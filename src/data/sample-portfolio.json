@@ -1,0 +1,34 @@
+{
+  "_comment": "SYNTHETIC FIXTURE — no real balances. Values are from the §9 worked example.",
+  "accounts": [
+    {
+      "id": "schwab-taxable",
+      "name": "Schwab Brokerage",
+      "institution": "Schwab",
+      "type": "TAXABLE"
+    },
+    {
+      "id": "fidelity-ira",
+      "name": "Fidelity Traditional IRA",
+      "institution": "Fidelity",
+      "type": "TRADITIONAL_IRA"
+    },
+    {
+      "id": "empower-401k",
+      "name": "Empower 401k",
+      "institution": "Empower",
+      "type": "FOUR_OH_ONE_K"
+    }
+  ],
+  "positions": [
+    { "accountId": "schwab-taxable",  "ticker": "MUNY",  "marketValue": 190000, "price": 52.10 },
+    { "accountId": "schwab-taxable",  "ticker": "VMFXX", "marketValue": 10000 },
+    { "accountId": "fidelity-ira",    "ticker": "FZROX", "marketValue": 200000, "price": 18.34 },
+    { "accountId": "fidelity-ira",    "ticker": "FZILX", "marketValue": 60000,  "price": 12.85 },
+    { "accountId": "fidelity-ira",    "ticker": "FPADX", "marketValue": 25000,  "price": 10.72 },
+    { "accountId": "fidelity-ira",    "ticker": "GLD",   "marketValue": 15000,  "price": 227.50 },
+    { "accountId": "empower-401k",    "ticker": "FSKAX", "marketValue": 370000 },
+    { "accountId": "empower-401k",    "ticker": "VXUS",  "marketValue": 110000 },
+    { "accountId": "empower-401k",    "ticker": "VWO",   "marketValue": 20000 }
+  ]
+}
