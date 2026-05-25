@@ -4,6 +4,7 @@ import { ALL_ASSET_CLASSES } from '../engine/types';
 import { AC_COLOR, AC_LABEL, ACCT_TYPE_LABEL, fmtUsd, fmtPct, fmtDelta } from './fmt';
 import { PieChart } from './PieChart';
 import type { PieSlice } from './PieChart';
+import { downloadReport } from './exportReport';
 
 interface Props {
   result: RebalanceResult;
@@ -200,11 +201,20 @@ export function ResultsPanel({ result, accounts }: Props) {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-baseline gap-4">
-        <h2 className="text-lg font-semibold text-gray-800">Results</h2>
-        <span className="text-sm text-gray-500">
-          Household value: <strong className="text-gray-800">{fmtUsd(householdValue)}</strong>
-        </span>
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-baseline gap-4">
+          <h2 className="text-lg font-semibold text-gray-800">Results</h2>
+          <span className="text-sm text-gray-500">
+            Household value: <strong className="text-gray-800">{fmtUsd(householdValue)}</strong>
+          </span>
+        </div>
+        <button
+          onClick={() => downloadReport(result, accounts)}
+          title="Download interactive HTML report with trade checklist"
+          className="text-xs text-gray-500 hover:text-gray-800 border border-gray-200 rounded px-2 py-1 hover:bg-gray-50 transition-colors shrink-0"
+        >
+          ↓ Report
+        </button>
       </div>
 
       {/* Priority flags */}
