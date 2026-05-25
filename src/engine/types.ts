@@ -71,6 +71,8 @@ export interface RebalanceResult {
   currentWeights: Record<AssetClass, number>;
   targetWeights: Record<AssetClass, number>;
   projectedWeights: Record<AssetClass, number>;
+  /** Per-account current value by asset class (before trades). Excludes unmapped positions. */
+  currentValueByAccount: Record<string, Record<AssetClass, number>>;
   trades: Trade[];
   flags: Flag[];
 }

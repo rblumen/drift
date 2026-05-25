@@ -33,6 +33,7 @@ export function rebalance(
       currentWeights: zeros,
       targetWeights: strategy.targets,
       projectedWeights: zeros,
+      currentValueByAccount,
       trades: [],
       flags,
     };
@@ -58,6 +59,7 @@ export function rebalance(
       currentWeights,
       targetWeights: strategy.targets,
       projectedWeights: currentWeights,
+      currentValueByAccount,
       trades: [],
       flags,
     };
@@ -199,5 +201,8 @@ export function rebalance(
     ALL_ASSET_CLASSES.map(ac => [ac, projectedValue[ac] / householdValue]),
   ) as Record<AssetClass, number>;
 
-  return { householdValue, currentWeights, targetWeights: strategy.targets, projectedWeights, trades, flags };
+  return {
+    householdValue, currentWeights, targetWeights: strategy.targets,
+    projectedWeights, currentValueByAccount, trades, flags,
+  };
 }

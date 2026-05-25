@@ -1,11 +1,16 @@
+import { useState } from 'react';
 import type { Account, AssetClass, Flag, RebalanceResult, Trade } from '../engine/types';
 import { ALL_ASSET_CLASSES } from '../engine/types';
-import { AC_LABEL, ACCT_TYPE_LABEL, fmtUsd, fmtPct, fmtDelta } from './fmt';
+import { AC_COLOR, AC_LABEL, ACCT_TYPE_LABEL, fmtUsd, fmtPct, fmtDelta } from './fmt';
+import { PieChart } from './PieChart';
+import type { PieSlice } from './PieChart';
 
 interface Props {
   result: RebalanceResult;
   accounts: Account[];
 }
+
+// ── Flag banners ──────────────────────────────────────────────────────────────
 
 function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
   const acctName = (id: string) => accounts.find(a => a.id === id)?.name ?? id;
@@ -65,13 +70,15 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
   return null;
 }
 
+// ── Household allocation table row ────────────────────────────────────────────
+
 function AllocationRow({
   ac, current, target, projected,
 }: {
   ac: AssetClass; current: number; target: number; projected: number;
 }) {
-  const drift = current - target;
-  const within = Math.abs(drift) <= 0.001; // already filtered but show anyway
+  const drift  = current - target;
+  const within = Math.abs(drift) <= 0.001;
   const barMax = Math.max(current, target, 0.01);
 
   return (
@@ -87,12 +94,10 @@ function AllocationRow({
       <td className="px-4 py-3 text-right tabular-nums text-gray-500">{fmtPct(projected)}</td>
       <td className="px-4 py-3 w-36">
         <div className="relative h-3 bg-gray-100 rounded-full overflow-hidden">
-          {/* target marker */}
           <div
             className="absolute top-0 bottom-0 w-0.5 bg-gray-400 z-10"
             style={{ left: `${(target / barMax) * 100}%` }}
           />
-          {/* current fill */}
           <div
             className={`absolute inset-y-0 left-0 rounded-full
               ${within ? 'bg-green-400' : current > target ? 'bg-amber-400' : 'bg-blue-400'}`}
@@ -104,7 +109,9 @@ function AllocationRow({
   );
 }
 
-function TradeRow({ trade, accounts }: { trade: Trade; accounts: Account[] }) {
+// ── Trade table row ───────────────────────────────────────────────────────────
+
+function TradeRow({ trade }: { trade: Trade }) {
   const isBuy = trade.deltaUsd > 0;
   return (
     <tr className="border-t border-gray-100 hover:bg-gray-50">
@@ -120,30 +127,64 @@ function TradeRow({ trade, accounts }: { trade: Trade; accounts: Account[] }) {
           {fmtDelta(trade.deltaUsd)}
         </span>
       </td>
-      {trade.inTaxableAccount && !isBuy && (
-        <td className="px-4 py-2 text-xs text-amber-600">⚠ taxable sale</td>
-      )}
-      {!(trade.inTaxableAccount && !isBuy) && <td className="px-4 py-2" />}
+      {trade.inTaxableAccount && !isBuy
+        ? <td className="px-4 py-2 text-xs text-amber-600">⚠ taxable sale</td>
+        : <td className="px-4 py-2" />}
     </tr>
   );
 }
 
+// ── Per-account allocation mini-pies ─────────────────────────────────────────
+
+/** Build pie slices from a by-class value map, filtering near-zero slivers. */
+function buildPieSlices(byClass: Record<AssetClass, number>): PieSlice[] {
+  return ALL_ASSET_CLASSES
+    .filter(ac => byClass[ac] > 0.5)   // skip sub-dollar noise
+    .map(ac => ({ label: AC_LABEL[ac], value: byClass[ac], color: AC_COLOR[ac] }));
+}
+
+// ── Main panel ────────────────────────────────────────────────────────────────
+
 export function ResultsPanel({ result, accounts }: Props) {
-  const { householdValue, currentWeights, targetWeights, projectedWeights, trades, flags } = result;
+  const { householdValue, currentWeights, targetWeights, projectedWeights,
+          currentValueByAccount, trades, flags } = result;
+
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+
+  function toggleCollapsed(id: string) {
+    setCollapsed(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
 
   // Separate flags by priority
-  const revisit    = flags.filter(f => f.kind === 'REVISIT_PLACEMENT');
-  const taxSales   = flags.filter(f => f.kind === 'TAXABLE_SALE');
-  const unmapped   = flags.filter(f => f.kind === 'UNMAPPED_HOLDING');
-  const spillovers = flags.filter(f => f.kind === 'PLACEMENT_SPILLOVER');
+  const importantFlags = [
+    ...flags.filter(f => f.kind === 'REVISIT_PLACEMENT'),
+    ...flags.filter(f => f.kind === 'UNMAPPED_HOLDING'),
+    ...flags.filter(f => f.kind === 'TAXABLE_SALE'),
+    ...flags.filter(f => f.kind === 'PLACEMENT_SPILLOVER'),
+  ];
 
-  const importantFlags = [...revisit, ...unmapped, ...taxSales, ...spillovers];
+  // Group trades by account; include any account that has trades OR existing positions.
+  // Accounts are ordered as they appear in the accounts array.
+  const tradesByAccount = accounts
+    .map(account => {
+      const acctTrades = trades
+        .filter(t => t.accountId === account.id)
+        .sort((a, b) => Math.abs(b.deltaUsd) - Math.abs(a.deltaUsd));
+      const before = buildPieSlices(currentValueByAccount[account.id] ?? {});
 
-  // Group trades by account
-  const tradesByAccount = accounts.map(a => ({
-    account: a,
-    trades: trades.filter(t => t.accountId === a.id).sort((a, b) => Math.abs(b.deltaUsd) - Math.abs(a.deltaUsd)),
-  })).filter(g => g.trades.length > 0);
+      // After: apply trade deltas on top of current values.
+      const afterByClass = { ...currentValueByAccount[account.id] } as Record<AssetClass, number>;
+      for (const ac of ALL_ASSET_CLASSES) afterByClass[ac] ??= 0;
+      for (const t of acctTrades) afterByClass[t.assetClass] += t.deltaUsd;
+      const after = buildPieSlices(afterByClass);
+
+      return { account, trades: acctTrades, before, after };
+    })
+    .filter(g => g.trades.length > 0 || g.before.length > 0);
 
   if (householdValue === 0) {
     return (
@@ -175,7 +216,7 @@ export function ResultsPanel({ result, accounts }: Props) {
         </div>
       )}
 
-      {/* Allocation table */}
+      {/* Household allocation table */}
       <div className="space-y-2">
         <h3 className="text-sm font-medium text-gray-700">Household allocation</h3>
         <div className="overflow-hidden border border-gray-200 rounded-lg">
@@ -211,7 +252,7 @@ export function ResultsPanel({ result, accounts }: Props) {
         </p>
       </div>
 
-      {/* Trades */}
+      {/* Per-account sections */}
       {trades.length === 0 ? (
         <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
           Portfolio is within tolerance — no trades needed.
@@ -219,38 +260,91 @@ export function ResultsPanel({ result, accounts }: Props) {
       ) : (
         <div className="space-y-4">
           <h3 className="text-sm font-medium text-gray-700">Recommended trades</h3>
-          {tradesByAccount.map(({ account, trades: acctTrades }) => {
-            const netUsd = acctTrades.reduce((s, t) => s + t.deltaUsd, 0);
+
+          {tradesByAccount.map(({ account, trades: acctTrades, before, after }) => {
+            const netUsd  = acctTrades.reduce((s, t) => s + t.deltaUsd, 0);
+            const isOpen  = !collapsed.has(account.id);
+            const hasBoth = before.length > 0 && after.length > 0;
+            const locked  = account.locked;
+
             return (
               <div key={account.id} className="overflow-hidden border border-gray-200 rounded-lg">
-                <div className="px-4 py-2 bg-gray-50 flex items-center justify-between">
-                  <div>
+
+                {/* ── Collapsible header ─────────────────────────────────── */}
+                <button
+                  className="w-full px-4 py-2.5 bg-gray-50 flex items-center gap-3 hover:bg-gray-100 transition-colors text-left"
+                  onClick={() => toggleCollapsed(account.id)}
+                >
+                  <span className="flex-1 flex items-center gap-2 min-w-0">
                     <span className="text-sm font-medium text-gray-700">{account.name}</span>
-                    <span className="ml-2 text-xs text-gray-400">
+                    <span className="text-xs text-gray-400">
                       {account.institution} · {ACCT_TYPE_LABEL[account.type]}
                     </span>
-                  </div>
-                  <span className="text-xs text-gray-500">
-                    Net: <span className={netUsd >= 0 ? 'text-green-600' : 'text-red-600'}>
-                      {fmtDelta(netUsd)}
-                    </span>
+                    {locked && (
+                      <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">
+                        🔒 locked
+                      </span>
+                    )}
                   </span>
-                </div>
-                <table className="w-full text-sm">
-                  <thead className="text-xs text-gray-500 uppercase tracking-wide border-b border-gray-100">
-                    <tr>
-                      <th className="px-4 py-1.5 text-left">Asset class</th>
-                      <th className="px-4 py-1.5 text-left">Action</th>
-                      <th className="px-4 py-1.5 text-right">Amount</th>
-                      <th className="px-4 py-1.5" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {acctTrades.map((t, i) => (
-                      <TradeRow key={i} trade={t} accounts={accounts} />
-                    ))}
-                  </tbody>
-                </table>
+                  {acctTrades.length > 0 && (
+                    <span className="text-xs text-gray-500 shrink-0">
+                      Net: <span className={netUsd >= 0 ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}>
+                        {fmtDelta(netUsd)}
+                      </span>
+                    </span>
+                  )}
+                  <span className="text-gray-400 text-xs ml-1">{isOpen ? '▾' : '▸'}</span>
+                </button>
+
+                {/* ── Expanded body ──────────────────────────────────────── */}
+                {isOpen && (
+                  <div>
+                    {/* Before / After pies */}
+                    {(before.length > 0 || after.length > 0) && (
+                      <div className={`px-4 py-4 border-b border-gray-100 ${hasBoth ? 'grid grid-cols-2 gap-6' : ''}`}>
+                        {before.length > 0 && (
+                          <PieChart
+                            title="Before"
+                            slices={before}
+                            size={88}
+                          />
+                        )}
+                        {after.length > 0 && (
+                          <PieChart
+                            title={acctTrades.length > 0 ? 'After trades' : 'Current'}
+                            slices={after}
+                            size={88}
+                          />
+                        )}
+                      </div>
+                    )}
+
+                    {/* Trade table */}
+                    {acctTrades.length > 0 && (
+                      <table className="w-full text-sm">
+                        <thead className="text-xs text-gray-500 uppercase tracking-wide border-b border-gray-100">
+                          <tr>
+                            <th className="px-4 py-1.5 text-left">Asset class</th>
+                            <th className="px-4 py-1.5 text-left">Action</th>
+                            <th className="px-4 py-1.5 text-right">Amount</th>
+                            <th className="px-4 py-1.5" />
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {acctTrades.map((t, i) => (
+                            <TradeRow key={i} trade={t} />
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+
+                    {acctTrades.length === 0 && (
+                      <p className="px-4 py-3 text-xs text-gray-400 italic">
+                        No trades — portfolio is within tolerance for this account.
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
