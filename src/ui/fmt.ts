@@ -55,6 +55,19 @@ export const ACCT_TYPE_COLOR: Record<string, string> = {
   OTHER:            '#9ca3af', // gray-400
 };
 
+// Human-readable placement bucket labels and chart colours.
+export const BUCKET_LABEL: Record<string, string> = {
+  TAXABLE:       'Taxable',
+  TAX_ADVANTAGED: 'Tax-Advantaged',
+  EDUCATION:     'Education (529)',
+};
+
+export const BUCKET_COLOR: Record<string, string> = {
+  TAXABLE:       '#fb923c', // orange-400
+  TAX_ADVANTAGED: '#818cf8', // indigo-400
+  EDUCATION:     '#f472b6', // pink-400
+};
+
 // Chart colours for asset classes.
 export const AC_COLOR: Record<string, string> = {
   US_TOTAL_MARKET: '#818cf8', // indigo-400

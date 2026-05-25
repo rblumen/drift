@@ -1,8 +1,13 @@
-import type { Account, AssetClass, Flag, Position } from '../engine/types';
+import type { Account, AssetClass, Flag, PlacementBucket, Position } from '../engine/types';
 import { ALL_ASSET_CLASSES } from '../engine/types';
 import { BUILTIN_CLASS_MAP, makeClassifier } from '../engine/classify';
-import { AC_COLOR, AC_LABEL } from './fmt';
+import { accountBucket } from '../engine/placement';
+import { AC_COLOR, AC_LABEL, BUCKET_COLOR, BUCKET_LABEL } from './fmt';
 import { PieChart } from './PieChart';
+import { StackedBars } from './StackedBars';
+import type { StackedRow, LegendEntry } from './StackedBars';
+
+const PLACEMENT_BUCKETS: PlacementBucket[] = ['TAX_ADVANTAGED', 'TAXABLE', 'EDUCATION'];
 
 interface Props {
   accounts: Account[];
@@ -50,16 +55,48 @@ export function ClassifyPanel({ accounts, positions, flags, tickerOverrides, set
     .filter(r => r.source !== 'unmapped')
     .sort((a, b) => a.ticker.localeCompare(b.ticker));
 
-  // Asset-class breakdown by market value (classified positions only).
-  const classify = makeClassifier(tickerOverrides);
+  // ── Chart data ──────────────────────────────────────────────────────────────
+
+  const classify   = makeClassifier(tickerOverrides);
+  const accountMap = new Map(accounts.map(a => [a.id, a]));
+
+  // (A) Asset-class pie — sum by asset class across all classified positions.
   const acValueMap = new Map<AssetClass, number>();
+
+  // (B) Placement bars — sum by (assetClass, bucket) for the stacked chart.
+  const acBucketMap = new Map<AssetClass, Map<PlacementBucket, number>>();
+
   for (const p of positions) {
     const ac = classify(p.ticker);
-    if (ac) acValueMap.set(ac, (acValueMap.get(ac) ?? 0) + p.marketValue);
+    if (!ac) continue; // skip unmapped
+
+    acValueMap.set(ac, (acValueMap.get(ac) ?? 0) + p.marketValue);
+
+    const acct   = accountMap.get(p.accountId);
+    const bucket = acct ? accountBucket(acct.type) : 'TAXABLE';
+    if (!acBucketMap.has(ac)) acBucketMap.set(ac, new Map());
+    const bm = acBucketMap.get(ac)!;
+    bm.set(bucket, (bm.get(bucket) ?? 0) + p.marketValue);
   }
+
   const acSlices = ALL_ASSET_CLASSES
     .filter(ac => (acValueMap.get(ac) ?? 0) > 0)
     .map(ac => ({ label: AC_LABEL[ac], value: acValueMap.get(ac)!, color: AC_COLOR[ac] }));
+
+  // Build stacked-bar rows — one per asset class, segments per bucket.
+  const placementRows: StackedRow[] = ALL_ASSET_CLASSES
+    .filter(ac => acBucketMap.has(ac))
+    .map(ac => {
+      const bm = acBucketMap.get(ac)!;
+      const segments = PLACEMENT_BUCKETS
+        .filter(b => (bm.get(b) ?? 0) > 0)
+        .map(b => ({ label: BUCKET_LABEL[b], value: bm.get(b)!, color: BUCKET_COLOR[b] }));
+      return { label: AC_LABEL[ac], total: segments.reduce((s, sg) => s + sg.value, 0), segments };
+    });
+
+  const placementLegend: LegendEntry[] = PLACEMENT_BUCKETS
+    .filter(b => placementRows.some(r => r.segments.some(s => s.label === BUCKET_LABEL[b])))
+    .map(b => ({ label: BUCKET_LABEL[b], color: BUCKET_COLOR[b] }));
 
   function assign(ticker: string, ac: AssetClass | '') {
     const next = { ...tickerOverrides };
@@ -85,10 +122,22 @@ export function ClassifyPanel({ accounts, positions, flags, tickerOverrides, set
         <span className="text-sm text-gray-500">{rows.length} ticker{rows.length !== 1 ? 's' : ''}</span>
       </div>
 
-      {/* ── Asset-class breakdown pie ──────────────────────────────────────── */}
+      {/* ── Charts ─────────────────────────────────────────────────────────── */}
       {acSlices.length > 0 && (
-        <div className="border border-gray-200 rounded-lg p-4">
-          <PieChart title="By asset class" slices={acSlices} />
+        <div className="grid grid-cols-[auto_1fr] gap-4 items-start">
+          {/* Asset-class pie */}
+          <div className="border border-gray-200 rounded-lg p-4">
+            <PieChart title="By asset class" slices={acSlices} />
+          </div>
+
+          {/* Placement stacked bars */}
+          <div className="border border-gray-200 rounded-lg p-4">
+            <StackedBars
+              title="Placement by asset class"
+              rows={placementRows}
+              legend={placementLegend}
+            />
+          </div>
         </div>
       )}
 
