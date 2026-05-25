@@ -22,6 +22,77 @@ const ADAPTER_META: { id: Adapter; label: string; hint: string }[] = [
   { id: 'manual',        label: 'Manual entry',     hint: 'Type positions in by hand' },
 ];
 
+// Colours assigned round-robin to accounts in the order they appear.
+const ACCOUNT_COLORS = [
+  '#818cf8', // indigo-400
+  '#38bdf8', // sky-400
+  '#34d399', // emerald-400
+  '#fbbf24', // amber-400
+  '#f87171', // red-400
+  '#a78bfa', // violet-400
+  '#fb923c', // orange-400
+  '#2dd4bf', // teal-400
+];
+
+// ── Pie chart ─────────────────────────────────────────────────────────────────
+
+function polarXY(cx: number, cy: number, r: number, deg: number) {
+  const rad = (deg - 90) * (Math.PI / 180);
+  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+}
+
+function slicePath(cx: number, cy: number, r: number, start: number, end: number): string {
+  // Full circle needs special treatment (can't draw A from point back to itself).
+  if (end - start >= 359.9999) {
+    return `M ${cx} ${cy - r} A ${r} ${r} 0 1 1 ${cx - 0.001} ${cy - r} Z`;
+  }
+  const s = polarXY(cx, cy, r, start);
+  const e = polarXY(cx, cy, r, end);
+  const large = end - start > 180 ? 1 : 0;
+  return `M ${cx} ${cy} L ${s.x} ${s.y} A ${r} ${r} 0 ${large} 1 ${e.x} ${e.y} Z`;
+}
+
+interface PieSlice { label: string; value: number; color: string }
+
+function AccountPieChart({ slices }: { slices: PieSlice[] }) {
+  const total = slices.reduce((s, sl) => s + sl.value, 0);
+  if (total === 0) return null;
+
+  const cx = 64, cy = 64, r = 56;
+  let cursor = 0;
+
+  return (
+    <div className="border border-gray-200 rounded-lg p-4 flex items-center gap-8">
+      <svg width={128} height={128} className="shrink-0">
+        {slices.map((sl, i) => {
+          const deg = (sl.value / total) * 360;
+          const path = slicePath(cx, cy, r, cursor, cursor + deg);
+          cursor += deg;
+          return (
+            <path key={i} d={path} fill={sl.color} stroke="white" strokeWidth={2}>
+              <title>{sl.label}: {fmtUsd(sl.value)} ({((sl.value / total) * 100).toFixed(1)}%)</title>
+            </path>
+          );
+        })}
+      </svg>
+      <div className="space-y-2 min-w-0">
+        {slices.map((sl, i) => (
+          <div key={i} className="flex items-center gap-2 text-sm min-w-0">
+            <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: sl.color }} />
+            <span className="text-gray-700 truncate">{sl.label}</span>
+            <span className="ml-auto pl-4 text-gray-500 tabular-nums shrink-0">{fmtUsd(sl.value)}</span>
+            <span className="text-gray-400 tabular-nums text-xs shrink-0 w-12 text-right">
+              {((sl.value / total) * 100).toFixed(1)}%
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
 /** Guess the best adapter from the account's institution name. */
 function defaultAdapter(institution: string): Adapter {
   const i = institution.toLowerCase();
@@ -44,15 +115,27 @@ function mergePositions(existing: Position[], incoming: Position[], accountId: s
   return [...existing.filter(p => p.accountId !== accountId), ...incoming];
 }
 
+// ── Component ─────────────────────────────────────────────────────────────────
+
 export function ImportPanel({ accounts, positions, setPositions }: Props) {
   const firstAccountId = accounts[0]?.id ?? '';
-  const [accountId, setAccountId]     = useState(firstAccountId);
-  const [adapter,   setAdapter]       = useState<Adapter>(() => defaultAdapter(accounts[0]?.institution ?? ''));
-  const [preview,   setPreview]       = useState<Position[] | null>(null);
-  const [parseErrors, setParseErrors] = useState<string[]>([]);
-  const [manualRow, setManualRow]     = useState({ ticker: '', marketValue: '', price: '' });
+  const [accountId,     setAccountId]     = useState(firstAccountId);
+  const [adapter,       setAdapter]       = useState<Adapter>(() => defaultAdapter(accounts[0]?.institution ?? ''));
+  const [preview,       setPreview]       = useState<Position[] | null>(null);
+  const [parseErrors,   setParseErrors]   = useState<string[]>([]);
+  const [manualRow,     setManualRow]     = useState({ ticker: '', marketValue: '', price: '' });
   const [empowerTotals, setEmpowerTotals] = useState<Partial<Record<AssetClass, string>>>({});
+  // Set of account IDs whose position rows are collapsed.
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const fileRef = useRef<HTMLInputElement>(null);
+
+  function toggleCollapsed(id: string) {
+    setCollapsed(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
 
   // When the user switches account, reset adapter to match the new institution.
   useEffect(() => {
@@ -118,10 +201,16 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
     setEmpowerTotals({});
   }
 
-  const allGrouped = accounts.map(a => ({
-    account: a,
-    rows: positions.filter(p => p.accountId === a.id),
-  })).filter(g => g.rows.length > 0);
+  // Enrich groups with per-account totals and colour assignments.
+  const allGrouped = accounts
+    .map((account, idx) => {
+      const rows  = positions.filter(p => p.accountId === account.id);
+      const total = rows.reduce((s, p) => s + p.marketValue, 0);
+      return { account, rows, total, color: ACCOUNT_COLORS[idx % ACCOUNT_COLORS.length] };
+    })
+    .filter(g => g.rows.length > 0);
+
+  const grandTotal = allGrouped.reduce((s, g) => s + g.total, 0);
 
   const isCsvAdapter = adapter === 'schwab' || adapter === 'fidelity' || adapter === 'empower';
   const adapterHint  = ADAPTER_META.find(m => m.id === adapter)?.hint ?? '';
@@ -141,9 +230,8 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
     <div className="space-y-6">
       <h2 className="text-lg font-semibold text-gray-800">Import Positions</h2>
 
-      {/* Step 1 — Pick account */}
+      {/* Step 1 — Pick account + format */}
       <div className="border border-gray-200 rounded-lg divide-y divide-gray-100">
-        {/* Account row */}
         <div className="px-4 py-3 flex items-center gap-4">
           <span className="text-sm font-medium text-gray-700 w-28 shrink-0">Account</span>
           <div className="flex flex-wrap gap-2">
@@ -162,7 +250,6 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
           </div>
         </div>
 
-        {/* Format row */}
         <div className="px-4 py-3 flex items-center gap-4">
           <span className="text-sm font-medium text-gray-700 w-28 shrink-0">Format</span>
           <div className="flex flex-wrap gap-2">
@@ -182,9 +269,8 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
         </div>
       </div>
 
-      {/* Step 2 — Import widget for selected format */}
+      {/* Step 2 — Import widget */}
 
-      {/* CSV file picker */}
       {isCsvAdapter && !preview && (
         <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center space-y-3">
           <p className="text-sm text-gray-500">{adapterHint}</p>
@@ -198,14 +284,12 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
         </div>
       )}
 
-      {/* Parse errors */}
       {parseErrors.length > 0 && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700 space-y-1">
           {parseErrors.map((e, i) => <div key={i}>{e}</div>)}
         </div>
       )}
 
-      {/* Preview */}
       {preview && (
         <div className="space-y-3">
           <h3 className="text-sm font-medium text-gray-700">
@@ -252,7 +336,6 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
         </div>
       )}
 
-      {/* Empower Totals */}
       {adapter === 'empower-totals' && (
         <div className="border border-gray-200 rounded-lg p-4 space-y-3">
           <p className="text-sm text-gray-500">{adapterHint}</p>
@@ -279,7 +362,6 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
         </div>
       )}
 
-      {/* Manual entry */}
       {adapter === 'manual' && (
         <div className="border border-gray-200 rounded-lg p-4 space-y-3">
           <div className="flex gap-2 items-end">
@@ -326,41 +408,78 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
         </div>
       )}
 
-      {/* Loaded positions */}
+      {/* Loaded positions — pie chart + collapsible account tables */}
       {allGrouped.length > 0 && (
         <div className="space-y-4 pt-2">
           <h3 className="text-sm font-medium text-gray-700 border-t pt-4">Loaded positions</h3>
-          {allGrouped.map(({ account, rows }) => (
-            <div key={account.id} className="overflow-hidden border border-gray-200 rounded-lg">
-              <div className="px-4 py-2 bg-gray-50 flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-700">{account.name}</span>
+
+          {/* Pie chart summary */}
+          <AccountPieChart
+            slices={allGrouped.map(g => ({ label: g.account.name, value: g.total, color: g.color }))}
+          />
+
+          {/* Per-account collapsible tables */}
+          {allGrouped.map(({ account, rows, total, color }) => {
+            const pct = grandTotal > 0 ? (total / grandTotal) * 100 : 0;
+            const isOpen = !collapsed.has(account.id);
+            return (
+              <div key={account.id} className="overflow-hidden border border-gray-200 rounded-lg">
+                {/* Header row — clickable to collapse */}
                 <button
-                  onClick={() => setPositions(positions.filter(p => p.accountId !== account.id))}
-                  className="text-xs text-red-400 hover:underline"
+                  className="w-full px-4 py-2.5 bg-gray-50 flex items-center gap-3 hover:bg-gray-100 transition-colors text-left"
+                  onClick={() => toggleCollapsed(account.id)}
                 >
-                  Clear all
+                  {/* Colour swatch */}
+                  <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: color }} />
+
+                  {/* Name */}
+                  <span className="text-sm font-medium text-gray-700 flex-1">{account.name}</span>
+
+                  {/* Totals */}
+                  <span className="text-sm text-gray-600 tabular-nums">{fmtUsd(total)}</span>
+                  <span className="text-xs text-gray-400 tabular-nums w-12 text-right">
+                    {pct.toFixed(1)}%
+                  </span>
+
+                  {/* Chevron */}
+                  <span className="text-gray-400 text-xs ml-1">{isOpen ? '▾' : '▸'}</span>
+
+                  {/* Clear button — stop propagation so it doesn't toggle collapse */}
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={e => { e.stopPropagation(); setPositions(positions.filter(p => p.accountId !== account.id)); }}
+                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); setPositions(positions.filter(p => p.accountId !== account.id)); } }}
+                    className="text-xs text-red-400 hover:underline ml-2 cursor-pointer"
+                  >
+                    Clear
+                  </span>
                 </button>
+
+                {/* Position rows — hidden when collapsed */}
+                {isOpen && (
+                  <table className="w-full text-sm">
+                    <tbody className="divide-y divide-gray-100">
+                      {rows.map((p, i) => (
+                        <tr key={i} className="hover:bg-gray-50">
+                          <td className="px-4 py-2 font-mono font-medium w-24">{p.ticker}</td>
+                          <td className="px-4 py-2 text-gray-500 truncate max-w-xs">{p.description ?? ''}</td>
+                          <td className="px-4 py-2 text-right tabular-nums">{fmtUsd(p.marketValue)}</td>
+                          <td className="px-4 py-2 text-right w-8">
+                            <button
+                              onClick={() => setPositions(positions.filter(x => !(x.accountId === p.accountId && x.ticker === p.ticker)))}
+                              className="text-gray-300 hover:text-red-400 text-xs"
+                              title="Remove"
+                            >✕</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </div>
-              <table className="w-full text-sm">
-                <tbody className="divide-y divide-gray-100">
-                  {rows.map((p, i) => (
-                    <tr key={i} className="hover:bg-gray-50">
-                      <td className="px-4 py-2 font-mono font-medium w-24">{p.ticker}</td>
-                      <td className="px-4 py-2 text-gray-500 truncate max-w-xs">{p.description ?? ''}</td>
-                      <td className="px-4 py-2 text-right">{fmtUsd(p.marketValue)}</td>
-                      <td className="px-4 py-2 text-right w-8">
-                        <button
-                          onClick={() => setPositions(positions.filter(x => !(x.accountId === p.accountId && x.ticker === p.ticker)))}
-                          className="text-gray-300 hover:text-red-400 text-xs"
-                          title="Remove"
-                        >✕</button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
