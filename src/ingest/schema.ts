@@ -76,6 +76,21 @@ export function parsePortfolio(raw: unknown): { accounts: Account[]; positions: 
   return { accounts: r.accounts as Account[], positions: r.positions as Position[] };
 }
 
+// Full persisted app state — used for localStorage and JSON file export/import.
+export const appStateSchema = z.object({
+  version:        z.literal(1),
+  accounts:       z.array(accountSchema),
+  positions:      z.array(positionSchema),
+  strategy:       strategySchema,
+  tickerOverrides: z.record(z.string(), z.enum(ASSET_CLASSES)),
+});
+
+export type AppState = z.infer<typeof appStateSchema>;
+
+export function parseAppState(raw: unknown): AppState {
+  return appStateSchema.parse(raw);
+}
+
 // Safe variants — return { ok, data } | { ok, error } without throwing.
 export function safeParsePosition(raw: unknown):
   | { ok: true; data: Position }

@@ -1,3 +1,21 @@
+// Default household strategy.
+//
+// Every value here is editable by the user in the Strategy panel. This file
+// exists only to provide a sensible starting point.
+//
+// ── Alts-split extension point ───────────────────────────────────────────────
+// When ready to split ALTERNATIVES into sub-classes (e.g. CRYPTO and
+// PRECIOUS_METALS), the migration path is:
+//
+//   1. Add 'CRYPTO' | 'PRECIOUS_METALS' to the AssetClass union in types.ts.
+//   2. Add them to ALL_ASSET_CLASSES (preserves rollup + placement iteration).
+//   3. Add default targets here (set ALTERNATIVES: 0 and split across the two).
+//   4. Add placement entries for each new class (both → TAX_ADVANTAGED).
+//   5. Extend assetclass-map.json with fund/ETF tickers for each sub-class.
+//   6. The engine (rollup, placement, rebalance) requires no further changes —
+//      it already iterates ALL_ASSET_CLASSES generically.
+// ─────────────────────────────────────────────────────────────────────────────
+
 import type { Strategy } from './types';
 
 export const DEFAULT_STRATEGY: Strategy = {
@@ -21,5 +39,5 @@ export const DEFAULT_STRATEGY: Strategy = {
     CASH:            ['TAXABLE', 'TAX_ADVANTAGED'],
   },
   toleranceAbs: 0.05,
-  minTradeUsd: 250,
+  minTradeUsd:  250,
 };
