@@ -1,9 +1,11 @@
-import type { AssetClass, Flag, Position } from '../engine/types';
+import type { Account, AssetClass, Flag, Position } from '../engine/types';
 import { ALL_ASSET_CLASSES } from '../engine/types';
-import { BUILTIN_CLASS_MAP } from '../engine/classify';
-import { AC_LABEL } from './fmt';
+import { BUILTIN_CLASS_MAP, makeClassifier } from '../engine/classify';
+import { AC_COLOR, AC_LABEL } from './fmt';
+import { PieChart } from './PieChart';
 
 interface Props {
+  accounts: Account[];
   positions: Position[];
   flags: Flag[];
   tickerOverrides: Record<string, AssetClass>;
@@ -19,7 +21,7 @@ interface TickerRow {
   source:      Source;
 }
 
-export function ClassifyPanel({ positions, flags, tickerOverrides, setTickerOverrides }: Props) {
+export function ClassifyPanel({ accounts, positions, flags, tickerOverrides, setTickerOverrides }: Props) {
   // Build one row per unique ticker across all positions.
   const seen = new Set<string>();
   const rows: TickerRow[] = [];
@@ -48,6 +50,17 @@ export function ClassifyPanel({ positions, flags, tickerOverrides, setTickerOver
     .filter(r => r.source !== 'unmapped')
     .sort((a, b) => a.ticker.localeCompare(b.ticker));
 
+  // Asset-class breakdown by market value (classified positions only).
+  const classify = makeClassifier(tickerOverrides);
+  const acValueMap = new Map<AssetClass, number>();
+  for (const p of positions) {
+    const ac = classify(p.ticker);
+    if (ac) acValueMap.set(ac, (acValueMap.get(ac) ?? 0) + p.marketValue);
+  }
+  const acSlices = ALL_ASSET_CLASSES
+    .filter(ac => (acValueMap.get(ac) ?? 0) > 0)
+    .map(ac => ({ label: AC_LABEL[ac], value: acValueMap.get(ac)!, color: AC_COLOR[ac] }));
+
   function assign(ticker: string, ac: AssetClass | '') {
     const next = { ...tickerOverrides };
     if (ac === '') delete next[ticker]; else next[ticker] = ac;
@@ -71,6 +84,13 @@ export function ClassifyPanel({ positions, flags, tickerOverrides, setTickerOver
         <h2 className="text-lg font-semibold text-gray-800">Classify Holdings</h2>
         <span className="text-sm text-gray-500">{rows.length} ticker{rows.length !== 1 ? 's' : ''}</span>
       </div>
+
+      {/* ── Asset-class breakdown pie ──────────────────────────────────────── */}
+      {acSlices.length > 0 && (
+        <div className="border border-gray-200 rounded-lg p-4">
+          <PieChart title="By asset class" slices={acSlices} />
+        </div>
+      )}
 
       {/* ── Unclassified — needs attention ─────────────────────────────────── */}
       {unmapped.length > 0 && (

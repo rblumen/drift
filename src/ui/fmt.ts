@@ -43,3 +43,24 @@ export const ACCT_TYPE_LABEL: Record<string, string> = {
   HSA:             'HSA',
   OTHER:           'Other',
 };
+
+// Chart colours for account types.
+export const ACCT_TYPE_COLOR: Record<string, string> = {
+  TAXABLE:          '#fb923c', // orange-400
+  TRADITIONAL_IRA:  '#60a5fa', // blue-400
+  ROTH_IRA:         '#34d399', // emerald-400
+  FOUR_OH_ONE_K:    '#818cf8', // indigo-400
+  FIVE_TWENTY_NINE: '#f472b6', // pink-400
+  HSA:              '#2dd4bf', // teal-400
+  OTHER:            '#9ca3af', // gray-400
+};
+
+// Chart colours for asset classes.
+export const AC_COLOR: Record<string, string> = {
+  US_TOTAL_MARKET: '#818cf8', // indigo-400
+  DEVELOPED_INTL:  '#38bdf8', // sky-400
+  EMERGING_INTL:   '#34d399', // emerald-400
+  FIXED_INCOME:    '#fbbf24', // amber-400
+  ALTERNATIVES:    '#f87171', // red-400
+  CASH:            '#9ca3af', // gray-400
+};

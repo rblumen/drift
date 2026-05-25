@@ -186,6 +186,7 @@ export default function App() {
         )}
         {activeTab === 'classify' && (
           <ClassifyPanel
+            accounts={accounts}
             positions={positions}
             flags={result.flags}
             tickerOverrides={tickerOverrides}

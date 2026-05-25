@@ -4,7 +4,8 @@ import { ALL_ASSET_CLASSES } from '../engine/types';
 import { parseSchwabCsv } from '../ingest/adapters/schwab';
 import { parseFidelityCsv } from '../ingest/adapters/fidelity';
 import { parseEmpowerCsv, parseEmpowerTotals } from '../ingest/adapters/empower';
-import { AC_LABEL, fmtUsd } from './fmt';
+import { AC_LABEL, ACCT_TYPE_COLOR, ACCT_TYPE_LABEL, fmtUsd } from './fmt';
+import { PieChart } from './PieChart';
 
 type Adapter = 'schwab' | 'fidelity' | 'empower' | 'empower-totals' | 'manual';
 
@@ -33,63 +34,6 @@ const ACCOUNT_COLORS = [
   '#fb923c', // orange-400
   '#2dd4bf', // teal-400
 ];
-
-// ── Pie chart ─────────────────────────────────────────────────────────────────
-
-function polarXY(cx: number, cy: number, r: number, deg: number) {
-  const rad = (deg - 90) * (Math.PI / 180);
-  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
-}
-
-function slicePath(cx: number, cy: number, r: number, start: number, end: number): string {
-  // Full circle needs special treatment (can't draw A from point back to itself).
-  if (end - start >= 359.9999) {
-    return `M ${cx} ${cy - r} A ${r} ${r} 0 1 1 ${cx - 0.001} ${cy - r} Z`;
-  }
-  const s = polarXY(cx, cy, r, start);
-  const e = polarXY(cx, cy, r, end);
-  const large = end - start > 180 ? 1 : 0;
-  return `M ${cx} ${cy} L ${s.x} ${s.y} A ${r} ${r} 0 ${large} 1 ${e.x} ${e.y} Z`;
-}
-
-interface PieSlice { label: string; value: number; color: string }
-
-function AccountPieChart({ slices }: { slices: PieSlice[] }) {
-  const total = slices.reduce((s, sl) => s + sl.value, 0);
-  if (total === 0) return null;
-
-  const cx = 64, cy = 64, r = 56;
-  let cursor = 0;
-
-  return (
-    <div className="border border-gray-200 rounded-lg p-4 flex items-center gap-8">
-      <svg width={128} height={128} className="shrink-0">
-        {slices.map((sl, i) => {
-          const deg = (sl.value / total) * 360;
-          const path = slicePath(cx, cy, r, cursor, cursor + deg);
-          cursor += deg;
-          return (
-            <path key={i} d={path} fill={sl.color} stroke="white" strokeWidth={2}>
-              <title>{sl.label}: {fmtUsd(sl.value)} ({((sl.value / total) * 100).toFixed(1)}%)</title>
-            </path>
-          );
-        })}
-      </svg>
-      <div className="space-y-2 min-w-0">
-        {slices.map((sl, i) => (
-          <div key={i} className="flex items-center gap-2 text-sm min-w-0">
-            <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: sl.color }} />
-            <span className="text-gray-700 truncate">{sl.label}</span>
-            <span className="ml-auto pl-4 text-gray-500 tabular-nums shrink-0">{fmtUsd(sl.value)}</span>
-            <span className="text-gray-400 tabular-nums text-xs shrink-0 w-12 text-right">
-              {((sl.value / total) * 100).toFixed(1)}%
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -211,6 +155,21 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
     .filter(g => g.rows.length > 0);
 
   const grandTotal = allGrouped.reduce((s, g) => s + g.total, 0);
+
+  // Slices for the "by account type" pie — aggregate across accounts sharing the same type.
+  const typeMap = new Map<string, number>();
+  for (const g of allGrouped) {
+    const t = g.account.type;
+    typeMap.set(t, (typeMap.get(t) ?? 0) + g.total);
+  }
+  const typeSlices = [...typeMap.entries()]
+    .filter(([, v]) => v > 0)
+    .sort((a, b) => b[1] - a[1])
+    .map(([type, value]) => ({
+      label: ACCT_TYPE_LABEL[type] ?? type,
+      value,
+      color: ACCT_TYPE_COLOR[type] ?? '#9ca3af',
+    }));
 
   const isCsvAdapter = adapter === 'schwab' || adapter === 'fidelity' || adapter === 'empower';
   const adapterHint  = ADAPTER_META.find(m => m.id === adapter)?.hint ?? '';
@@ -413,10 +372,21 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
         <div className="space-y-4 pt-2">
           <h3 className="text-sm font-medium text-gray-700 border-t pt-4">Loaded positions</h3>
 
-          {/* Pie chart summary */}
-          <AccountPieChart
-            slices={allGrouped.map(g => ({ label: g.account.name, value: g.total, color: g.color }))}
-          />
+          {/* Pie charts: by account and by account type */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="border border-gray-200 rounded-lg p-4">
+              <PieChart
+                title="By account"
+                slices={allGrouped.map(g => ({ label: g.account.name, value: g.total, color: g.color }))}
+              />
+            </div>
+            <div className="border border-gray-200 rounded-lg p-4">
+              <PieChart
+                title="By account type"
+                slices={typeSlices}
+              />
+            </div>
+          </div>
 
           {/* Per-account collapsible tables */}
           {allGrouped.map(({ account, rows, total, color }) => {
