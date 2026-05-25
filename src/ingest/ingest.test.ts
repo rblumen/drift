@@ -3,11 +3,12 @@ import { parsePosition, parseStrategy, safeParseStrategy, safeParsePosition, par
 import { parseCsv, parseMoney } from './csv';
 import { parseSchwabCsv } from './adapters/schwab';
 import { parseFidelityCsv } from './adapters/fidelity';
-import { parseEmpowerTotals, EMPOWER_TICKER } from './adapters/empower';
+import { parseEmpowerCsv, parseEmpowerTotals, EMPOWER_TICKER } from './adapters/empower';
 import { DEFAULT_STRATEGY } from '../engine/strategy';
 
 import schwabCsv from '../data/fixtures/schwab-sample.csv?raw';
 import fidelityCsv from '../data/fixtures/fidelity-sample.csv?raw';
+import empowerCsv from '../data/fixtures/empower-sample.csv?raw';
 
 // ─── parseMoney ──────────────────────────────────────────────────────────────
 
@@ -139,6 +140,24 @@ describe('parseCsv — generic', () => {
     const r = parseCsv(CSV, 'acct1', { ticker: 'Ticker', marketValue: 'Market Value' });
     expect(r.positions.every(p => p.ticker !== '--')).toBe(true);
   });
+
+  it('strips trailing asterisks from tickers', () => {
+    const CSV_WITH_STAR = [
+      'Ticker,Market Value',
+      'FDRXX**,"$11,931.55"',
+    ].join('\n');
+    const r = parseCsv(CSV_WITH_STAR, 'acct1', { ticker: 'Ticker', marketValue: 'Market Value' });
+    expect(r.positions[0].ticker).toBe('FDRXX');
+  });
+
+  it('skips rows with negative market value', () => {
+    const CSV_NEG = [
+      'Ticker,Market Value',
+      'PENDING,"-$9,604.84"',
+    ].join('\n');
+    const r = parseCsv(CSV_NEG, 'acct1', { ticker: 'Ticker', marketValue: 'Market Value' });
+    expect(r.positions).toHaveLength(0);
+  });
 });
 
 // ─── Schwab adapter ───────────────────────────────────────────────────────────
@@ -162,9 +181,9 @@ describe('parseSchwabCsv', () => {
     expect(r.positions.every(p => p.ticker !== '--')).toBe(true);
   });
 
-  it('skips the Account Total footer row', () => {
+  it('skips the Positions Total footer row', () => {
     const r = parseSchwabCsv(schwabCsv, 'schwab-taxable');
-    expect(r.positions.every(p => p.ticker !== 'Account Total')).toBe(true);
+    expect(r.positions.every(p => p.ticker !== 'Positions Total')).toBe(true);
   });
 
   it('parses price when present', () => {
@@ -201,7 +220,59 @@ describe('parseFidelityCsv', () => {
   });
 });
 
-// ─── Empower adapter ──────────────────────────────────────────────────────────
+// ─── Empower CSV adapter ──────────────────────────────────────────────────────
+
+describe('parseEmpowerCsv', () => {
+  it('returns positions for each fund in the sample fixture', () => {
+    const r = parseEmpowerCsv(empowerCsv, 'empower-401k');
+    expect(r.positions.length).toBeGreaterThan(0);
+    expect(r.errors).toHaveLength(0);
+  });
+
+  it('returns two positions from the two-fund fixture', () => {
+    const r = parseEmpowerCsv(empowerCsv, 'empower-401k');
+    expect(r.positions).toHaveLength(2);
+  });
+
+  it('parses VTI with correct market value', () => {
+    const r = parseEmpowerCsv(empowerCsv, 'empower-401k');
+    const vti = r.positions.find(p => p.ticker === 'VTI');
+    expect(vti).toBeDefined();
+    expect(vti!.marketValue).toBeCloseTo(50_000, 0);
+  });
+
+  it('parses FXNAX with correct market value', () => {
+    const r = parseEmpowerCsv(empowerCsv, 'empower-401k');
+    const bond = r.positions.find(p => p.ticker === 'FXNAX');
+    expect(bond).toBeDefined();
+    expect(bond!.marketValue).toBeCloseTo(20_000, 0);
+  });
+
+  it('preserves fund description from row 1', () => {
+    const r = parseEmpowerCsv(empowerCsv, 'empower-401k');
+    const vti = r.positions.find(p => p.ticker === 'VTI');
+    expect(vti?.description).toBe('Vanguard Total Stock Market ETF');
+  });
+
+  it('attaches the supplied accountId to all positions', () => {
+    const r = parseEmpowerCsv(empowerCsv, 'empower-401k');
+    expect(r.positions.every(p => p.accountId === 'empower-401k')).toBe(true);
+  });
+
+  it('skips funds with zero balance', () => {
+    const csvWithZero = [
+      'Holding,VTI,FXNAX',
+      'Shares,Total Market,Bond Index',
+      'Price,100.00,50.00',
+      ',"$50,000.00","$0.00"',
+    ].join('\n');
+    const r = parseEmpowerCsv(csvWithZero, 'empower-401k');
+    expect(r.positions).toHaveLength(1);
+    expect(r.positions[0].ticker).toBe('VTI');
+  });
+});
+
+// ─── Empower manual-entry adapter ────────────────────────────────────────────
 
 describe('parseEmpowerTotals', () => {
   it('creates one position per non-zero class', () => {

@@ -1,20 +1,23 @@
 // Schwab positions-CSV adapter.
 //
 // How to export: Accounts → Positions tab → Export (top-right link).
-// The file starts with two metadata rows (account name and as-of timestamp)
-// before the column header, which is why skipRows is 2.
+// The exported file has exactly one metadata row (the "Positions for account …"
+// timestamp line) followed by an empty line, then the column header.
+// skipRows=1 drops the metadata line; papaparse's skipEmptyLines handles the
+// blank gap before the header.
 //
-// If Schwab changes their export format, adjust SCHWAB_COLUMNS and SCHWAB_SKIP_ROWS.
+// Column names confirmed against the 2026-05 Schwab export format.
+// If Schwab changes their export, adjust SCHWAB_COLUMNS and SCHWAB_SKIP_ROWS.
 import { parseCsv, type CsvParseResult } from '../csv';
 
 const SCHWAB_COLUMNS = {
   ticker:      'Symbol',
-  marketValue: 'Market Value',
+  marketValue: 'Mkt Val (Market Value)',
   description: 'Description',
   price:       'Price',
 } as const;
 
-const SCHWAB_SKIP_ROWS = 2;
+const SCHWAB_SKIP_ROWS = 1;
 
 export function parseSchwabCsv(csvText: string, accountId: string): CsvParseResult {
   return parseCsv(csvText, accountId, SCHWAB_COLUMNS, { skipRows: SCHWAB_SKIP_ROWS });

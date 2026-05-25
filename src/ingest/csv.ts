@@ -32,9 +32,11 @@ export function parseCsv(
   columnMap: ColumnMap,
   opts?: { skipRows?: number },
 ): CsvParseResult {
+  // Normalise line endings before splitting so skipRows works on Windows exports.
+  const normalised = csvText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   const body = opts?.skipRows
-    ? csvText.split('\n').slice(opts.skipRows).join('\n')
-    : csvText;
+    ? normalised.split('\n').slice(opts.skipRows).join('\n')
+    : normalised;
 
   const { data, errors: parseErrors } =
     Papa.parse<Record<string, string>>(body, { header: true, skipEmptyLines: true });
@@ -43,15 +45,17 @@ export function parseCsv(
   const errors: string[] = parseErrors.map(e => `CSV parse error: ${e.message}`);
 
   for (const [i, row] of data.entries()) {
-    const ticker      = row[columnMap.ticker]?.trim();
+    // Strip broker footnote markers (e.g. "FDRXX**" → "FDRXX").
+    const ticker      = row[columnMap.ticker]?.trim().replace(/\*+$/, '');
     const marketValue = parseMoney(row[columnMap.marketValue]);
     const price       = columnMap.price ? parseMoney(row[columnMap.price]) : undefined;
     const description = columnMap.description ? row[columnMap.description]?.trim() : undefined;
 
-    // Skip subtotal/footer rows: no ticker, placeholder '--', NaN value, $0,
-    // or a ticker that contains a space (e.g. "Account Total", "Cash & Cash Investments").
+    // Skip subtotal/footer rows: no ticker, placeholder '--', NaN value, $0 or
+    // negative (pending activity), or a ticker that contains a space (e.g.
+    // "Account Total", "Cash & Cash Investments").
     // Real fund tickers are always space-free alphanumeric symbols.
-    if (!ticker || ticker === '--' || ticker.includes(' ') || isNaN(marketValue) || marketValue === 0) continue;
+    if (!ticker || ticker === '--' || ticker.includes(' ') || isNaN(marketValue) || marketValue <= 0) continue;
 
     const result = positionSchema.safeParse({
       accountId,
