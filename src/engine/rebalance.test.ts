@@ -239,6 +239,139 @@ describe('minTradeUsd suppression', () => {
   });
 });
 
+// ─── zero-net-balance invariant ──────────────────────────────────────────────
+// With the tolerance-locking fix, Σ trade deltas per account must equal newCash
+// (i.e. sells and buys within an account cancel out, leaving only cash deployment).
+
+describe('zero-net-balance invariant — tolerance with partial drift', () => {
+  // Positions that are CLOSE to §9 targets but not exact; some classes
+  // are within the default 5% band, some are out of tolerance. The old code
+  // would generate non-zero net deltas per account; the fixed code must not.
+  const DRIFTED_POSITIONS: Position[] = [
+    // schwab: $210k FI (target $200k — $10k over, within 5% of $1M = $50k band)
+    { accountId: 'schwab', ticker: 'MUNY',  marketValue: 210_000 },
+    // IRA: slightly off across multiple classes
+    { accountId: 'ira',    ticker: 'FZROX', marketValue: 170_000 },  // US: short
+    { accountId: 'ira',    ticker: 'FZILX', marketValue:  80_000 },  // INTL: over
+    { accountId: 'ira',    ticker: 'FPADX', marketValue:  11_250 },
+    { accountId: 'ira',    ticker: 'GLD',   marketValue:   9_375 },
+    // 401k: slightly off
+    { accountId: 'k401',   ticker: 'FSKAX', marketValue: 319_375 },  // US: short
+    { accountId: 'k401',   ticker: 'VXUS',  marketValue: 106_250 },
+    { accountId: 'k401',   ticker: 'VWO',   marketValue:  18_750 },
+    { accountId: 'k401',   ticker: 'GLD',   marketValue:  15_625 },
+  ];
+
+  it('net trade delta per account = 0 (no new cash, out-of-tolerance classes)', () => {
+    const strategy = { ...DEFAULT_STRATEGY, toleranceAbs: 0 };
+    const r = rebalance(ACCOUNTS_NO_CASH, DRIFTED_POSITIONS, strategy);
+    // Allow $2 rounding tolerance.
+    expect(near(accountSum(r.trades, 'schwab'), 0, 2)).toBe(true);
+    expect(near(accountSum(r.trades, 'ira'),    0, 2)).toBe(true);
+    expect(near(accountSum(r.trades, 'k401'),   0, 2)).toBe(true);
+  });
+
+  it('net trade delta per account = 0 even when some classes are within tolerance', () => {
+    // Default 5% tolerance suppresses some classes; the remaining must still balance.
+    const r = rebalance(ACCOUNTS_NO_CASH, DRIFTED_POSITIONS, DEFAULT_STRATEGY);
+    expect(near(accountSum(r.trades, 'schwab'), 0, 2)).toBe(true);
+    expect(near(accountSum(r.trades, 'ira'),    0, 2)).toBe(true);
+    expect(near(accountSum(r.trades, 'k401'),   0, 2)).toBe(true);
+  });
+});
+
+// ─── locked accounts ─────────────────────────────────────────────────────────
+
+describe('locked accounts', () => {
+  const LOCKED_IRA_ACCOUNTS: Account[] = [
+    { id: 'schwab', name: 'Schwab Brokerage',   institution: 'Schwab',   type: 'TAXABLE',         newCash: 200_000 },
+    { id: 'ira',    name: 'Fidelity Trad IRA',   institution: 'Fidelity', type: 'TRADITIONAL_IRA', newCash: 300_000, locked: true },
+    { id: 'k401',   name: 'Empower 401k',        institution: 'Empower',  type: 'FOUR_OH_ONE_K',   newCash: 500_000 },
+  ];
+
+  it('locked account contributes to householdValue', () => {
+    const r = rebalance(LOCKED_IRA_ACCOUNTS, NO_POSITIONS, ZERO_TOL_STRATEGY);
+    expect(r.householdValue).toBe(1_000_000);
+  });
+
+  it('locked account contributes to currentWeights', () => {
+    // IRA has $300k in FIXED_INCOME; locked but still counted in weights.
+    const POSITIONS_WITH_LOCKED_IRA: Position[] = [
+      { accountId: 'ira', ticker: 'MUNY', marketValue: 300_000 },
+    ];
+    const accts: Account[] = [
+      { id: 'schwab', name: 'Schwab', institution: 'Schwab', type: 'TAXABLE',         newCash: 200_000 },
+      { id: 'ira',    name: 'IRA',    institution: 'Fidelity', type: 'TRADITIONAL_IRA', locked: true },
+      { id: 'k401',   name: '401k',   institution: 'Empower',  type: 'FOUR_OH_ONE_K',   newCash: 500_000 },
+    ];
+    const r = rebalance(accts, POSITIONS_WITH_LOCKED_IRA, ZERO_TOL_STRATEGY);
+    expect(r.currentWeights.FIXED_INCOME).toBeCloseTo(0.3, 3);  // 300k/1M
+  });
+
+  it('generates zero trades for a locked account', () => {
+    const r = rebalance(LOCKED_IRA_ACCOUNTS, NO_POSITIONS, ZERO_TOL_STRATEGY);
+    const iraTrades = r.trades.filter(t => t.accountId === 'ira');
+    expect(iraTrades).toHaveLength(0);
+  });
+
+  it('remaining (non-locked) accounts still balance to their capacity', () => {
+    const r = rebalance(LOCKED_IRA_ACCOUNTS, NO_POSITIONS, ZERO_TOL_STRATEGY);
+    // schwab + k401 together have $700k of free capacity to deploy.
+    expect(near(accountSum(r.trades, 'schwab') + accountSum(r.trades, 'k401'), 700_000)).toBe(true);
+  });
+
+  it('net trade delta per non-locked account = newCash only', () => {
+    // greenfield: all new cash → each account's net delta should equal its newCash
+    const r = rebalance(LOCKED_IRA_ACCOUNTS, NO_POSITIONS, ZERO_TOL_STRATEGY);
+    expect(near(accountSum(r.trades, 'schwab'), 200_000)).toBe(true);
+    expect(near(accountSum(r.trades, 'k401'),   500_000)).toBe(true);
+  });
+});
+
+// ─── locked positions ────────────────────────────────────────────────────────
+
+describe('locked positions', () => {
+  // On-target portfolio except FZROX in 401k is locked.
+  const LOCKED_POS_ACCOUNTS: Account[] = ACCOUNTS_NO_CASH;
+  const BASE_LOCKED_POSITIONS: Position[] = [
+    { accountId: 'schwab', ticker: 'MUNY',  marketValue: 200_000 },
+    { accountId: 'ira',    ticker: 'GLD',   marketValue:   9_375 },
+    { accountId: 'ira',    ticker: 'FPADX', marketValue:  11_250 },
+    { accountId: 'ira',    ticker: 'FZILX', marketValue:  63_750 },
+    { accountId: 'ira',    ticker: 'FZROX', marketValue: 215_625 },
+    { accountId: 'k401',   ticker: 'GLD',   marketValue:  15_625 },
+    { accountId: 'k401',   ticker: 'VWO',   marketValue:  18_750 },
+    { accountId: 'k401',   ticker: 'VXUS',  marketValue: 106_250 },
+    // FSKAX locked — should never appear in a sell trade
+    { accountId: 'k401',   ticker: 'FSKAX', marketValue: 259_375, locked: true },
+    // Extra cash overweight in US — needs to be rebalanced elsewhere
+    { accountId: 'k401',   ticker: 'FSKAX', marketValue: 100_000 },
+  ];
+
+  it('locked position still counted in currentWeights', () => {
+    const r = rebalance(LOCKED_POS_ACCOUNTS, BASE_LOCKED_POSITIONS, ZERO_TOL_STRATEGY);
+    // Total US_TOTAL_MARKET in k401 = 259375 + 100000 + 215625(ira) = 575000 → weight ≈ 0.575
+    expect(r.currentWeights.US_TOTAL_MARKET).toBeGreaterThan(0.5);
+  });
+
+  it('no trade generated that would reduce the locked position', () => {
+    const r = rebalance(LOCKED_POS_ACCOUNTS, BASE_LOCKED_POSITIONS, ZERO_TOL_STRATEGY);
+    // The sell of US_TOTAL_MARKET in k401 must not exceed the unlocked amount ($100k)
+    const usSell = r.trades.find(t => t.accountId === 'k401' && t.assetClass === 'US_TOTAL_MARKET');
+    // If there is a sell, it can't exceed $100k (the unlocked portion)
+    if (usSell && usSell.deltaUsd < 0) {
+      expect(Math.abs(usSell.deltaUsd)).toBeLessThanOrEqual(100_000 + 1); // +$1 rounding
+    }
+  });
+
+  it('net trade delta per account = 0 (no new cash)', () => {
+    const r = rebalance(LOCKED_POS_ACCOUNTS, BASE_LOCKED_POSITIONS, ZERO_TOL_STRATEGY);
+    expect(near(accountSum(r.trades, 'schwab'), 0, 2)).toBe(true);
+    expect(near(accountSum(r.trades, 'ira'),    0, 2)).toBe(true);
+    expect(near(accountSum(r.trades, 'k401'),   0, 2)).toBe(true);
+  });
+});
+
 // ─── TAXABLE_SALE flag ───────────────────────────────────────────────────────
 
 describe('TAXABLE_SALE flag', () => {

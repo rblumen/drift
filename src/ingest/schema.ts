@@ -19,6 +19,7 @@ export const positionSchema = z.object({
   description: z.string().optional(),
   marketValue: z.number().nonnegative(),
   price: z.number().positive().optional(),
+  locked: z.boolean().optional(),
 });
 
 export const accountSchema = z.object({
@@ -28,6 +29,7 @@ export const accountSchema = z.object({
   type: z.enum(ACCOUNT_TYPES),
   newCash: z.number().nonnegative().optional(),
   availableTickers: z.array(z.string().min(1)).optional(),
+  locked: z.boolean().optional(),
 });
 
 const targetsSchema = z.object({

@@ -431,10 +431,23 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
                   <table className="w-full text-sm">
                     <tbody className="divide-y divide-gray-100">
                       {rows.map((p, i) => (
-                        <tr key={i} className="hover:bg-gray-50">
+                        <tr key={i} className={`hover:bg-gray-50 ${p.locked ? 'opacity-60' : ''}`}>
                           <td className="px-4 py-2 font-mono font-medium w-24">{p.ticker}</td>
                           <td className="px-4 py-2 text-gray-500 truncate max-w-xs">{p.description ?? ''}</td>
                           <td className="px-4 py-2 text-right tabular-nums">{fmtUsd(p.marketValue)}</td>
+                          <td className="px-4 py-2 text-center w-8">
+                            <button
+                              onClick={() => setPositions(positions.map(x =>
+                                x.accountId === p.accountId && x.ticker === p.ticker
+                                  ? { ...x, locked: !x.locked }
+                                  : x
+                              ))}
+                              title={p.locked ? 'Unlock position (allow trades)' : 'Lock position (exclude from trades)'}
+                              className={`text-sm transition-colors ${p.locked ? 'text-amber-500 hover:text-gray-400' : 'text-gray-300 hover:text-amber-500'}`}
+                            >
+                              {p.locked ? '🔒' : '🔓'}
+                            </button>
+                          </td>
                           <td className="px-4 py-2 text-right w-8">
                             <button
                               onClick={() => setPositions(positions.filter(x => !(x.accountId === p.accountId && x.ticker === p.ticker)))}

@@ -90,6 +90,7 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount }: Props)
                 <th className="px-4 py-2 text-left">Institution</th>
                 <th className="px-4 py-2 text-left">Type</th>
                 <th className="px-4 py-2 text-right">New Cash</th>
+                <th className="px-4 py-2 text-center" title="Locked accounts count in totals but receive no trade suggestions">Locked</th>
                 <th className="px-4 py-2" />
               </tr>
             </thead>
@@ -134,6 +135,10 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount }: Props)
                         className="w-24 border rounded px-2 py-1 text-sm text-right"
                       />
                     </td>
+                    <td className="px-4 py-2 text-center">
+                      {/* Lock state preserved during edit */}
+                      <span className="text-xs text-gray-400">{acct.locked ? '🔒' : '—'}</span>
+                    </td>
                     <td className="px-4 py-2 text-right space-x-2 whitespace-nowrap">
                       <button
                         onClick={() => saveEdit(acct.id)}
@@ -146,12 +151,23 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount }: Props)
                     </td>
                   </tr>
                 ) : (
-                  <tr key={acct.id} className="hover:bg-gray-50">
+                  <tr key={acct.id} className={`hover:bg-gray-50 ${acct.locked ? 'opacity-60' : ''}`}>
                     <td className="px-4 py-2 font-medium text-gray-800">{acct.name}</td>
                     <td className="px-4 py-2 text-gray-600">{acct.institution}</td>
                     <td className="px-4 py-2 text-gray-600">{ACCT_TYPE_LABEL[acct.type]}</td>
                     <td className="px-4 py-2 text-right text-gray-600">
                       {acct.newCash ? `$${acct.newCash.toLocaleString()}` : '—'}
+                    </td>
+                    <td className="px-4 py-2 text-center">
+                      <button
+                        onClick={() => setAccounts(accounts.map(a =>
+                          a.id === acct.id ? { ...a, locked: !a.locked } : a
+                        ))}
+                        title={acct.locked ? 'Unlock account (allow trades)' : 'Lock account (exclude from trades)'}
+                        className={`text-sm transition-colors ${acct.locked ? 'text-amber-500 hover:text-gray-400' : 'text-gray-300 hover:text-amber-500'}`}
+                      >
+                        {acct.locked ? '🔒' : '🔓'}
+                      </button>
                     </td>
                     <td className="px-4 py-2 text-right space-x-3 whitespace-nowrap">
                       <button

@@ -36,6 +36,9 @@ export interface Account {
   // If set, only tickers on this list (and their derived asset classes) can be
   // held in this account. Absent = unrestricted. Use for 401k-style fixed menus.
   availableTickers?: string[];
+  /** When true, the account is counted in all totals/weights but excluded from
+   *  trade suggestions entirely (zero rebalancing capacity). */
+  locked?: boolean;
 }
 
 export interface Position {
@@ -44,6 +47,9 @@ export interface Position {
   description?: string;
   marketValue: number;
   price?: number;
+  /** When true, this holding counts in totals but is excluded from trades —
+   *  only the unlocked portion of each (account, class) slot is rebalanced. */
+  locked?: boolean;
 }
 
 export interface Strategy {

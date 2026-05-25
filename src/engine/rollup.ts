@@ -10,6 +10,9 @@ export interface RollupResult {
   currentValueByAccount: Record<string, Record<AssetClass, number>>;
   // Per-account investable value (mapped positions + newCash, excluding unmapped).
   accountValues: Record<string, number>;
+  // Market value of individually-locked positions, keyed by account then class.
+  // Does NOT include account-level locking (handled in rebalance).
+  lockedValueByAccount: Record<string, Record<AssetClass, number>>;
   unmappedTickers: string[];
 }
 
@@ -24,12 +27,14 @@ export function rollup(
 ): RollupResult {
   const currentValue = zeroByClass();
   const currentValueByAccount: Record<string, Record<AssetClass, number>> = {};
+  const lockedValueByAccount: Record<string, Record<AssetClass, number>> = {};
   const accountValues: Record<string, number> = {};
   const seenUnmapped = new Set<string>();
   const unmappedTickers: string[] = [];
 
   for (const acct of accounts) {
     currentValueByAccount[acct.id] = zeroByClass();
+    lockedValueByAccount[acct.id]  = zeroByClass();
     accountValues[acct.id] = acct.newCash ?? 0;
   }
 
@@ -46,9 +51,17 @@ export function rollup(
     currentValue[ac] += pos.marketValue;
     currentValueByAccount[pos.accountId][ac] += pos.marketValue;
     accountValues[pos.accountId] = (accountValues[pos.accountId] ?? 0) + pos.marketValue;
+
+    // Track locked position value separately (account-level locking is handled in rebalance).
+    if (pos.locked) {
+      lockedValueByAccount[pos.accountId][ac] += pos.marketValue;
+    }
   }
 
   const householdValue = Object.values(accountValues).reduce((a, b) => a + b, 0);
 
-  return { householdValue, currentValue, currentValueByAccount, accountValues, unmappedTickers };
+  return {
+    householdValue, currentValue, currentValueByAccount,
+    accountValues, lockedValueByAccount, unmappedTickers,
+  };
 }
