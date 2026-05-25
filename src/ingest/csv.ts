@@ -42,7 +42,13 @@ export function parseCsv(
     Papa.parse<Record<string, string>>(body, { header: true, skipEmptyLines: true });
 
   const positions: Position[] = [];
-  const errors: string[] = parseErrors.map(e => `CSV parse error: ${e.message}`);
+  // FieldMismatch (TooManyFields / TooFewFields) fires on broker footer/disclaimer
+  // rows and on rows with trailing commas, but the data is still parsed correctly
+  // and our row-level filters catch those rows anyway. Only surface fatal errors
+  // like unclosed quotes that indicate a genuinely unparseable file.
+  const errors: string[] = parseErrors
+    .filter(e => e.type !== 'FieldMismatch')
+    .map(e => `CSV parse error: ${e.message}`);
 
   for (const [i, row] of data.entries()) {
     // Strip broker footnote markers (e.g. "FDRXX**" → "FDRXX").
