@@ -1,30 +1,30 @@
 import { useState, useEffect } from 'react';
 import type { Strategy, AssetClass, PlacementBucket } from '../engine/types';
 import { ALL_ASSET_CLASSES } from '../engine/types';
-import { AC_LABEL } from './fmt';
+import { AC_COLOR, AC_LABEL, BUCKET_COLOR, BUCKET_LABEL } from './fmt';
+import { DonutChart } from './DonutChart';
+import type { DonutSlice } from './DonutChart';
+
+const ALL_BUCKETS: PlacementBucket[] = ['TAX_ADVANTAGED', 'TAXABLE', 'EDUCATION'];
 
 interface Props {
   strategy: Strategy;
   setStrategy: (s: Strategy) => void;
+  /** Live current weights from the rebalance engine (fractions 0–1). */
+  currentWeights: Record<AssetClass, number>;
 }
 
-const BUCKET_LABEL: Record<PlacementBucket, string> = {
-  TAXABLE:       'Taxable',
-  TAX_ADVANTAGED:'Tax-advantaged',
-  EDUCATION:     'Education',
-};
-
-export function StrategyPanel({ strategy, setStrategy }: Props) {
-  // Local weight state as string inputs (so user can type freely before committing)
+export function StrategyPanel({ strategy, setStrategy, currentWeights }: Props) {
+  // Local weight state as strings so the user can type freely before committing.
   const [weights, setWeights] = useState<Record<AssetClass, string>>(
     () => Object.fromEntries(
       ALL_ASSET_CLASSES.map(ac => [ac, (strategy.targets[ac] * 100).toFixed(1)])
     ) as Record<AssetClass, string>
   );
   const [tolerance, setTolerance] = useState(String((strategy.toleranceAbs * 100).toFixed(1)));
-  const [minTrade, setMinTrade] = useState(String(strategy.minTradeUsd));
+  const [minTrade,  setMinTrade]  = useState(String(strategy.minTradeUsd));
 
-  // Sync local state if strategy prop changes externally
+  // Sync local state if strategy prop changes externally (e.g. JSON import).
   useEffect(() => {
     setWeights(Object.fromEntries(
       ALL_ASSET_CLASSES.map(ac => [ac, (strategy.targets[ac] * 100).toFixed(1)])
@@ -34,7 +34,7 @@ export function StrategyPanel({ strategy, setStrategy }: Props) {
   }, [strategy]);
 
   const sum = ALL_ASSET_CLASSES.reduce((s, ac) => s + (parseFloat(weights[ac]) || 0), 0);
-  const sumOk = Math.abs(sum - 100) < 0.11; // ±0.001 * 100 ≈ 0.1pp tolerance
+  const sumOk = Math.abs(sum - 100) < 0.11;
 
   function commitWeights() {
     if (!sumOk) return;
@@ -48,11 +48,43 @@ export function StrategyPanel({ strategy, setStrategy }: Props) {
     });
   }
 
+  function updatePlacement(ac: AssetClass, slot: 0 | 1, bucket: PlacementBucket | '') {
+    const current = [...strategy.placement[ac]] as PlacementBucket[];
+    if (slot === 0) {
+      current[0] = bucket as PlacementBucket; // 1st choice is required
+    } else {
+      if (bucket === '') {
+        current.splice(1); // remove 2nd choice
+      } else {
+        current[1] = bucket as PlacementBucket;
+      }
+    }
+    setStrategy({ ...strategy, placement: { ...strategy.placement, [ac]: current } });
+  }
+
+  // Build donut slices — same order as ALL_ASSET_CLASSES so colours are consistent.
+  const innerSlices: DonutSlice[] = ALL_ASSET_CLASSES.map(ac => ({
+    label:  AC_LABEL[ac],
+    weight: currentWeights[ac] ?? 0,
+    color:  AC_COLOR[ac],
+  }));
+
+  const outerSlices: DonutSlice[] = ALL_ASSET_CLASSES.map(ac => ({
+    label:  AC_LABEL[ac],
+    weight: strategy.targets[ac] ?? 0,
+    color:  AC_COLOR[ac],
+  }));
+
   return (
     <div className="space-y-6">
       <h2 className="text-lg font-semibold text-gray-800">Strategy</h2>
 
-      {/* Target weights */}
+      {/* ── Current vs. target donut ─────────────────────────────────────────── */}
+      <div className="border border-gray-200 rounded-lg p-5">
+        <DonutChart inner={innerSlices} outer={outerSlices} size={180} />
+      </div>
+
+      {/* ── Target allocation ────────────────────────────────────────────────── */}
       <div className="space-y-3">
         <h3 className="text-sm font-medium text-gray-700">Target allocation</h3>
         <div className="overflow-hidden border border-gray-200 rounded-lg">
@@ -67,7 +99,12 @@ export function StrategyPanel({ strategy, setStrategy }: Props) {
             <tbody className="divide-y divide-gray-100">
               {ALL_ASSET_CLASSES.map(ac => (
                 <tr key={ac}>
-                  <td className="px-4 py-2 text-gray-700">{AC_LABEL[ac]}</td>
+                  <td className="px-4 py-2">
+                    <span className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-sm shrink-0" style={{ backgroundColor: AC_COLOR[ac] }} />
+                      <span className="text-gray-700">{AC_LABEL[ac]}</span>
+                    </span>
+                  </td>
                   <td className="px-4 py-2 text-right">
                     <div className="flex items-center justify-end gap-1">
                       <input
@@ -86,8 +123,11 @@ export function StrategyPanel({ strategy, setStrategy }: Props) {
                   <td className="px-4 py-2">
                     <div className="w-48 bg-gray-100 rounded-full h-2">
                       <div
-                        className="bg-indigo-500 h-2 rounded-full transition-all"
-                        style={{ width: `${Math.min(parseFloat(weights[ac]) || 0, 100)}%` }}
+                        className="h-2 rounded-full transition-all"
+                        style={{
+                          width:           `${Math.min(parseFloat(weights[ac]) || 0, 100)}%`,
+                          backgroundColor: AC_COLOR[ac],
+                        }}
                       />
                     </div>
                   </td>
@@ -114,11 +154,15 @@ export function StrategyPanel({ strategy, setStrategy }: Props) {
         )}
       </div>
 
-      {/* Placement rules (read-only in v1) */}
+      {/* ── Placement rules (editable) ───────────────────────────────────────── */}
       <div className="space-y-3">
-        <h3 className="text-sm font-medium text-gray-700">Placement rules
-          <span className="ml-2 text-xs font-normal text-gray-400">(preferred account type, in order)</span>
-        </h3>
+        <div>
+          <h3 className="text-sm font-medium text-gray-700">Placement rules</h3>
+          <p className="text-xs text-gray-400 mt-0.5">
+            Preferred account type for each asset class. The engine fills the 1st-choice bucket
+            first, then spills into 2nd.
+          </p>
+        </div>
         <div className="overflow-hidden border border-gray-200 rounded-lg">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
@@ -132,15 +176,34 @@ export function StrategyPanel({ strategy, setStrategy }: Props) {
               {ALL_ASSET_CLASSES.map(ac => {
                 const buckets = strategy.placement[ac];
                 return (
-                  <tr key={ac}>
+                  <tr key={ac} className="hover:bg-gray-50">
                     <td className="px-4 py-2 text-gray-700">{AC_LABEL[ac]}</td>
+
+                    {/* 1st choice — required, no empty option */}
                     <td className="px-4 py-2">
-                      <span className="bg-indigo-50 text-indigo-700 text-xs px-2 py-0.5 rounded-full">
-                        {BUCKET_LABEL[buckets[0]]}
-                      </span>
+                      <select
+                        value={buckets[0] ?? 'TAX_ADVANTAGED'}
+                        onChange={e => updatePlacement(ac, 0, e.target.value as PlacementBucket)}
+                        className="border border-gray-200 rounded px-2 py-1 text-sm bg-white hover:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                      >
+                        {ALL_BUCKETS.map(b => (
+                          <option key={b} value={b}>{BUCKET_LABEL[b]}</option>
+                        ))}
+                      </select>
                     </td>
-                    <td className="px-4 py-2 text-gray-400 text-xs">
-                      {buckets[1] ? BUCKET_LABEL[buckets[1]] : '—'}
+
+                    {/* 2nd choice — optional, empty = spill anywhere */}
+                    <td className="px-4 py-2">
+                      <select
+                        value={buckets[1] ?? ''}
+                        onChange={e => updatePlacement(ac, 1, e.target.value as PlacementBucket | '')}
+                        className="border border-gray-200 rounded px-2 py-1 text-sm bg-white hover:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400 text-gray-500"
+                      >
+                        <option value="">— none —</option>
+                        {ALL_BUCKETS.map(b => (
+                          <option key={b} value={b}>{BUCKET_LABEL[b]}</option>
+                        ))}
+                      </select>
                     </td>
                   </tr>
                 );
@@ -148,13 +211,9 @@ export function StrategyPanel({ strategy, setStrategy }: Props) {
             </tbody>
           </table>
         </div>
-        <p className="text-xs text-gray-400">
-          Placement rules determine which account type each asset class prefers.
-          The engine fills the first-choice bucket first, then spills to the second.
-        </p>
       </div>
 
-      {/* Tolerances */}
+      {/* ── Rebalance parameters ─────────────────────────────────────────────── */}
       <div className="space-y-3">
         <h3 className="text-sm font-medium text-gray-700">Rebalance parameters</h3>
         <div className="grid grid-cols-2 gap-4 max-w-sm">

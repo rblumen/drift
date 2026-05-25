@@ -197,6 +197,7 @@ export default function App() {
           <StrategyPanel
             strategy={strategy}
             setStrategy={setStrategy}
+            currentWeights={result.currentWeights}
           />
         )}
         {activeTab === 'results' && (
