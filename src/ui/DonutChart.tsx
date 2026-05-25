@@ -104,61 +104,65 @@ export function DonutChart({ inner, outer, size = 180 }: Props) {
           </text>
         </svg>
 
-        {/* Ring labels outside the SVG */}
-        {hasInner && (
-          <div className="absolute -right-1 top-1/2 -translate-y-1/2 flex flex-col gap-1 text-right pointer-events-none">
-          </div>
-        )}
       </div>
 
-      {/* Legend — current vs target per asset class */}
-      <div className="space-y-2 flex-1 min-w-0 self-center">
-        {/* Header */}
-        <div className="flex text-xs text-gray-400 gap-2 pb-0.5 border-b border-gray-100 mb-1">
-          <span className="flex-1">Asset class</span>
-          <span className="w-14 text-right">Now</span>
-          <span className="w-4 text-center" />
-          <span className="w-14 text-right">Target</span>
+      {/* Legend — grid layout guarantees column alignment between header and rows */}
+      <div className="flex-1 min-w-0 self-center space-y-0">
+
+        {/* Header row */}
+        <div className="grid text-xs text-gray-400 pb-1.5 mb-0.5 border-b border-gray-100"
+             style={{ gridTemplateColumns: '1fr 3.5rem 3.5rem 3rem' }}>
+          <span className="pl-4">Asset class</span>
+          <span className="text-right">Now</span>
+          <span className="text-right">Target</span>
+          <span className="text-right">Change</span>
         </div>
+
+        {/* Data rows */}
         {outer.map((sl, i) => {
           const currentWeight = inner[i]?.weight ?? 0;
           const drift = currentWeight - sl.weight;
-          const driftLabel =
-            Math.abs(drift) < 0.001 ? null :
-            drift > 0 ? `+${fmtPct(drift)}` : fmtPct(drift);
-          const driftColor =
-            Math.abs(drift) < 0.001 ? '' :
-            drift > 0 ? 'text-red-400' : 'text-sky-500';
+          const significant = Math.abs(drift) >= 0.001;
+          const driftLabel = significant
+            ? (drift > 0 ? `+${fmtPct(drift)}` : fmtPct(drift))
+            : '—';
+          const driftColor = !significant    ? 'text-gray-300'
+                           : drift > 0       ? 'text-red-400'
+                           :                   'text-sky-500';
           return (
-            <div key={sl.label} className="flex items-center gap-2 text-xs">
-              <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: sl.color }} />
-              <span className="text-gray-600 flex-1 truncate">{sl.label}</span>
-              {hasInner ? (
-                <>
-                  <span className="w-14 text-right tabular-nums text-gray-500">
-                    {fmtPct(currentWeight)}
-                  </span>
-                  <span className={`w-4 text-center text-gray-300`}>→</span>
-                </>
-              ) : (
-                <span className="w-18" />
-              )}
-              <span className="w-14 text-right tabular-nums font-medium text-gray-700">
+            <div
+              key={sl.label}
+              className="grid items-center text-xs py-[3px]"
+              style={{ gridTemplateColumns: '1fr 3.5rem 3.5rem 3rem' }}
+            >
+              {/* Swatch + label live inside the first column */}
+              <span className="flex items-center gap-1.5 min-w-0">
+                <span className="w-2 h-2 rounded-sm shrink-0" style={{ backgroundColor: sl.color }} />
+                <span className="text-gray-600 truncate">{sl.label}</span>
+              </span>
+              <span className="text-right tabular-nums text-gray-400">
+                {hasInner ? fmtPct(currentWeight) : '—'}
+              </span>
+              <span className="text-right tabular-nums font-medium text-gray-700">
                 {fmtPct(sl.weight)}
               </span>
-              {driftLabel && (
-                <span className={`w-12 text-right tabular-nums text-xs ${driftColor}`}>
-                  {driftLabel}
-                </span>
-              )}
+              <span className={`text-right tabular-nums ${driftColor}`}>
+                {hasInner ? driftLabel : '—'}
+              </span>
             </div>
           );
         })}
-        <div className="flex items-center gap-2 pt-2 text-xs text-gray-400 border-t border-gray-100">
-          <span className="w-2.5 h-2.5 rounded-full border-2 border-gray-300 shrink-0" />
-          <span>inner = current</span>
-          <span className="ml-3 w-2.5 h-2.5 rounded-full border-2 border-gray-400 shrink-0" />
-          <span>outer = target</span>
+
+        {/* Ring annotation */}
+        <div className="flex items-center gap-4 pt-2.5 mt-1 text-xs text-gray-400 border-t border-gray-100">
+          <span className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full border-2 border-gray-300 shrink-0" />
+            inner = current
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full border-2 border-gray-500 shrink-0" />
+            outer = target
+          </span>
         </div>
       </div>
     </div>
