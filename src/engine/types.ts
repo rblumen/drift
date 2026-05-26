@@ -44,6 +44,9 @@ export interface Account {
   // If set, only tickers on this list (and their derived asset classes) can be
   // held in this account. Absent = unrestricted. Use for 401k-style fixed menus.
   availableTickers?: string[];
+  // Explicit asset-class whitelist. Takes precedence over availableTickers when set.
+  // Use when you know which classes an account permits without a full ticker list.
+  allowedAssetClasses?: AssetClass[];
   /** When true, the account is counted in all totals/weights but excluded from
    *  trade suggestions entirely (zero rebalancing capacity). */
   locked?: boolean;

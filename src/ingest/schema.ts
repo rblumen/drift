@@ -30,6 +30,7 @@ export const accountSchema = z.object({
   type: z.enum(ACCOUNT_TYPES),
   newCash: z.number().nonnegative().optional(),
   availableTickers: z.array(z.string().min(1)).optional(),
+  allowedAssetClasses: z.array(z.enum(ASSET_CLASSES)).optional(),
   locked: z.boolean().optional(),
 });
 

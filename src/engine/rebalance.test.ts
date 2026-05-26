@@ -390,6 +390,53 @@ describe('locked positions', () => {
   });
 });
 
+// ─── allowedAssetClasses — explicit class whitelist ──────────────────────────
+
+describe('allowedAssetClasses — explicit class whitelist', () => {
+  const EXPLICIT_CONSTRAINED: Account[] = [
+    { id: 'schwab', name: 'Schwab',    institution: 'Schwab',   type: 'TAXABLE',         newCash: 200_000 },
+    { id: 'ira',    name: 'Trad IRA',  institution: 'Fidelity', type: 'TRADITIONAL_IRA', newCash: 300_000 },
+    {
+      id: 'k401', name: 'Empower 401k', institution: 'Empower', type: 'FOUR_OH_ONE_K', newCash: 500_000,
+      // Direct class whitelist — same effective constraint as the availableTickers test
+      // but expressed without a ticker list.
+      allowedAssetClasses: [
+        'US_LARGE_CAP', 'US_MID_CAP', 'US_SMALL_CAP',
+        'DEVELOPED_INTL', 'EMERGING_INTL', 'FIXED_INCOME', 'CASH',
+      ] as AssetClass[],
+    },
+  ];
+
+  it('401k receives no ALTERNATIVES when excluded via allowedAssetClasses', () => {
+    const r = rebalance(EXPLICIT_CONSTRAINED, NO_POSITIONS, ZERO_TOL_STRATEGY);
+    expect(tradeFor(r.trades, 'k401', 'ALTERNATIVES')).toBeUndefined();
+  });
+
+  it('all $25k ALTERNATIVES go to IRA', () => {
+    const r = rebalance(EXPLICIT_CONSTRAINED, NO_POSITIONS, ZERO_TOL_STRATEGY);
+    expect(tradeFor(r.trades, 'ira', 'ALTERNATIVES')?.deltaUsd).toBeCloseTo(25_000, 0);
+  });
+
+  it('each account trade sum still matches its capacity', () => {
+    const r = rebalance(EXPLICIT_CONSTRAINED, NO_POSITIONS, ZERO_TOL_STRATEGY);
+    expect(near(accountSum(r.trades, 'schwab'), 200_000)).toBe(true);
+    expect(near(accountSum(r.trades, 'ira'),    300_000)).toBe(true);
+    expect(near(accountSum(r.trades, 'k401'),   500_000)).toBe(true);
+  });
+
+  it('allowedAssetClasses takes precedence over availableTickers', () => {
+    // availableTickers includes GLD (→ ALTERNATIVES), but allowedAssetClasses overrides it.
+    const accts: Account[] = [{
+      id: 'ira', name: 'IRA', institution: 'Fidelity', type: 'TRADITIONAL_IRA', newCash: 500_000,
+      availableTickers: ['GLD'],
+      allowedAssetClasses: ['US_LARGE_CAP'] as AssetClass[],
+    }];
+    const r = rebalance(accts, NO_POSITIONS, ZERO_TOL_STRATEGY);
+    expect(tradeFor(r.trades, 'ira', 'ALTERNATIVES')).toBeUndefined();
+    expect(tradeFor(r.trades, 'ira', 'US_LARGE_CAP')).toBeDefined();
+  });
+});
+
 // ─── TAXABLE_SALE flag ───────────────────────────────────────────────────────
 
 describe('TAXABLE_SALE flag', () => {

@@ -134,12 +134,15 @@ export function rebalance(
     ]),
   ) as Record<AssetClass, number>;
 
-  // Step 6 — Derive per-account effective allowed classes from availableTickers.
+  // Step 6 — Derive per-account effective allowed classes.
+  //           Priority: allowedAssetClasses (explicit) > availableTickers (derived) > unrestricted.
   //           Only for non-locked accounts (locked accounts don't participate).
   const nonLockedAccounts = accounts.filter(a => !a.locked);
   const effectiveAllowed: Record<string, Set<AssetClass>> = {};
   for (const acct of nonLockedAccounts) {
-    if (acct.availableTickers === undefined) {
+    if (acct.allowedAssetClasses !== undefined) {
+      effectiveAllowed[acct.id] = new Set(acct.allowedAssetClasses);
+    } else if (acct.availableTickers === undefined) {
       effectiveAllowed[acct.id] = new Set(ALL_ASSET_CLASSES);
     } else {
       const allowed = new Set<AssetClass>();
