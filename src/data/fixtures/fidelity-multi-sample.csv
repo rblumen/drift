@@ -1,0 +1,7 @@
+Account Number,Account Name,Symbol,Description,Quantity,Last Price,Last Price Change,Current Value,Today's Gain/Loss Dollar,Today's Gain/Loss Percent,Total Gain/Loss Dollar,Total Gain/Loss Percent,Percent Of Account,Cost Basis Total,Average Cost Basis,Type
+"Z00000001","Fidelity Traditional IRA","FZROX","FIDELITY ZERO TOTAL MARKET INDEX FUND","11750","$18.34","$0.12","$215,495.00","$1,410.00","0.66%","$15,000.00","7.49%","71.83%","$200,495.00","$17.06","Mutual Fund"
+"Z00000001","Fidelity Traditional IRA","FZILX","FIDELITY ZERO INTERNATIONAL INDEX FUND","4961","$12.85","$0.05","$63,748.85","$248.05","0.39%","$3,000.00","4.94%","21.25%","$60,748.85","$12.24","Mutual Fund"
+"Z00000001","Fidelity Traditional IRA","","Pending Activity","","","","$0.00","","","","","","","",""
+"Z00000002","Fidelity Roth IRA","FZROX","FIDELITY ZERO TOTAL MARKET INDEX FUND","3200","$18.34","$0.12","$58,688.00","$384.00","0.66%","$3,200.00","5.77%","74.28%","$55,488.00","$17.34","Mutual Fund"
+"Z00000002","Fidelity Roth IRA","FXNAX","FIDELITY US BOND INDEX FUND","1800","$11.24","$0.01","$20,232.00","$18.00","0.09%","$232.00","1.16%","25.60%","$20,000.00","$11.11","Mutual Fund"
+"Z00000002","Fidelity Roth IRA","","Pending Activity","","","","$0.00","","","","","","","",""

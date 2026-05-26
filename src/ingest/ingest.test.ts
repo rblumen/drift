@@ -2,12 +2,13 @@ import { describe, it, expect } from 'vitest';
 import { parsePosition, parseStrategy, safeParseStrategy, safeParsePosition, parsePortfolio } from './schema';
 import { parseCsv, parseMoney } from './csv';
 import { parseSchwabCsv } from './adapters/schwab';
-import { parseFidelityCsv } from './adapters/fidelity';
+import { parseFidelityCsv, parseFidelityMultiCsv } from './adapters/fidelity';
 import { parseEmpowerCsv, parseEmpowerTotals, EMPOWER_TICKER } from './adapters/empower';
 import { DEFAULT_STRATEGY } from '../engine/strategy';
 
 import schwabCsv from '../data/fixtures/schwab-sample.csv?raw';
 import fidelityCsv from '../data/fixtures/fidelity-sample.csv?raw';
+import fidelityMultiCsv from '../data/fixtures/fidelity-multi-sample.csv?raw';
 import empowerCsv from '../data/fixtures/empower-sample.csv?raw';
 
 // ─── parseMoney ──────────────────────────────────────────────────────────────
@@ -217,6 +218,61 @@ describe('parseFidelityCsv', () => {
   it('attaches the supplied accountId', () => {
     const r = parseFidelityCsv(fidelityCsv, 'fidelity-ira');
     expect(r.positions.every(p => p.accountId === 'fidelity-ira')).toBe(true);
+  });
+});
+
+// ─── Fidelity multi-account adapter ──────────────────────────────────────────
+
+describe('parseFidelityMultiCsv', () => {
+  it('discovers two accounts from the multi-account fixture', () => {
+    const r = parseFidelityMultiCsv(fidelityMultiCsv);
+    expect(r.discovered).toHaveLength(2);
+    expect(r.errors).toHaveLength(0);
+  });
+
+  it('preserves account order of first appearance', () => {
+    const r = parseFidelityMultiCsv(fidelityMultiCsv);
+    expect(r.discovered[0].accountNumber).toBe('Z00000001');
+    expect(r.discovered[1].accountNumber).toBe('Z00000002');
+  });
+
+  it('captures account names', () => {
+    const r = parseFidelityMultiCsv(fidelityMultiCsv);
+    expect(r.discovered[0].accountName).toBe('Fidelity Traditional IRA');
+    expect(r.discovered[1].accountName).toBe('Fidelity Roth IRA');
+  });
+
+  it('returns 2 positions for account Z00000001 (skips Pending Activity)', () => {
+    const r = parseFidelityMultiCsv(fidelityMultiCsv);
+    expect(r.positionsByNumber['Z00000001']).toHaveLength(2);
+  });
+
+  it('returns 2 positions for account Z00000002', () => {
+    const r = parseFidelityMultiCsv(fidelityMultiCsv);
+    expect(r.positionsByNumber['Z00000002']).toHaveLength(2);
+  });
+
+  it('parses market values correctly for each account', () => {
+    const r = parseFidelityMultiCsv(fidelityMultiCsv);
+    const trad = r.positionsByNumber['Z00000001'];
+    const fzrox = trad.find(p => p.ticker === 'FZROX');
+    expect(fzrox?.marketValue).toBeCloseTo(215_495, 0);
+
+    const roth = r.positionsByNumber['Z00000002'];
+    const fxnax = roth.find(p => p.ticker === 'FXNAX');
+    expect(fxnax?.marketValue).toBeCloseTo(20_232, 0);
+  });
+
+  it('uses accountNumber as placeholder accountId', () => {
+    const r = parseFidelityMultiCsv(fidelityMultiCsv);
+    expect(r.positionsByNumber['Z00000001'].every(p => p.accountId === 'Z00000001')).toBe(true);
+    expect(r.positionsByNumber['Z00000002'].every(p => p.accountId === 'Z00000002')).toBe(true);
+  });
+
+  it('single-account file returns one discovered account, no mapping UI needed', () => {
+    const r = parseFidelityMultiCsv(fidelityCsv);
+    expect(r.discovered).toHaveLength(1);
+    expect(r.discovered[0].accountNumber).toBe('Z00000001');
   });
 });
 

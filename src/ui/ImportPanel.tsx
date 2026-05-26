@@ -2,7 +2,8 @@ import { useRef, useState, useEffect } from 'react';
 import type { Account, AssetClass, Position } from '../engine/types';
 import { ALL_ASSET_CLASSES } from '../engine/types';
 import { parseSchwabCsv } from '../ingest/adapters/schwab';
-import { parseFidelityCsv } from '../ingest/adapters/fidelity';
+import { parseFidelityMultiCsv } from '../ingest/adapters/fidelity';
+import type { FidelityMultiResult } from '../ingest/adapters/fidelity';
 import { parseEmpowerCsv, parseEmpowerTotals } from '../ingest/adapters/empower';
 import { AC_LABEL, ACCT_TYPE_COLOR, ACCT_TYPE_LABEL, fmtUsd } from './fmt';
 import { PieChart } from './PieChart';
@@ -69,6 +70,9 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
   const [parseErrors,   setParseErrors]   = useState<string[]>([]);
   const [manualRow,     setManualRow]     = useState({ ticker: '', marketValue: '', price: '' });
   const [empowerTotals, setEmpowerTotals] = useState<Partial<Record<AssetClass, string>>>({});
+  // Fidelity multi-account flow.
+  const [fidelityMulti,   setFidelityMulti]   = useState<FidelityMultiResult | null>(null);
+  const [fidelityMapping, setFidelityMapping] = useState<Record<string, string>>({});
   // Set of account IDs whose position rows are collapsed.
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const fileRef = useRef<HTMLInputElement>(null);
@@ -87,6 +91,8 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
     if (acct) setAdapter(defaultAdapter(acct.institution));
     setPreview(null);
     setParseErrors([]);
+    setFidelityMulti(null);
+    setFidelityMapping({});
   }, [accountId]);
 
   // Keep accountId in sync if accounts list changes (e.g. first account added).
@@ -99,14 +105,42 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (!file || !accountId) return;
+    if (!file) return;
     const text = await readFile(file);
-    let result;
-    if (adapter === 'schwab')        result = parseSchwabCsv(text, accountId);
-    else if (adapter === 'fidelity') result = parseFidelityCsv(text, accountId);
-    else                             result = parseEmpowerCsv(text, accountId);
-    setParseErrors(result.errors);
-    setPreview(result.positions);
+
+    if (adapter === 'fidelity') {
+      const multiResult = parseFidelityMultiCsv(text);
+      setParseErrors(multiResult.errors);
+
+      if (multiResult.discovered.length <= 1) {
+        // Single account — assign all positions to the currently-selected account.
+        const num = multiResult.discovered[0]?.accountNumber;
+        const raw = num ? (multiResult.positionsByNumber[num] ?? []) : [];
+        setPreview(raw.map(p => ({ ...p, accountId })));
+        setFidelityMulti(null);
+      } else {
+        // Multiple accounts — show the mapping step.
+        // Auto-match by name similarity so common cases need no manual selection.
+        const initMapping: Record<string, string> = {};
+        for (const disc of multiResult.discovered) {
+          const nameLower = disc.accountName.toLowerCase();
+          const match = accounts.find(a =>
+            a.name.toLowerCase().includes(nameLower) ||
+            nameLower.includes(a.name.toLowerCase())
+          );
+          initMapping[disc.accountNumber] = match?.id ?? '';
+        }
+        setFidelityMulti(multiResult);
+        setFidelityMapping(initMapping);
+      }
+    } else {
+      const result = adapter === 'schwab'
+        ? parseSchwabCsv(text, accountId)
+        : parseEmpowerCsv(text, accountId);
+      setParseErrors(result.errors);
+      setPreview(result.positions);
+    }
+
     e.target.value = '';
   }
 
@@ -114,6 +148,22 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
     if (!preview) return;
     setPositions(mergePositions(positions, preview, accountId));
     setPreview(null);
+    setParseErrors([]);
+  }
+
+  function confirmFidelityMulti() {
+    if (!fidelityMulti) return;
+    let updated = positions;
+    for (const disc of fidelityMulti.discovered) {
+      const appId = fidelityMapping[disc.accountNumber];
+      if (!appId) continue;
+      const remapped = (fidelityMulti.positionsByNumber[disc.accountNumber] ?? [])
+        .map(p => ({ ...p, accountId: appId }));
+      updated = mergePositions(updated, remapped, appId);
+    }
+    setPositions(updated);
+    setFidelityMulti(null);
+    setFidelityMapping({});
     setParseErrors([]);
   }
 
@@ -215,7 +265,7 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
             {ADAPTER_META.map(m => (
               <button
                 key={m.id}
-                onClick={() => { setAdapter(m.id); setPreview(null); setParseErrors([]); }}
+                onClick={() => { setAdapter(m.id); setPreview(null); setParseErrors([]); setFidelityMulti(null); setFidelityMapping({}); }}
                 className={`px-3 py-1.5 text-sm rounded-md border transition-colors
                   ${adapter === m.id
                     ? 'bg-indigo-600 text-white border-indigo-600'
@@ -230,7 +280,7 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
 
       {/* Step 2 — Import widget */}
 
-      {isCsvAdapter && !preview && (
+      {isCsvAdapter && !preview && !fidelityMulti && (
         <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center space-y-3">
           <p className="text-sm text-gray-500">{adapterHint}</p>
           <input ref={fileRef} type="file" accept=".csv" onChange={handleFile} className="hidden" />
@@ -246,6 +296,61 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
       {parseErrors.length > 0 && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700 space-y-1">
           {parseErrors.map((e, i) => <div key={i}>{e}</div>)}
+        </div>
+      )}
+
+      {/* Fidelity multi-account mapping step */}
+      {fidelityMulti && (
+        <div className="border border-indigo-200 rounded-lg p-4 space-y-4 bg-indigo-50">
+          <div>
+            <h3 className="text-sm font-semibold text-indigo-800">
+              Map Fidelity accounts → your accounts
+            </h3>
+            <p className="text-xs text-indigo-600 mt-0.5">
+              {fidelityMulti.discovered.length} accounts found in the file. Route each one to an account you've added, or skip it.
+            </p>
+          </div>
+          <div className="space-y-2">
+            {fidelityMulti.discovered.map(disc => {
+              const posCount = fidelityMulti.positionsByNumber[disc.accountNumber]?.length ?? 0;
+              return (
+                <div key={disc.accountNumber} className="flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-gray-800 truncate">{disc.accountName}</div>
+                    <div className="text-xs text-gray-500">
+                      {disc.accountNumber} · {posCount} position{posCount !== 1 ? 's' : ''}
+                    </div>
+                  </div>
+                  <span className="text-gray-400 text-sm shrink-0">→</span>
+                  <select
+                    value={fidelityMapping[disc.accountNumber] ?? ''}
+                    onChange={e => setFidelityMapping({ ...fidelityMapping, [disc.accountNumber]: e.target.value })}
+                    className="border border-gray-300 rounded px-2 py-1.5 text-sm bg-white min-w-44"
+                  >
+                    <option value="">— skip —</option>
+                    {accounts.map(a => (
+                      <option key={a.id} value={a.id}>{a.name}</option>
+                    ))}
+                  </select>
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={confirmFidelityMulti}
+              disabled={!fidelityMulti.discovered.some(d => fidelityMapping[d.accountNumber])}
+              className="bg-indigo-600 text-white text-sm px-4 py-1.5 rounded-md hover:bg-indigo-700 disabled:opacity-40"
+            >
+              Confirm import
+            </button>
+            <button
+              onClick={() => { setFidelityMulti(null); setFidelityMapping({}); setParseErrors([]); }}
+              className="text-gray-500 text-sm px-3 py-1.5 rounded-md hover:bg-gray-100"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       )}
 
