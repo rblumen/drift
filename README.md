@@ -18,16 +18,30 @@ A local, browser-only tool for household-level investment rebalancing across mul
 node --version   # should print v18.x or higher
 ```
 
-## Running locally
+## Launching the app
+
+### One double-click (Windows)
+
+Double-click **`launch.bat`** in the project folder.
+
+It will:
+1. Run `npm install` automatically on first launch (skipped after that)
+2. Start the Vite dev server in a minimised taskbar window
+3. Wait until the server is ready, then open **http://localhost:5173** in your default browser
+4. Close the launcher window — the server keeps running in the taskbar
+
+**To stop:** close the "Portfolio Rebalancer — Server" window in your taskbar, or click into it and press `Ctrl+C`.
+
+> **Already running?** Double-clicking `launch.bat` again just opens a new browser tab — it won't start a second server.
+
+### Manual (any platform)
 
 ```bash
 npm install      # first time only — installs dependencies
-npm run dev      # starts the dev server
+npm run dev      # starts the dev server at http://localhost:5173
 ```
 
-Then open **http://localhost:5173** in your browser. The app reloads automatically when you save a file.
-
-To stop the server, press `Ctrl+C` in the terminal.
+The app reloads automatically when you save a source file. Press `Ctrl+C` in the terminal to stop.
 
 ## Typical workflow
 
@@ -59,7 +73,7 @@ The exported file contains your accounts, positions, strategy, and any custom ti
 ## Other commands
 
 ```bash
-npm test         # run the engine and ingest unit tests (78 tests)
+npm test         # run the engine and ingest unit tests (88 tests)
 npm run build    # production build → dist/
 ```
 
