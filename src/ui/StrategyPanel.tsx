@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { Strategy, AssetClass, PlacementBucket } from '../engine/types';
 import { ALL_ASSET_CLASSES } from '../engine/types';
+import { DEFAULT_STRATEGY } from '../engine/strategy';
 import { AC_COLOR, AC_LABEL, BUCKET_COLOR, BUCKET_LABEL } from './fmt';
 import { DonutChart } from './DonutChart';
 import type { DonutSlice } from './DonutChart';
@@ -174,7 +175,7 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights }: Props) 
             </thead>
             <tbody className="divide-y divide-gray-100">
               {ALL_ASSET_CLASSES.map(ac => {
-                const buckets = strategy.placement[ac];
+                const buckets = strategy.placement[ac] ?? DEFAULT_STRATEGY.placement[ac];
                 return (
                   <tr key={ac} className="hover:bg-gray-50">
                     <td className="px-4 py-2 text-gray-700">{AC_LABEL[ac]}</td>

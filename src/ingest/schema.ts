@@ -53,27 +53,49 @@ const targetsSchema = z.object({
   { message: 'Target weights must sum to 1.0 (±0.001)' },
 );
 
-// Migration: old saves that stored the full 57.5% US equity as US_TOTAL_MARKET
-// (before cap-class split) are upgraded automatically to the Russell sub-class targets.
-// Condition: US_TOTAL_MARKET > 0.001  AND  all sub-classes sum to < 0.001.
+// Default placement for any asset class missing from an old saved strategy.
+const DEFAULT_PLACEMENT: Record<string, string[]> = {
+  US_TOTAL_MARKET: ['TAX_ADVANTAGED', 'TAXABLE'],
+  US_LARGE_CAP:    ['TAX_ADVANTAGED', 'TAXABLE'],
+  US_MID_CAP:      ['TAX_ADVANTAGED', 'TAXABLE'],
+  US_SMALL_CAP:    ['TAX_ADVANTAGED', 'TAXABLE'],
+  DEVELOPED_INTL:  ['TAX_ADVANTAGED', 'TAXABLE'],
+  EMERGING_INTL:   ['TAX_ADVANTAGED', 'TAXABLE'],
+  FIXED_INCOME:    ['TAXABLE'],
+  ALTERNATIVES:    ['TAX_ADVANTAGED'],
+  CASH:            ['TAXABLE', 'TAX_ADVANTAGED'],
+};
+
+// Migration: upgrades old saves when new asset classes are added.
+//   1. Targets: US_TOTAL_MARKET → cap sub-class split (Russell weights).
+//      Condition: US_TOTAL_MARKET > 0.001 AND sub-classes sum to < 0.001.
+//   2. Placement: any asset class missing from placement gets a default entry,
+//      so StrategyPanel never sees an undefined bucket array.
 const migrateStrategyTargets = (raw: unknown): unknown => {
   if (typeof raw !== 'object' || raw === null) return raw;
-  const r = raw as Record<string, unknown>;
+  let r = raw as Record<string, unknown>;
+
+  // 1. Targets migration.
   const targets = r['targets'];
-  if (typeof targets !== 'object' || targets === null) return raw;
-  const t = targets as Record<string, number>;
-  const utm = t['US_TOTAL_MARKET'] ?? 0;
-  const subSum = (t['US_LARGE_CAP'] ?? 0) + (t['US_MID_CAP'] ?? 0) + (t['US_SMALL_CAP'] ?? 0);
-  if (utm > 0.001 && subSum < 0.001) {
-    const lc = Math.round(utm * 0.67 * 1000) / 1000;
-    const mc = Math.round(utm * 0.25 * 1000) / 1000;
-    const sc = Math.round((utm - lc - mc) * 1000) / 1000;
-    return {
-      ...r,
-      targets: { ...t, US_TOTAL_MARKET: 0, US_LARGE_CAP: lc, US_MID_CAP: mc, US_SMALL_CAP: sc },
-    };
+  if (typeof targets === 'object' && targets !== null) {
+    const t = targets as Record<string, number>;
+    const utm = t['US_TOTAL_MARKET'] ?? 0;
+    const subSum = (t['US_LARGE_CAP'] ?? 0) + (t['US_MID_CAP'] ?? 0) + (t['US_SMALL_CAP'] ?? 0);
+    if (utm > 0.001 && subSum < 0.001) {
+      const lc = Math.round(utm * 0.67 * 1000) / 1000;
+      const mc = Math.round(utm * 0.25 * 1000) / 1000;
+      const sc = Math.round((utm - lc - mc) * 1000) / 1000;
+      r = { ...r, targets: { ...t, US_TOTAL_MARKET: 0, US_LARGE_CAP: lc, US_MID_CAP: mc, US_SMALL_CAP: sc } };
+    }
   }
-  return raw;
+
+  // 2. Placement migration: fill in defaults for any missing asset class.
+  const placement = r['placement'];
+  if (typeof placement === 'object' && placement !== null) {
+    r = { ...r, placement: { ...DEFAULT_PLACEMENT, ...(placement as Record<string, unknown>) } };
+  }
+
+  return r;
 };
 
 export const strategySchema = z.preprocess(migrateStrategyTargets, z.object({
