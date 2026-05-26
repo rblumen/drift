@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach } from 'vitest';
-import { buildState, DEFAULT_APP_STATE, saveState, loadState, clearState } from './store';
+import { buildState, DEFAULT_APP_STATE, saveState, loadState, clearState, saveBackup } from './store';
 import { parseAppState } from './ingest/schema';
 import { DEFAULT_STRATEGY } from './engine/strategy';
 
@@ -75,9 +75,10 @@ describe('localStorage round-trip', () => {
     saveState(DEFAULT_APP_STATE);
     const loaded = loadState();
     expect(loaded).not.toBeNull();
-    expect(loaded!.version).toBe(1);
-    expect(loaded!.accounts).toEqual([]);
-    expect(loaded!.strategy.toleranceAbs).toBeCloseTo(0.05);
+    expect(loaded!.source).toBe('primary');
+    expect(loaded!.state.version).toBe(1);
+    expect(loaded!.state.accounts).toEqual([]);
+    expect(loaded!.state.strategy.toleranceAbs).toBeCloseTo(0.05);
   });
 
   it('round-trips accounts and positions', () => {
@@ -89,9 +90,9 @@ describe('localStorage round-trip', () => {
     );
     saveState(state);
     const loaded = loadState();
-    expect(loaded!.accounts[0].name).toBe('IRA');
-    expect(loaded!.positions[0].ticker).toBe('FZROX');
-    expect(loaded!.tickerOverrides['XYZ']).toBe('ALTERNATIVES');
+    expect(loaded!.state.accounts[0].name).toBe('IRA');
+    expect(loaded!.state.positions[0].ticker).toBe('FZROX');
+    expect(loaded!.state.tickerOverrides['XYZ']).toBe('ALTERNATIVES');
   });
 
   it('clearState makes loadState return null again', () => {
@@ -100,13 +101,30 @@ describe('localStorage round-trip', () => {
     expect(loadState()).toBeNull();
   });
 
-  it('returns null for a corrupted stored value', () => {
+  it('returns null for a corrupted stored value (with no backups)', () => {
     localStorage.setItem('rebalancer-v1', '{ not valid json }');
     expect(loadState()).toBeNull();
   });
 
-  it('returns null when the saved version does not match', () => {
+  it('returns null when the saved version does not match (with no backups)', () => {
     localStorage.setItem('rebalancer-v1', JSON.stringify({ ...DEFAULT_APP_STATE, version: 2 }));
     expect(loadState()).toBeNull();
+  });
+
+  it('falls back to a valid backup when primary is corrupt', () => {
+    saveBackup(DEFAULT_APP_STATE);
+    localStorage.setItem('rebalancer-v1', '{ not valid json }');
+    const loaded = loadState();
+    expect(loaded).not.toBeNull();
+    expect(loaded!.source).toBe('backup');
+    expect(loaded!.backupTs).toBeDefined();
+    expect(loaded!.state.version).toBe(1);
+  });
+
+  it('falls back to backup when primary has invalid version', () => {
+    saveBackup(DEFAULT_APP_STATE);
+    localStorage.setItem('rebalancer-v1', JSON.stringify({ ...DEFAULT_APP_STATE, version: 2 }));
+    const loaded = loadState();
+    expect(loaded!.source).toBe('backup');
   });
 });

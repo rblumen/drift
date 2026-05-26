@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, Fragment } from 'react';
 import type { Account, AssetClass, Flag, FundDecomposition, PlacementBucket, Position } from '../engine/types';
 import { ALL_ASSET_CLASSES } from '../engine/types';
 import { BUILTIN_CLASS_MAP, makeClassifier } from '../engine/classify';
@@ -319,54 +319,41 @@ export function ClassifyPanel({
                     <span className="text-amber-700 text-sm truncate flex-1 max-w-[220px]">
                       {row.description ?? <span className="text-amber-300">—</span>}
                     </span>
-                    {tdfDetect ? (
-                      <div className="flex items-center gap-2 ml-auto">
+                    <div className="flex items-center gap-2 ml-auto">
+                      {tdfDetect && (
                         <span className="text-xs text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
-                          Target date fund {tdfDetect.confidence === 'high' ? '(exact)' : '(estimated)'}
+                          Known blend{tdfDetect.confidence === 'estimated' ? ' (estimated)' : ''}
                         </span>
-                        {!isEditing && (
-                          <>
-                            <button
-                              onClick={() => setEditState({ ticker: row.ticker, draft: {} })}
-                              className="text-xs border border-indigo-300 text-indigo-600 rounded px-2 py-0.5 hover:bg-indigo-50"
-                            >
-                              Set decomposition
-                            </button>
-                            <select
-                              value=""
-                              onChange={e => { if (e.target.value) assign(row.ticker, e.target.value as AssetClass); }}
-                              className="text-xs border border-gray-200 rounded px-1.5 py-0.5 text-gray-500 bg-white"
-                            >
-                              <option value="">or assign single class</option>
-                              {ALL_ASSET_CLASSES.map(ac => (
-                                <option key={ac} value={ac}>{AC_LABEL[ac]}</option>
-                              ))}
-                            </select>
-                          </>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="ml-auto">
-                        <select
-                          value=""
-                          onChange={e => { if (e.target.value) assign(row.ticker, e.target.value as AssetClass); }}
-                          className="border border-amber-300 rounded px-2 py-1 text-sm bg-white"
-                        >
-                          <option value="">— select class —</option>
-                          {ALL_ASSET_CLASSES.map(ac => (
-                            <option key={ac} value={ac}>{AC_LABEL[ac]}</option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
+                      )}
+                      {!isEditing && (
+                        <>
+                          <button
+                            onClick={() => setEditState({ ticker: row.ticker, draft: {} })}
+                            className="text-xs border border-indigo-300 text-indigo-600 rounded px-2 py-0.5 hover:bg-indigo-50"
+                          >
+                            Set as blended fund
+                          </button>
+                          <select
+                            value=""
+                            onChange={e => { if (e.target.value) assign(row.ticker, e.target.value as AssetClass); }}
+                            className={`text-xs border rounded px-1.5 py-0.5 bg-white ${tdfDetect ? 'border-gray-200 text-gray-500' : 'border-amber-300 text-gray-700'}`}
+                          >
+                            <option value="">{tdfDetect ? 'or single class…' : '— select class —'}</option>
+                            {ALL_ASSET_CLASSES.map(ac => (
+                              <option key={ac} value={ac}>{AC_LABEL[ac]}</option>
+                            ))}
+                          </select>
+                        </>
+                      )}
+                    </div>
                   </div>
-                  {tdfDetect && isEditing && (
+                  {isEditing && (
                     <DecompEditor
                       ticker={row.ticker}
-                      initial={tdfDetect.composition}
+                      initial={tdfDetect?.composition ?? {}}
                       onApply={d => applyDecomp(row.ticker, d)}
                       onCancel={() => setEditState(null)}
-                      isEstimated={tdfDetect.confidence === 'estimated'}
+                      isEstimated={tdfDetect?.confidence === 'estimated'}
                     />
                   )}
                   {tdfDetect && !isEditing && (
@@ -385,7 +372,7 @@ export function ClassifyPanel({
       {/* ── Target date funds (decomposed) ─────────────────────────────────── */}
       {decomposed.length > 0 && (
         <div className="space-y-2">
-          <h3 className="text-sm font-medium text-gray-600">Target date funds</h3>
+          <h3 className="text-sm font-medium text-gray-600">Blended funds</h3>
           <div className="overflow-hidden border border-indigo-200 rounded-lg">
             <table className="w-full text-sm">
               <thead className="bg-indigo-50 text-xs text-indigo-600 uppercase tracking-wide border-b border-indigo-200">
@@ -453,7 +440,7 @@ export function ClassifyPanel({
             </table>
           </div>
           <p className="text-xs text-gray-400">
-            Decomposed funds are counted in allocation totals but excluded from trade suggestions.
+            Blended funds count toward allocation totals but are excluded from trade suggestions — their sub-components can't be traded individually.
           </p>
         </div>
       )}
@@ -472,48 +459,91 @@ export function ClassifyPanel({
                   <th className="px-4 py-2 text-left">Description</th>
                   <th className="px-4 py-2 text-left">Asset class</th>
                   <th className="px-4 py-2 text-left">Source</th>
+                  <th className="px-4 py-2" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {classified.map(row => (
-                  <tr key={row.ticker} className="hover:bg-gray-50">
-                    <td className="px-4 py-2 font-mono font-medium">{row.ticker}</td>
-                    <td className="px-4 py-2 text-gray-500 truncate max-w-[200px]">
-                      {row.description ?? <span className="text-gray-300">—</span>}
-                    </td>
-                    <td className="px-4 py-2">
-                      <select
-                        value={row.effective ?? ''}
-                        onChange={e => assign(row.ticker, e.target.value as AssetClass | '')}
-                        className="border border-gray-200 rounded px-2 py-1 text-sm bg-transparent"
-                      >
-                        {ALL_ASSET_CLASSES.map(ac => (
-                          <option key={ac} value={ac}>{AC_LABEL[ac]}</option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="px-4 py-2">
-                      {row.source === 'override' ? (
-                        <span className="inline-flex items-center gap-1.5 text-xs text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
-                          Your override
-                          <button
-                            onClick={() => assign(row.ticker, '')}
-                            className="hover:text-red-500"
-                            title="Revert to built-in"
-                          >✕</button>
-                        </span>
-                      ) : (
-                        <span className="text-xs text-gray-400">Built-in</span>
+                {classified.map(row => {
+                  const isEditing = editState?.ticker === row.ticker;
+                  return (
+                    <Fragment key={row.ticker}>
+                      <tr className={`hover:bg-gray-50 ${isEditing ? 'bg-indigo-50/60' : ''}`}>
+                        <td className="px-4 py-2 font-mono font-medium">{row.ticker}</td>
+                        <td className="px-4 py-2 text-gray-500 truncate max-w-[200px]">
+                          {row.description ?? <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className="px-4 py-2">
+                          {isEditing ? (
+                            <span className="text-xs text-indigo-500 italic">Setting blend…</span>
+                          ) : (
+                            <select
+                              value={row.effective ?? ''}
+                              onChange={e => assign(row.ticker, e.target.value as AssetClass | '')}
+                              className="border border-gray-200 rounded px-2 py-1 text-sm bg-transparent"
+                            >
+                              {ALL_ASSET_CLASSES.map(ac => (
+                                <option key={ac} value={ac}>{AC_LABEL[ac]}</option>
+                              ))}
+                            </select>
+                          )}
+                        </td>
+                        <td className="px-4 py-2">
+                          {row.source === 'override' ? (
+                            <span className="inline-flex items-center gap-1.5 text-xs text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
+                              Your override
+                              {!isEditing && (
+                                <button
+                                  onClick={() => assign(row.ticker, '')}
+                                  className="hover:text-red-500"
+                                  title="Revert to built-in"
+                                >✕</button>
+                              )}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-gray-400">Built-in</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2 text-right whitespace-nowrap">
+                          {isEditing ? (
+                            <button
+                              onClick={() => setEditState(null)}
+                              className="text-xs text-gray-400 hover:text-red-500"
+                            >
+                              Cancel
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => setEditState({ ticker: row.ticker, draft: {} })}
+                              className="text-xs text-gray-400 hover:text-indigo-600 hover:underline"
+                              title="Define this as a blended fund with multiple asset-class components"
+                            >
+                              Set as blended
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                      {isEditing && (
+                        <tr className="bg-indigo-50/30">
+                          <td colSpan={5} className="px-4 pb-3">
+                            <DecompEditor
+                              ticker={row.ticker}
+                              initial={row.effective ? { [row.effective]: 1.0 } : {}}
+                              onApply={d => applyDecomp(row.ticker, d)}
+                              onCancel={() => setEditState(null)}
+                              isEstimated={false}
+                            />
+                          </td>
+                        </tr>
                       )}
-                    </td>
-                  </tr>
-                ))}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
           <p className="text-xs text-gray-400">
-            Changing any row overrides the built-in map for that ticker.
-            Removing an override (✕) reverts to the built-in classification.
+            Changing the class dropdown overrides the built-in map; removing an override (✕) reverts it.
+            Use "Set as blended" to define a fund-of-funds or balanced fund with multiple asset-class components.
           </p>
         </div>
       )}

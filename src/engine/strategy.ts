@@ -20,10 +20,13 @@ import type { Strategy } from './types';
 
 export const DEFAULT_STRATEGY: Strategy = {
   targets: {
-    US_TOTAL_MARKET: 0.575,
-    US_LARGE_CAP:    0.0,
-    US_MID_CAP:      0.0,
-    US_SMALL_CAP:    0.0,
+    // US equity 57.5% expressed as Russell-weighted cap sub-classes:
+    //   57.5% × 0.67 = 38.5% large,  × 0.25 = 14.375% → 14.4% mid,  × 0.08 = 4.6% small.
+    // US_TOTAL_MARKET holdings are auto-redistributed in rollup via RUSSELL_CAP_SPLIT.
+    US_TOTAL_MARKET: 0.000,
+    US_LARGE_CAP:    0.385,
+    US_MID_CAP:      0.144,
+    US_SMALL_CAP:    0.046,
     DEVELOPED_INTL:  0.17,
     EMERGING_INTL:   0.03,
     FIXED_INCOME:    0.20,

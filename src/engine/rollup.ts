@@ -2,6 +2,19 @@ import type { Account, Position, AssetClass, FundDecomposition } from './types';
 import { ALL_ASSET_CLASSES } from './types';
 import type { ClassifyFn } from './classify';
 
+/**
+ * Russell index cap-class weights used to redistribute US_TOTAL_MARKET holdings.
+ *   US_LARGE_CAP  0.67  (Russell 1000 ex-Midcap, ~mega/large blend)
+ *   US_MID_CAP    0.25  (Russell Midcap = bottom 800 of Russell 1000)
+ *   US_SMALL_CAP  0.08  (Russell 2000)
+ * Source: Russell US Index construction methodology.
+ */
+export const RUSSELL_CAP_SPLIT = {
+  US_LARGE_CAP: 0.67,
+  US_MID_CAP:   0.25,
+  US_SMALL_CAP: 0.08,
+} as const;
+
 export interface RollupResult {
   // Only mapped positions + newCash. Unmapped positions are excluded so they
   // don't distort target sizes. The UNMAPPED_HOLDING flag alerts the user.
@@ -70,6 +83,35 @@ export function rollup(
     // Track locked position value separately (account-level locking is handled in rebalance).
     if (pos.locked) {
       lockedValueByAccount[pos.accountId][ac] += pos.marketValue;
+    }
+  }
+
+  // Post-process: redistribute any US_TOTAL_MARKET value into cap sub-classes.
+  // This handles all sources uniformly: direct classifications, TDF decompositions
+  // that emit US_TOTAL_MARKET, and user custom decompositions.
+  const utmTotal = currentValue.US_TOTAL_MARKET;
+  if (utmTotal > 0) {
+    for (const [subClass, weight] of Object.entries(RUSSELL_CAP_SPLIT) as [AssetClass, number][]) {
+      currentValue[subClass] += utmTotal * weight;
+    }
+    currentValue.US_TOTAL_MARKET = 0;
+
+    for (const acctId of Object.keys(currentValueByAccount)) {
+      const utmAcct = currentValueByAccount[acctId].US_TOTAL_MARKET;
+      if (utmAcct > 0) {
+        for (const [subClass, weight] of Object.entries(RUSSELL_CAP_SPLIT) as [AssetClass, number][]) {
+          currentValueByAccount[acctId][subClass] += utmAcct * weight;
+        }
+        currentValueByAccount[acctId].US_TOTAL_MARKET = 0;
+      }
+
+      const utmLocked = lockedValueByAccount[acctId].US_TOTAL_MARKET;
+      if (utmLocked > 0) {
+        for (const [subClass, weight] of Object.entries(RUSSELL_CAP_SPLIT) as [AssetClass, number][]) {
+          lockedValueByAccount[acctId][subClass] += utmLocked * weight;
+        }
+        lockedValueByAccount[acctId].US_TOTAL_MARKET = 0;
+      }
     }
   }
 

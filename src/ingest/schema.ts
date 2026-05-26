@@ -53,7 +53,30 @@ const targetsSchema = z.object({
   { message: 'Target weights must sum to 1.0 (±0.001)' },
 );
 
-export const strategySchema = z.object({
+// Migration: old saves that stored the full 57.5% US equity as US_TOTAL_MARKET
+// (before cap-class split) are upgraded automatically to the Russell sub-class targets.
+// Condition: US_TOTAL_MARKET > 0.001  AND  all sub-classes sum to < 0.001.
+const migrateStrategyTargets = (raw: unknown): unknown => {
+  if (typeof raw !== 'object' || raw === null) return raw;
+  const r = raw as Record<string, unknown>;
+  const targets = r['targets'];
+  if (typeof targets !== 'object' || targets === null) return raw;
+  const t = targets as Record<string, number>;
+  const utm = t['US_TOTAL_MARKET'] ?? 0;
+  const subSum = (t['US_LARGE_CAP'] ?? 0) + (t['US_MID_CAP'] ?? 0) + (t['US_SMALL_CAP'] ?? 0);
+  if (utm > 0.001 && subSum < 0.001) {
+    const lc = Math.round(utm * 0.67 * 1000) / 1000;
+    const mc = Math.round(utm * 0.25 * 1000) / 1000;
+    const sc = Math.round((utm - lc - mc) * 1000) / 1000;
+    return {
+      ...r,
+      targets: { ...t, US_TOTAL_MARKET: 0, US_LARGE_CAP: lc, US_MID_CAP: mc, US_SMALL_CAP: sc },
+    };
+  }
+  return raw;
+};
+
+export const strategySchema = z.preprocess(migrateStrategyTargets, z.object({
   targets: targetsSchema,
   placement: z.record(
     z.string(),
@@ -61,7 +84,7 @@ export const strategySchema = z.object({
   ),
   toleranceAbs: z.number().min(0).max(1),
   minTradeUsd:  z.number().nonnegative(),
-});
+}));
 
 export const portfolioSchema = z.object({
   accounts:  z.array(accountSchema),
@@ -83,7 +106,14 @@ export function parsePortfolio(raw: unknown): { accounts: Account[]; positions: 
   return { accounts: r.accounts as Account[], positions: r.positions as Position[] };
 }
 
-export const fundDecompositionSchema = z.record(z.string(), z.number().min(0).max(1));
+// A single fund's asset-class breakdown: { US_LARGE_CAP: 0.54, FIXED_INCOME: 0.09, … }
+export const fundDecompositionSchema = z.record(
+  z.enum(ASSET_CLASSES),
+  z.number().min(0).max(1),
+);
+
+// The full decompositions map stored in AppState: ticker → FundDecomposition
+export const decompositionsSchema = z.record(z.string(), fundDecompositionSchema);
 
 // Full persisted app state — used for localStorage and JSON file export/import.
 export const appStateSchema = z.object({
@@ -92,7 +122,7 @@ export const appStateSchema = z.object({
   positions:      z.array(positionSchema),
   strategy:       strategySchema,
   tickerOverrides: z.record(z.string(), z.enum(ASSET_CLASSES)),
-  decompositions: fundDecompositionSchema.optional().default({}),
+  decompositions: decompositionsSchema.optional().default({}),
 });
 
 export type AppState = z.infer<typeof appStateSchema>;

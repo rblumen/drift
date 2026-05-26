@@ -116,26 +116,30 @@ describe('spillover case — taxable > FI target', () => {
     expect(flag?.kind === 'REVISIT_PLACEMENT' && flag.fixedIncomeTarget).toBe(0.2);
   });
 
-  it('US_TOTAL_MARKET spills into TAXABLE bucket', () => {
+  it('some equity class spills into TAXABLE bucket', () => {
+    // After Russell redistribution, US equity is placed as LC → MC → SC.
+    // LC ($385k) fills first and fits entirely in the $475k of remaining TA capacity.
+    // MC ($144k) then partially spills, followed by SC ($46k) — total ~$100k into taxable.
     const r = rebalance(ACCOUNTS_300K_TAXABLE, NO_POSITIONS, ZERO_TOL_STRATEGY);
     expect(
-      r.flags.some(f => f.kind === 'PLACEMENT_SPILLOVER'
-        && f.assetClass === 'US_TOTAL_MARKET'
-        && f.bucket === 'TAXABLE'),
+      r.flags.some(f => f.kind === 'PLACEMENT_SPILLOVER' && f.bucket === 'TAXABLE'),
     ).toBe(true);
   });
 
-  it('spill amount is ~$100k (leftover taxable capacity after FI fill)', () => {
+  it('total equity spillover into taxable is ~$100k (leftover capacity after FI fill)', () => {
     const r = rebalance(ACCOUNTS_300K_TAXABLE, NO_POSITIONS, ZERO_TOL_STRATEGY);
-    const spill = r.flags.find(f => f.kind === 'PLACEMENT_SPILLOVER' && f.assetClass === 'US_TOTAL_MARKET');
-    expect(spill?.kind === 'PLACEMENT_SPILLOVER' && near(spill.amountUsd, 100_000)).toBe(true);
+    const spillTotal = r.flags
+      .filter(f => f.kind === 'PLACEMENT_SPILLOVER' && f.bucket === 'TAXABLE')
+      .reduce((sum, f) => sum + (f.kind === 'PLACEMENT_SPILLOVER' ? f.amountUsd : 0), 0);
+    expect(near(spillTotal, 100_000)).toBe(true);
   });
 
-  it('schwab holds both FIXED_INCOME and US_TOTAL_MARKET', () => {
+  it('schwab holds FIXED_INCOME plus at least one equity sub-class', () => {
     const r = rebalance(ACCOUNTS_300K_TAXABLE, NO_POSITIONS, ZERO_TOL_STRATEGY);
     const classes = r.trades.filter(t => t.accountId === 'schwab').map(t => t.assetClass);
     expect(classes).toContain('FIXED_INCOME');
-    expect(classes).toContain('US_TOTAL_MARKET');
+    const US_EQUITY = ['US_LARGE_CAP', 'US_MID_CAP', 'US_SMALL_CAP'] as const;
+    expect(classes.some(c => (US_EQUITY as readonly string[]).includes(c))).toBe(true);
   });
 
   it('each account trade sum still matches its capacity', () => {
@@ -155,9 +159,9 @@ describe('constrained 401k — no ALTERNATIVES in fund menu', () => {
     { id: 'ira',    name: 'Fidelity Trad IRA', institution: 'Fidelity', type: 'TRADITIONAL_IRA', newCash: 300_000 },
     {
       id: 'k401', name: 'Empower 401k', institution: 'Empower', type: 'FOUR_OH_ONE_K', newCash: 500_000,
-      // Typical 401k menu: index funds for each equity class + bond fund + MM.
-      // No alternatives/crypto/metals available.
-      availableTickers: ['FSKAX', 'VXUS', 'VWO', 'FXNAX', 'VMFXX'],
+      // Typical 401k menu: cap-class index funds + INTL + bond + MM.
+      // No alternatives/crypto/metals. Uses FXAIX/FSMDX/FSSNX for LC/MC/SC.
+      availableTickers: ['FXAIX', 'FSMDX', 'FSSNX', 'VXUS', 'VWO', 'FXNAX', 'VMFXX'],
     },
   ];
 
@@ -349,19 +353,32 @@ describe('locked positions', () => {
     { accountId: 'k401',   ticker: 'FSKAX', marketValue: 100_000 },
   ];
 
-  it('locked position still counted in currentWeights', () => {
+  it('locked position still counted in currentWeights (via cap sub-classes)', () => {
     const r = rebalance(LOCKED_POS_ACCOUNTS, BASE_LOCKED_POSITIONS, ZERO_TOL_STRATEGY);
-    // Total US_TOTAL_MARKET in k401 = 259375 + 100000 + 215625(ira) = 575000 → weight ≈ 0.575
-    expect(r.currentWeights.US_TOTAL_MARKET).toBeGreaterThan(0.5);
+    // US_TOTAL_MARKET is redistributed to LC/MC/SC via RUSSELL_CAP_SPLIT.
+    // Total US equity: 259375 + 100000 (k401) + 215625 (ira) = 575000 → ~57.5% combined.
+    const usEquityWeight =
+      r.currentWeights.US_LARGE_CAP +
+      r.currentWeights.US_MID_CAP  +
+      r.currentWeights.US_SMALL_CAP;
+    expect(usEquityWeight).toBeGreaterThan(0.5);
   });
 
-  it('no trade generated that would reduce the locked position', () => {
+  it('no trade reduces cap sub-class beyond the unlocked portion', () => {
     const r = rebalance(LOCKED_POS_ACCOUNTS, BASE_LOCKED_POSITIONS, ZERO_TOL_STRATEGY);
-    // The sell of US_TOTAL_MARKET in k401 must not exceed the unlocked amount ($100k)
-    const usSell = r.trades.find(t => t.accountId === 'k401' && t.assetClass === 'US_TOTAL_MARKET');
-    // If there is a sell, it can't exceed $100k (the unlocked portion)
-    if (usSell && usSell.deltaUsd < 0) {
-      expect(Math.abs(usSell.deltaUsd)).toBeLessThanOrEqual(100_000 + 1); // +$1 rounding
+    // k401 FSKAX: $259k locked + $100k unlocked → redistributed via Russell weights.
+    // Unlocked cap capacity: LC ≈ $67k, MC ≈ $25k, SC ≈ $8k.
+    const lcSell = r.trades.find(t => t.accountId === 'k401' && t.assetClass === 'US_LARGE_CAP');
+    if (lcSell && lcSell.deltaUsd < 0) {
+      expect(Math.abs(lcSell.deltaUsd)).toBeLessThanOrEqual(100_000 * 0.67 + 1);
+    }
+    const mcSell = r.trades.find(t => t.accountId === 'k401' && t.assetClass === 'US_MID_CAP');
+    if (mcSell && mcSell.deltaUsd < 0) {
+      expect(Math.abs(mcSell.deltaUsd)).toBeLessThanOrEqual(100_000 * 0.25 + 1);
+    }
+    const scSell = r.trades.find(t => t.accountId === 'k401' && t.assetClass === 'US_SMALL_CAP');
+    if (scSell && scSell.deltaUsd < 0) {
+      expect(Math.abs(scSell.deltaUsd)).toBeLessThanOrEqual(100_000 * 0.08 + 1);
     }
   });
 

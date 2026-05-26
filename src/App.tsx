@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import type { Account, AssetClass, FundDecomposition, Position, Strategy } from './engine/types';
 import { DEFAULT_STRATEGY } from './engine/strategy';
 import { rebalance } from './engine/rebalance';
@@ -9,7 +9,8 @@ import { StrategyPanel } from './ui/StrategyPanel';
 import { ResultsPanel } from './ui/ResultsPanel';
 import { fmtUsd } from './ui/fmt';
 import {
-  buildState, clearState, DEFAULT_APP_STATE, exportJson, importJson, loadState, saveState,
+  buildState, clearState, DEFAULT_APP_STATE, exportJson, importJson,
+  loadState, saveState, saveBackup,
 } from './store';
 
 type Tab = 'accounts' | 'import' | 'classify' | 'strategy' | 'results';
@@ -23,7 +24,9 @@ const TABS: { id: Tab; label: string }[] = [
 ];
 
 // Initialise from localStorage (or defaults if nothing saved / schema mismatch).
-const saved = loadState() ?? DEFAULT_APP_STATE;
+// loadState() falls back to the most-recent valid backup automatically.
+const loadResult = loadState();
+const saved = loadResult?.state ?? DEFAULT_APP_STATE;
 
 export default function App() {
   const [accounts,         setAccounts]         = useState<Account[]>(saved.accounts);
@@ -33,12 +36,46 @@ export default function App() {
   const [decompositions,   setDecompositions]   = useState<Record<string, FundDecomposition>>(saved.decompositions ?? {});
   const [activeTab,        setActiveTab]        = useState<Tab>('accounts');
   const [importError,      setImportError]      = useState<string | null>(null);
+  // Non-null when data was loaded from a backup because the primary slot was invalid.
+  const [restoredFromBackup, setRestoredFromBackup] = useState<number | null>(
+    loadResult?.source === 'backup' ? (loadResult.backupTs ?? Date.now()) : null,
+  );
+  // Timestamp of last successful primary save — drives the "Saved" indicator.
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(
+    loadResult !== null ? new Date() : null,
+  );
+
   const importFileRef = useRef<HTMLInputElement>(null);
 
-  // Auto-save to localStorage whenever any state slice changes.
+  // Keep a ref to the latest state slices for the backup interval closure.
+  const stateRef = useRef({ accounts, positions, strategy, tickerOverrides, decompositions });
   useEffect(() => {
-    saveState(buildState(accounts, positions, strategy, tickerOverrides, decompositions));
+    stateRef.current = { accounts, positions, strategy, tickerOverrides, decompositions };
   }, [accounts, positions, strategy, tickerOverrides, decompositions]);
+
+  // Skip the very first save so that a schema-validation failure on load can
+  // never silently overwrite existing localStorage data with empty defaults.
+  const didMountRef = useRef(false);
+
+  // Primary autosave: write to localStorage on every state change (but not on
+  // the initial mount — the stored value is already correct at that point).
+  useEffect(() => {
+    if (!didMountRef.current) {
+      didMountRef.current = true;
+      return;
+    }
+    saveState(buildState(accounts, positions, strategy, tickerOverrides, decompositions));
+    setLastSavedAt(new Date());
+  }, [accounts, positions, strategy, tickerOverrides, decompositions]);
+
+  // Backup autosave: write a timestamped snapshot every 5 minutes.
+  useEffect(() => {
+    const id = setInterval(() => {
+      const s = stateRef.current;
+      saveBackup(buildState(s.accounts, s.positions, s.strategy, s.tickerOverrides, s.decompositions));
+    }, 5 * 60 * 1000);
+    return () => clearInterval(id);
+  }, []);
 
   const result = useMemo(
     () => rebalance(accounts, positions, strategy, tickerOverrides, decompositions),
@@ -46,6 +83,10 @@ export default function App() {
   );
 
   const unmappedCount = result.flags.filter(f => f.kind === 'UNMAPPED_HOLDING').length;
+
+  /** Format the last-saved time as "3:42 PM". */
+  const fmtSavedTime = useCallback((d: Date) =>
+    d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }), []);
 
   function handleDeleteAccount(id: string) {
     setPositions(prev => prev.filter(p => p.accountId !== id));
@@ -81,6 +122,8 @@ export default function App() {
     setTickerOverrides({});
     setDecompositions({});
     setActiveTab('accounts');
+    setLastSavedAt(null);
+    setRestoredFromBackup(null);
   }
 
   return (
@@ -97,6 +140,16 @@ export default function App() {
               {result.householdValue > 0 && (
                 <span className="text-sm text-gray-500">
                   {fmtUsd(result.householdValue)}
+                </span>
+              )}
+
+              {/* Autosave indicator */}
+              {lastSavedAt && (accounts.length > 0 || positions.length > 0) && (
+                <span
+                  className="text-xs text-gray-400 tabular-nums"
+                  title={`Last saved at ${lastSavedAt.toLocaleTimeString()}`}
+                >
+                  ✓ Saved {fmtSavedTime(lastSavedAt)}
                 </span>
               )}
 
@@ -133,6 +186,25 @@ export default function App() {
               </div>
             </div>
           </div>
+
+          {/* Restored-from-backup banner */}
+          {restoredFromBackup !== null && (
+            <div className="mb-2 bg-amber-50 border border-amber-200 rounded px-3 py-2 text-xs text-amber-800 flex items-center justify-between">
+              <span>
+                ⚠ Your last save couldn't be read — portfolio restored from a backup taken at{' '}
+                {new Date(restoredFromBackup).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                {' '}on{' '}
+                {new Date(restoredFromBackup).toLocaleDateString([], { month: 'short', day: 'numeric' })}.
+                {' '}Recent changes may be missing. Export a copy to preserve what's here.
+              </span>
+              <button
+                onClick={() => setRestoredFromBackup(null)}
+                className="ml-3 text-amber-600 hover:text-amber-800 flex-shrink-0"
+              >
+                ✕
+              </button>
+            </div>
+          )}
 
           {/* Import error */}
           {importError && (

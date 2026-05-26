@@ -1,8 +1,11 @@
 // Client-side persistence for the portfolio rebalancer.
 //
-// Two storage paths:
-//   1. localStorage (auto-save) — persists across page reloads, same origin only.
-//   2. JSON file export/import — portable backup; user controls the file.
+// Storage paths:
+//   1. localStorage primary key  — written on every state change (immediate).
+//   2. localStorage backup slots — 3 rolling snapshots, written every 5 minutes.
+//      If the primary slot fails validation on load (e.g. after a schema change),
+//      the most-recent valid backup is used automatically and the UI shows a banner.
+//   3. JSON file export/import   — portable backup the user controls.
 //
 // The on-disk format is versioned (version: 1) so future schema migrations can
 // detect and upgrade old saves rather than silently failing.
@@ -17,6 +20,8 @@ import { appStateSchema, type AppState } from './ingest/schema';
 export type { AppState };
 
 const STORAGE_KEY    = 'rebalancer-v1';
+const BACKUP_KEY     = 'rebalancer-v1-backups';
+const BACKUP_LIMIT   = 3;
 const SCHEMA_VERSION = 1 as const;
 
 // ─── Default state ────────────────────────────────────────────────────────────
@@ -30,9 +35,22 @@ export const DEFAULT_APP_STATE: AppState = {
   decompositions:  {},
 };
 
-// ─── localStorage ─────────────────────────────────────────────────────────────
+// ─── Internal backup helpers ──────────────────────────────────────────────────
 
-/** Persist the full app state. Silently no-ops if storage is unavailable. */
+interface BackupEntry { ts: number; state: unknown; }
+
+function readRawBackups(): BackupEntry[] {
+  try {
+    const raw = localStorage.getItem(BACKUP_KEY);
+    return raw ? (JSON.parse(raw) as BackupEntry[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+// ─── Primary autosave ─────────────────────────────────────────────────────────
+
+/** Persist the full app state immediately. Silently no-ops if storage is unavailable. */
 export function saveState(state: AppState): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -41,30 +59,86 @@ export function saveState(state: AppState): void {
   }
 }
 
+// ─── Rolling backup (call every ~5 minutes) ───────────────────────────────────
+
 /**
- * Load and validate persisted state.
- * Returns null if nothing is saved, the version doesn't match, or the data
- * fails schema validation — callers should fall back to DEFAULT_APP_STATE.
+ * Write a timestamped backup snapshot, keeping the most recent BACKUP_LIMIT entries.
+ * Called periodically from the app rather than on every state change to avoid
+ * writing 3× the data on each keystroke.
  */
-export function loadState(): AppState | null {
+export function saveBackup(state: AppState): void {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as unknown;
-    const result = appStateSchema.safeParse(parsed);
-    return result.success ? result.data : null;
+    const entries = readRawBackups();
+    entries.unshift({ ts: Date.now(), state });
+    if (entries.length > BACKUP_LIMIT) entries.length = BACKUP_LIMIT;
+    localStorage.setItem(BACKUP_KEY, JSON.stringify(entries));
   } catch {
-    return null;
+    // Ignore — primary save already succeeded.
   }
 }
 
-/** Wipe the persisted state (used by "Reset / clear all"). */
-export function clearState(): void {
+// ─── Load with automatic fallback ────────────────────────────────────────────
+
+export interface LoadResult {
+  state: AppState;
+  /** 'primary' = loaded from the main slot. 'backup' = primary was missing or
+   *  invalid; restored from a timestamped backup. */
+  source: 'primary' | 'backup';
+  /** Unix ms timestamp of the backup used (only set when source = 'backup'). */
+  backupTs?: number;
+}
+
+/**
+ * Load and validate persisted state, falling back to the most recent valid
+ * backup if the primary slot is missing, corrupt, or fails schema validation.
+ * Returns null if no valid state exists anywhere.
+ */
+export function loadState(): LoadResult | null {
+  // 1. Try primary slot.
+  let primaryParseError: string | undefined;
   try {
-    localStorage.removeItem(STORAGE_KEY);
-  } catch {
-    // ignore
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as unknown;
+      const r = appStateSchema.safeParse(parsed);
+      if (r.success) return { state: r.data, source: 'primary' };
+      primaryParseError = r.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join('; ');
+      console.warn('[rebalancer] Primary state failed schema validation — falling back to backups.\n', primaryParseError);
+    }
+  } catch (e) {
+    // JSON.parse failure — fall through to backups.
+    console.warn('[rebalancer] Primary state is not valid JSON — falling back to backups.', e);
   }
+
+  // 2. Primary missing or invalid — try backups from newest to oldest.
+  const backups = readRawBackups();
+  for (const entry of backups) {
+    try {
+      const r = appStateSchema.safeParse(entry.state);
+      if (r.success) return { state: r.data, source: 'backup', backupTs: entry.ts };
+      console.warn('[rebalancer] Backup entry (ts=%d) failed schema validation — skipping.', entry.ts,
+        r.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join('; '));
+    } catch {
+      // Skip this backup entry.
+    }
+  }
+
+  if (primaryParseError !== undefined || backups.length > 0) {
+    // There WAS data but nothing parsed — surface a clear console error so it
+    // doesn't silently vanish.
+    console.error('[rebalancer] All saved states failed validation. App will start with defaults. '
+      + 'Check the warnings above for details.');
+  }
+
+  return null;
+}
+
+// ─── Clear all persisted data ─────────────────────────────────────────────────
+
+/** Wipe both the primary slot and all backups (used by "Reset / clear all"). */
+export function clearState(): void {
+  try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
+  try { localStorage.removeItem(BACKUP_KEY);  } catch { /* ignore */ }
 }
 
 // ─── JSON file export ─────────────────────────────────────────────────────────
