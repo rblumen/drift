@@ -390,6 +390,51 @@ describe('locked positions', () => {
   });
 });
 
+// ─── concentrateClasses — fill designated account first ──────────────────────
+
+describe('concentrateClasses — fill designated account first', () => {
+  // Two IRAs: Roth IRA concentrates ALTERNATIVES.
+  // The default strategy spreads ALTERNATIVES proportionally across all TA accounts;
+  // with concentrateClasses the Roth must absorb as much as its capacity allows first.
+  const CONCENTRATE_ACCOUNTS: Account[] = [
+    { id: 'schwab',   name: 'Schwab',       institution: 'Schwab',   type: 'TAXABLE',         newCash: 200_000 },
+    { id: 'trad_ira', name: 'Trad IRA',     institution: 'Fidelity', type: 'TRADITIONAL_IRA', newCash: 150_000 },
+    { id: 'roth',     name: 'Roth IRA',     institution: 'Fidelity', type: 'ROTH_IRA',         newCash: 150_000,
+      concentrateClasses: ['ALTERNATIVES'] as AssetClass[] },
+    { id: 'k401',     name: 'Empower 401k', institution: 'Empower',  type: 'FOUR_OH_ONE_K',   newCash: 500_000 },
+  ];
+
+  it('all ALTERNATIVES go to Roth IRA when it has sufficient capacity', () => {
+    const r = rebalance(CONCENTRATE_ACCOUNTS, NO_POSITIONS, ZERO_TOL_STRATEGY);
+    // ALTERNATIVES target = 2.5% × $1M = $25k. Roth has $150k capacity → absorbs all of it.
+    expect(tradeFor(r.trades, 'roth',     'ALTERNATIVES')?.deltaUsd).toBeCloseTo(25_000, 0);
+    expect(tradeFor(r.trades, 'trad_ira', 'ALTERNATIVES')).toBeUndefined();
+    expect(tradeFor(r.trades, 'k401',     'ALTERNATIVES')).toBeUndefined();
+  });
+
+  it('spills to other TA accounts when Roth IRA capacity is exhausted', () => {
+    const SMALL_ROTH: Account[] = [
+      { id: 'schwab',   name: 'Schwab',   institution: 'Schwab',   type: 'TAXABLE',         newCash: 200_000 },
+      { id: 'trad_ira', name: 'Trad IRA', institution: 'Fidelity', type: 'TRADITIONAL_IRA', newCash: 795_000 },
+      { id: 'roth',     name: 'Roth IRA', institution: 'Fidelity', type: 'ROTH_IRA',         newCash:   5_000,
+        concentrateClasses: ['ALTERNATIVES'] as AssetClass[] },
+    ];
+    const r = rebalance(SMALL_ROTH, NO_POSITIONS, ZERO_TOL_STRATEGY);
+    // Roth has $5k — fills with ALTERNATIVES first, then capacity is gone.
+    expect(tradeFor(r.trades, 'roth', 'ALTERNATIVES')?.deltaUsd).toBeCloseTo(5_000, 0);
+    // Remaining $20k of ALTERNATIVES spills to trad IRA.
+    expect(tradeFor(r.trades, 'trad_ira', 'ALTERNATIVES')?.deltaUsd).toBeCloseTo(20_000, 0);
+  });
+
+  it('each account trade sum matches its capacity', () => {
+    const r = rebalance(CONCENTRATE_ACCOUNTS, NO_POSITIONS, ZERO_TOL_STRATEGY);
+    expect(near(accountSum(r.trades, 'schwab'),   200_000)).toBe(true);
+    expect(near(accountSum(r.trades, 'trad_ira'), 150_000)).toBe(true);
+    expect(near(accountSum(r.trades, 'roth'),     150_000)).toBe(true);
+    expect(near(accountSum(r.trades, 'k401'),     500_000)).toBe(true);
+  });
+});
+
 // ─── allowedAssetClasses — explicit class whitelist ──────────────────────────
 
 describe('allowedAssetClasses — explicit class whitelist', () => {

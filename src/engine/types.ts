@@ -47,6 +47,11 @@ export interface Account {
   // Explicit asset-class whitelist. Takes precedence over availableTickers when set.
   // Use when you know which classes an account permits without a full ticker list.
   allowedAssetClasses?: AssetClass[];
+  // Classes to fill in this account before other eligible accounts within the same
+  // bucket. Use to concentrate a low-liquidity class (e.g. ALTERNATIVES) in one
+  // specific account. Gracefully spills to other eligible accounts if capacity is
+  // exhausted.
+  concentrateClasses?: AssetClass[];
   /** When true, the account is counted in all totals/weights but excluded from
    *  trade suggestions entirely (zero rebalancing capacity). */
   locked?: boolean;

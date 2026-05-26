@@ -33,6 +33,12 @@ function zeroByClass(): Record<AssetClass, number> {
   return Object.fromEntries(ALL_ASSET_CLASSES.map(ac => [ac, 0])) as Record<AssetClass, number>;
 }
 
+function partition<T>(arr: T[], pred: (x: T) => boolean): [T[], T[]] {
+  const yes: T[] = [], no: T[] = [];
+  for (const x of arr) (pred(x) ? yes : no).push(x);
+  return [yes, no];
+}
+
 // Distributes `toPlace` dollars across `eligible` accounts proportionally to
 // each account's remaining capacity. Mutates remainingCapacity and targetLocation.
 function distributeProportional(
@@ -85,13 +91,21 @@ export function greedyPlace(
       );
       if (eligible.length === 0) continue;
 
-      const totalCap = eligible.reduce((s, a) => s + remainingCapacity[a.id], 0);
-      const toPlace = Math.min(remainingNeed[ac], totalCap);
-      distributeProportional(eligible, toPlace, totalCap, ac, remainingCapacity, targetLocation);
-      remainingNeed[ac] -= toPlace;
+      // Fill accounts that concentrate this class first, then the rest.
+      const [conc, rest] = partition(eligible, a => !!a.concentrateClasses?.includes(ac));
+      let placed = 0;
+      for (const group of [conc, rest]) {
+        if (group.length === 0 || remainingNeed[ac] <= EPSILON) continue;
+        const cap = group.reduce((s, a) => s + remainingCapacity[a.id], 0);
+        if (cap <= EPSILON) continue;
+        const toPlace = Math.min(remainingNeed[ac], cap);
+        distributeProportional(group, toPlace, cap, ac, remainingCapacity, targetLocation);
+        remainingNeed[ac] -= toPlace;
+        placed += toPlace;
+      }
 
-      if (bucketIdx > 0 && toPlace > EPSILON) {
-        flags.push({ kind: 'PLACEMENT_SPILLOVER', assetClass: ac, bucket, amountUsd: toPlace });
+      if (bucketIdx > 0 && placed > EPSILON) {
+        flags.push({ kind: 'PLACEMENT_SPILLOVER', assetClass: ac, bucket, amountUsd: placed });
       }
     } // end pass 1
 
@@ -107,19 +121,24 @@ export function greedyPlace(
         continue;
       }
 
-      const totalCap = anyEligible.reduce((s, a) => s + remainingCapacity[a.id], 0);
-      const toPlace = Math.min(remainingNeed[ac], totalCap);
-
       // Track spill per destination bucket for flags.
+      // Fill concentrated accounts first, then the rest.
       const spillByBucket = new Map<PlacementBucket, number>();
-      for (const acct of anyEligible) {
-        const share = (remainingCapacity[acct.id] / totalCap) * toPlace;
-        targetLocation[acct.id][ac] += share;
-        remainingCapacity[acct.id] -= share;
-        const bkt = accountBucket(acct.type);
-        spillByBucket.set(bkt, (spillByBucket.get(bkt) ?? 0) + share);
+      const [concSpill, restSpill] = partition(anyEligible, a => !!a.concentrateClasses?.includes(ac));
+      for (const group of [concSpill, restSpill]) {
+        if (group.length === 0 || remainingNeed[ac] <= EPSILON) continue;
+        const cap = group.reduce((s, a) => s + remainingCapacity[a.id], 0);
+        if (cap <= EPSILON) continue;
+        const toPlace = Math.min(remainingNeed[ac], cap);
+        for (const acct of group) {
+          const share = (remainingCapacity[acct.id] / cap) * toPlace;
+          targetLocation[acct.id][ac] += share;
+          remainingCapacity[acct.id] -= share;
+          const bkt = accountBucket(acct.type);
+          spillByBucket.set(bkt, (spillByBucket.get(bkt) ?? 0) + share);
+        }
+        remainingNeed[ac] -= toPlace;
       }
-      remainingNeed[ac] -= toPlace;
 
       for (const [bucket, amountUsd] of spillByBucket) {
         flags.push({ kind: 'PLACEMENT_SPILLOVER', assetClass: ac, bucket, amountUsd });
