@@ -1,4 +1,5 @@
-import type { Account, AssetClass, Flag, PlacementBucket, Position } from '../engine/types';
+import { useState } from 'react';
+import type { Account, AssetClass, Flag, FundDecomposition, PlacementBucket, Position } from '../engine/types';
 import { ALL_ASSET_CLASSES } from '../engine/types';
 import { BUILTIN_CLASS_MAP, makeClassifier } from '../engine/classify';
 import { accountBucket } from '../engine/placement';
@@ -6,6 +7,7 @@ import { AC_COLOR, AC_LABEL, BUCKET_COLOR, BUCKET_LABEL } from './fmt';
 import { PieChart } from './PieChart';
 import { StackedBars } from './StackedBars';
 import type { StackedRow, LegendEntry } from './StackedBars';
+import { detectTargetDateFund } from '../data/targetDateFunds';
 
 const PLACEMENT_BUCKETS: PlacementBucket[] = ['TAX_ADVANTAGED', 'TAXABLE', 'EDUCATION'];
 
@@ -15,9 +17,11 @@ interface Props {
   flags: Flag[];
   tickerOverrides: Record<string, AssetClass>;
   setTickerOverrides: (o: Record<string, AssetClass>) => void;
+  decompositions: Record<string, FundDecomposition>;
+  setDecompositions: (d: Record<string, FundDecomposition>) => void;
 }
 
-type Source = 'override' | 'builtin' | 'unmapped';
+type Source = 'override' | 'builtin' | 'unmapped' | 'decomposed';
 
 interface TickerRow {
   ticker:      string;
@@ -26,7 +30,125 @@ interface TickerRow {
   source:      Source;
 }
 
-export function ClassifyPanel({ accounts, positions, flags, tickerOverrides, setTickerOverrides }: Props) {
+// Inline editor state for a single decomposition being edited.
+interface EditState {
+  ticker: string;
+  draft: Partial<Record<AssetClass, string>>; // string so we can have partial % inputs
+}
+
+function DecompWeightBars({ decomp }: { decomp: FundDecomposition }) {
+  const total = Object.values(decomp).reduce((s, v) => s + (v ?? 0), 0);
+  if (total === 0) return null;
+  return (
+    <div className="flex h-3 rounded overflow-hidden w-40">
+      {(Object.entries(decomp) as [AssetClass, number][]).map(([ac, w]) => (
+        <div
+          key={ac}
+          title={`${AC_LABEL[ac] ?? ac}: ${Math.round(w * 100)}%`}
+          style={{ width: `${(w / total) * 100}%`, background: AC_COLOR[ac] ?? '#ccc' }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function DecompEditor({
+  ticker,
+  initial,
+  onApply,
+  onCancel,
+  isEstimated,
+}: {
+  ticker: string;
+  initial: FundDecomposition;
+  onApply: (d: FundDecomposition) => void;
+  onCancel: () => void;
+  isEstimated: boolean;
+}) {
+  const [draft, setDraft] = useState<Partial<Record<AssetClass, string>>>(() => {
+    const d: Partial<Record<AssetClass, string>> = {};
+    for (const ac of ALL_ASSET_CLASSES) {
+      const v = initial[ac];
+      if (v !== undefined && v > 0) d[ac] = String(Math.round(v * 1000) / 10);
+    }
+    return d;
+  });
+
+  const sum = ALL_ASSET_CLASSES.reduce((s, ac) => {
+    const v = parseFloat(draft[ac] ?? '0');
+    return s + (isNaN(v) ? 0 : v);
+  }, 0);
+  const sumOk = Math.abs(sum - 100) <= 0.5;
+
+  function handleApply() {
+    const result: FundDecomposition = {};
+    for (const ac of ALL_ASSET_CLASSES) {
+      const v = parseFloat(draft[ac] ?? '0');
+      if (!isNaN(v) && v > 0) result[ac] = Math.round(v * 10) / 1000;
+    }
+    onApply(result);
+  }
+
+  return (
+    <div className="mt-2 p-3 bg-white border border-amber-200 rounded-lg space-y-2">
+      {isEstimated && (
+        <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+          Estimated from fund series. Verify on the fund's fact sheet page.
+        </p>
+      )}
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+        {ALL_ASSET_CLASSES.map(ac => (
+          <label key={ac} className="flex items-center gap-2 text-xs">
+            <span
+              className="inline-block w-2.5 h-2.5 rounded-sm flex-shrink-0"
+              style={{ background: AC_COLOR[ac] ?? '#ccc' }}
+            />
+            <span className="w-28 text-gray-600">{AC_LABEL[ac] ?? ac}</span>
+            <input
+              type="number"
+              min="0"
+              max="100"
+              step="0.1"
+              value={draft[ac] ?? ''}
+              onChange={e => setDraft(prev => ({ ...prev, [ac]: e.target.value }))}
+              className="w-16 border border-gray-200 rounded px-1.5 py-0.5 text-right text-xs"
+              placeholder="0"
+            />
+            <span className="text-gray-400">%</span>
+          </label>
+        ))}
+      </div>
+      <div className="flex items-center justify-between pt-1">
+        <span className={`text-xs font-medium ${sumOk ? 'text-green-600' : 'text-red-500'}`}>
+          Sum: {sum.toFixed(1)}% {sumOk ? '✓' : '(must be ~100%)'}
+        </span>
+        <div className="flex gap-2">
+          <button
+            onClick={onCancel}
+            className="text-xs text-gray-500 border border-gray-200 rounded px-2 py-1 hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleApply}
+            disabled={!sumOk}
+            className="text-xs text-white bg-indigo-600 rounded px-2 py-1 disabled:opacity-40 hover:bg-indigo-700 disabled:cursor-not-allowed"
+          >
+            Apply decomposition
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function ClassifyPanel({
+  accounts, positions, flags,
+  tickerOverrides, setTickerOverrides,
+  decompositions, setDecompositions,
+}: Props) {
+  const [editState, setEditState] = useState<EditState | null>(null);
+
   // Build one row per unique ticker across all positions.
   const seen = new Set<string>();
   const rows: TickerRow[] = [];
@@ -34,6 +156,10 @@ export function ClassifyPanel({ accounts, positions, flags, tickerOverrides, set
     const t = p.ticker.toUpperCase();
     if (seen.has(t)) continue;
     seen.add(t);
+    if (decompositions[t]) {
+      rows.push({ ticker: t, description: p.description, effective: null, source: 'decomposed' });
+      continue;
+    }
     const override = tickerOverrides[t];
     const builtin  = BUILTIN_CLASS_MAP[t];
     const source: Source = override ? 'override' : builtin ? 'builtin' : 'unmapped';
@@ -50,9 +176,10 @@ export function ClassifyPanel({ accounts, positions, flags, tickerOverrides, set
     }
   }
 
-  const unmapped  = rows.filter(r => r.source === 'unmapped');
+  const unmapped   = rows.filter(r => r.source === 'unmapped');
+  const decomposed = rows.filter(r => r.source === 'decomposed');
   const classified = rows
-    .filter(r => r.source !== 'unmapped')
+    .filter(r => r.source !== 'unmapped' && r.source !== 'decomposed')
     .sort((a, b) => a.ticker.localeCompare(b.ticker));
 
   // ── Chart data ──────────────────────────────────────────────────────────────
@@ -67,13 +194,27 @@ export function ClassifyPanel({ accounts, positions, flags, tickerOverrides, set
   const acBucketMap = new Map<AssetClass, Map<PlacementBucket, number>>();
 
   for (const p of positions) {
+    const acct   = accountMap.get(p.accountId);
+    const bucket = acct ? accountBucket(acct.type) : 'TAXABLE';
+
+    // Handle decomposed positions.
+    const decomp = decompositions[p.ticker.toUpperCase()];
+    if (decomp) {
+      for (const [ac, weight] of Object.entries(decomp) as [AssetClass, number][]) {
+        const portion = p.marketValue * weight;
+        acValueMap.set(ac, (acValueMap.get(ac) ?? 0) + portion);
+        if (!acBucketMap.has(ac)) acBucketMap.set(ac, new Map());
+        const bm = acBucketMap.get(ac)!;
+        bm.set(bucket, (bm.get(bucket) ?? 0) + portion);
+      }
+      continue;
+    }
+
     const ac = classify(p.ticker);
     if (!ac) continue; // skip unmapped
 
     acValueMap.set(ac, (acValueMap.get(ac) ?? 0) + p.marketValue);
 
-    const acct   = accountMap.get(p.accountId);
-    const bucket = acct ? accountBucket(acct.type) : 'TAXABLE';
     if (!acBucketMap.has(ac)) acBucketMap.set(ac, new Map());
     const bm = acBucketMap.get(ac)!;
     bm.set(bucket, (bm.get(bucket) ?? 0) + p.marketValue);
@@ -102,6 +243,21 @@ export function ClassifyPanel({ accounts, positions, flags, tickerOverrides, set
     const next = { ...tickerOverrides };
     if (ac === '') delete next[ticker]; else next[ticker] = ac;
     setTickerOverrides(next);
+  }
+
+  function applyDecomp(ticker: string, decomp: FundDecomposition) {
+    setDecompositions({ ...decompositions, [ticker]: decomp });
+    // Remove any single-class override/unmapped state for this ticker.
+    const next = { ...tickerOverrides };
+    delete next[ticker];
+    setTickerOverrides(next);
+    setEditState(null);
+  }
+
+  function removeDecomp(ticker: string) {
+    const next = { ...decompositions };
+    delete next[ticker];
+    setDecompositions(next);
   }
 
   if (rows.length === 0) {
@@ -152,44 +308,160 @@ export function ClassifyPanel({ accounts, positions, flags, tickerOverrides, set
               — excluded from the rebalance until assigned
             </span>
           </div>
-          <table className="w-full text-sm bg-amber-50">
-            <thead className="text-xs text-amber-700 uppercase tracking-wide border-b border-amber-200">
-              <tr>
-                <th className="px-4 py-2 text-left">Ticker</th>
-                <th className="px-4 py-2 text-left">Description</th>
-                <th className="px-4 py-2 text-left">Assign asset class</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-amber-100">
-              {unmapped.map(row => (
-                <tr key={row.ticker}>
-                  <td className="px-4 py-2.5 font-mono font-semibold text-amber-900">{row.ticker}</td>
-                  <td className="px-4 py-2.5 text-amber-700 truncate max-w-[200px]">
-                    {row.description ?? <span className="text-amber-300">—</span>}
-                  </td>
-                  <td className="px-4 py-2.5">
-                    <select
-                      value=""
-                      onChange={e => { if (e.target.value) assign(row.ticker, e.target.value as AssetClass); }}
-                      className="border border-amber-300 rounded px-2 py-1 text-sm bg-white"
-                    >
-                      <option value="">— select —</option>
-                      {ALL_ASSET_CLASSES.map(ac => (
-                        <option key={ac} value={ac}>{AC_LABEL[ac]}</option>
-                      ))}
-                    </select>
-                  </td>
+          <div className="bg-amber-50">
+            {unmapped.map(row => {
+              const tdfDetect = detectTargetDateFund(row.ticker, row.description);
+              const isEditing = editState?.ticker === row.ticker;
+              return (
+                <div key={row.ticker} className="border-b border-amber-100 last:border-b-0 px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    <span className="font-mono font-semibold text-amber-900 w-24 flex-shrink-0">{row.ticker}</span>
+                    <span className="text-amber-700 text-sm truncate flex-1 max-w-[220px]">
+                      {row.description ?? <span className="text-amber-300">—</span>}
+                    </span>
+                    {tdfDetect ? (
+                      <div className="flex items-center gap-2 ml-auto">
+                        <span className="text-xs text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
+                          Target date fund {tdfDetect.confidence === 'high' ? '(exact)' : '(estimated)'}
+                        </span>
+                        {!isEditing && (
+                          <>
+                            <button
+                              onClick={() => setEditState({ ticker: row.ticker, draft: {} })}
+                              className="text-xs border border-indigo-300 text-indigo-600 rounded px-2 py-0.5 hover:bg-indigo-50"
+                            >
+                              Set decomposition
+                            </button>
+                            <select
+                              value=""
+                              onChange={e => { if (e.target.value) assign(row.ticker, e.target.value as AssetClass); }}
+                              className="text-xs border border-gray-200 rounded px-1.5 py-0.5 text-gray-500 bg-white"
+                            >
+                              <option value="">or assign single class</option>
+                              {ALL_ASSET_CLASSES.map(ac => (
+                                <option key={ac} value={ac}>{AC_LABEL[ac]}</option>
+                              ))}
+                            </select>
+                          </>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="ml-auto">
+                        <select
+                          value=""
+                          onChange={e => { if (e.target.value) assign(row.ticker, e.target.value as AssetClass); }}
+                          className="border border-amber-300 rounded px-2 py-1 text-sm bg-white"
+                        >
+                          <option value="">— select class —</option>
+                          {ALL_ASSET_CLASSES.map(ac => (
+                            <option key={ac} value={ac}>{AC_LABEL[ac]}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                  {tdfDetect && isEditing && (
+                    <DecompEditor
+                      ticker={row.ticker}
+                      initial={tdfDetect.composition}
+                      onApply={d => applyDecomp(row.ticker, d)}
+                      onCancel={() => setEditState(null)}
+                      isEstimated={tdfDetect.confidence === 'estimated'}
+                    />
+                  )}
+                  {tdfDetect && !isEditing && (
+                    <div className="mt-1 ml-24 flex items-center gap-2">
+                      <DecompWeightBars decomp={tdfDetect.composition} />
+                      <span className="text-xs text-gray-400">{tdfDetect.label}</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── Target date funds (decomposed) ─────────────────────────────────── */}
+      {decomposed.length > 0 && (
+        <div className="space-y-2">
+          <h3 className="text-sm font-medium text-gray-600">Target date funds</h3>
+          <div className="overflow-hidden border border-indigo-200 rounded-lg">
+            <table className="w-full text-sm">
+              <thead className="bg-indigo-50 text-xs text-indigo-600 uppercase tracking-wide border-b border-indigo-200">
+                <tr>
+                  <th className="px-4 py-2 text-left">Ticker</th>
+                  <th className="px-4 py-2 text-left">Description</th>
+                  <th className="px-4 py-2 text-left">Composition</th>
+                  <th className="px-4 py-2 text-left"></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-indigo-50">
+                {decomposed.map(row => {
+                  const decomp = decompositions[row.ticker]!;
+                  const isEditing = editState?.ticker === row.ticker;
+                  return (
+                    <tr key={row.ticker} className="hover:bg-indigo-50/40">
+                      <td className="px-4 py-2.5 font-mono font-medium text-indigo-900">{row.ticker}</td>
+                      <td className="px-4 py-2.5 text-gray-500 truncate max-w-[180px]">
+                        {row.description ?? <span className="text-gray-300">—</span>}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        {isEditing ? null : (
+                          <div className="flex items-center gap-2">
+                            <DecompWeightBars decomp={decomp} />
+                            <span className="text-xs text-gray-400">
+                              {(Object.entries(decomp) as [AssetClass, number][])
+                                .map(([ac, w]) => `${AC_LABEL[ac] ?? ac} ${Math.round(w * 100)}%`)
+                                .join(' · ')}
+                            </span>
+                          </div>
+                        )}
+                        {isEditing && (
+                          <DecompEditor
+                            ticker={row.ticker}
+                            initial={decomp}
+                            onApply={d => applyDecomp(row.ticker, d)}
+                            onCancel={() => setEditState(null)}
+                            isEstimated={false}
+                          />
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5 whitespace-nowrap">
+                        {!isEditing && (
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => setEditState({ ticker: row.ticker, draft: {} })}
+                              className="text-xs text-indigo-600 border border-indigo-200 rounded px-2 py-0.5 hover:bg-indigo-50"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => removeDecomp(row.ticker)}
+                              className="text-xs text-gray-400 hover:text-red-500 border border-gray-200 rounded px-2 py-0.5 hover:bg-red-50"
+                              title="Remove decomposition"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-xs text-gray-400">
+            Decomposed funds are counted in allocation totals but excluded from trade suggestions.
+          </p>
         </div>
       )}
 
       {/* ── All classified holdings ─────────────────────────────────────────── */}
       {classified.length > 0 && (
         <div className="space-y-2">
-          {unmapped.length > 0 && (
+          {(unmapped.length > 0 || decomposed.length > 0) && (
             <h3 className="text-sm font-medium text-gray-600">Classified holdings</h3>
           )}
           <div className="overflow-hidden border border-gray-200 rounded-lg">

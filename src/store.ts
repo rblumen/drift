@@ -10,7 +10,7 @@
 // Hard guardrail: this module never makes network calls. All data stays
 // in the browser. The JSON file export writes only to the user's filesystem.
 
-import type { Account, AssetClass, Position, Strategy } from './engine/types';
+import type { Account, AssetClass, FundDecomposition, Position, Strategy } from './engine/types';
 import { DEFAULT_STRATEGY } from './engine/strategy';
 import { appStateSchema, type AppState } from './ingest/schema';
 
@@ -27,6 +27,7 @@ export const DEFAULT_APP_STATE: AppState = {
   positions:       [],
   strategy:        DEFAULT_STRATEGY,
   tickerOverrides: {},
+  decompositions:  {},
 };
 
 // ─── localStorage ─────────────────────────────────────────────────────────────
@@ -114,12 +115,13 @@ export async function importJson(
 
 // ─── Convenience state builder ────────────────────────────────────────────────
 
-/** Assemble an AppState object from the four individual state slices. */
+/** Assemble an AppState object from the five individual state slices. */
 export function buildState(
   accounts:        Account[],
   positions:       Position[],
   strategy:        Strategy,
   tickerOverrides: Record<string, AssetClass>,
+  decompositions:  Record<string, FundDecomposition> = {},
 ): AppState {
-  return { version: SCHEMA_VERSION, accounts, positions, strategy, tickerOverrides };
+  return { version: SCHEMA_VERSION, accounts, positions, strategy, tickerOverrides, decompositions };
 }

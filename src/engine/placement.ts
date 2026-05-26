@@ -9,6 +9,9 @@ const PLACEMENT_ORDER: AssetClass[] = [
   'EMERGING_INTL',
   'DEVELOPED_INTL',
   'US_TOTAL_MARKET',
+  'US_LARGE_CAP',
+  'US_MID_CAP',
+  'US_SMALL_CAP',
   'CASH',
 ];
 
@@ -70,8 +73,9 @@ export function greedyPlace(
     // Pass 1 — try preferred buckets in order.
     // Filling any bucket beyond the first (index > 0) is a spillover and gets flagged,
     // because the asset class didn't fully fit in its primary home.
-    for (let bucketIdx = 0; bucketIdx < strategy.placement[ac].length; bucketIdx++) {
-      const bucket = strategy.placement[ac][bucketIdx];
+    const placementBuckets = strategy.placement[ac] ?? ['TAX_ADVANTAGED', 'TAXABLE'];
+    for (let bucketIdx = 0; bucketIdx < placementBuckets.length; bucketIdx++) {
+      const bucket = placementBuckets[bucketIdx];
       if (remainingNeed[ac] <= EPSILON) break;
 
       const eligible = accounts.filter(
@@ -89,7 +93,7 @@ export function greedyPlace(
       if (bucketIdx > 0 && toPlace > EPSILON) {
         flags.push({ kind: 'PLACEMENT_SPILLOVER', assetClass: ac, bucket, amountUsd: toPlace });
       }
-    }
+    } // end pass 1
 
     // Pass 2 — spill into any eligible account (any bucket).
     if (remainingNeed[ac] > EPSILON) {

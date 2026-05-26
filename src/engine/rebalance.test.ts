@@ -192,7 +192,8 @@ describe('tolerance — portfolio exactly at target', () => {
 
   it('emits WITHIN_TOLERANCE for every asset class', () => {
     const r = rebalance(ACCOUNTS_NO_CASH, ON_TARGET_POSITIONS, DEFAULT_STRATEGY);
-    expect(r.flags.filter(f => f.kind === 'WITHIN_TOLERANCE')).toHaveLength(6);
+    // ALL_ASSET_CLASSES now has 9 entries (added US_LARGE_CAP, US_MID_CAP, US_SMALL_CAP).
+    expect(r.flags.filter(f => f.kind === 'WITHIN_TOLERANCE')).toHaveLength(9);
   });
 });
 

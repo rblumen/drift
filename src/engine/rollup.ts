@@ -1,4 +1,4 @@
-import type { Account, Position, AssetClass } from './types';
+import type { Account, Position, AssetClass, FundDecomposition } from './types';
 import { ALL_ASSET_CLASSES } from './types';
 import type { ClassifyFn } from './classify';
 
@@ -24,6 +24,7 @@ export function rollup(
   accounts: Account[],
   positions: Position[],
   classify: ClassifyFn,
+  decompositions: Record<string, FundDecomposition> = {},
 ): RollupResult {
   const currentValue = zeroByClass();
   const currentValueByAccount: Record<string, Record<AssetClass, number>> = {};
@@ -39,6 +40,20 @@ export function rollup(
   }
 
   for (const pos of positions) {
+    // Check for decomposition first (target date funds, etc.).
+    const decomp = decompositions[pos.ticker.toUpperCase()];
+    if (decomp) {
+      // Split value across asset classes; always treat as frozen.
+      accountValues[pos.accountId] = (accountValues[pos.accountId] ?? 0) + pos.marketValue;
+      for (const [ac, weight] of Object.entries(decomp) as [AssetClass, number][]) {
+        const portion = pos.marketValue * weight;
+        currentValue[ac] += portion;
+        currentValueByAccount[pos.accountId][ac] += portion;
+        lockedValueByAccount[pos.accountId][ac] += portion; // always frozen — can't trade sub-components
+      }
+      continue; // skip the classify path
+    }
+
     const ac = classify(pos.ticker);
     if (ac === null) {
       if (!seenUnmapped.has(pos.ticker)) {

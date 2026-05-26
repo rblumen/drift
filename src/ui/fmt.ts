@@ -26,6 +26,9 @@ export function fmtShares(deltaUsd: number, price: number | undefined): string |
 // Human-readable asset class labels.
 export const AC_LABEL: Record<string, string> = {
   US_TOTAL_MARKET: 'US Total Market',
+  US_LARGE_CAP:    'US Large Cap',
+  US_MID_CAP:      'US Mid Cap',
+  US_SMALL_CAP:    'US Small Cap',
   DEVELOPED_INTL:  'Developed Intl',
   EMERGING_INTL:   'Emerging Intl',
   FIXED_INCOME:    'Fixed Income',
@@ -71,6 +74,9 @@ export const BUCKET_COLOR: Record<string, string> = {
 // Chart colours for asset classes.
 export const AC_COLOR: Record<string, string> = {
   US_TOTAL_MARKET: '#818cf8', // indigo-400
+  US_LARGE_CAP:    '#3b82f6', // blue-500
+  US_MID_CAP:      '#60a5fa', // blue-400
+  US_SMALL_CAP:    '#93c5fd', // blue-300
   DEVELOPED_INTL:  '#38bdf8', // sky-400
   EMERGING_INTL:   '#34d399', // emerald-400
   FIXED_INCOME:    '#fbbf24', // amber-400

@@ -9,7 +9,8 @@ const ACCOUNT_TYPES = [
 const PLACEMENT_BUCKETS = ['TAXABLE', 'TAX_ADVANTAGED', 'EDUCATION'] as const;
 
 const ASSET_CLASSES = [
-  'US_TOTAL_MARKET', 'DEVELOPED_INTL', 'EMERGING_INTL',
+  'US_TOTAL_MARKET', 'US_LARGE_CAP', 'US_MID_CAP', 'US_SMALL_CAP',
+  'DEVELOPED_INTL', 'EMERGING_INTL',
   'FIXED_INCOME', 'ALTERNATIVES', 'CASH',
 ] as const;
 
@@ -34,6 +35,9 @@ export const accountSchema = z.object({
 
 const targetsSchema = z.object({
   US_TOTAL_MARKET: z.number().min(0).max(1),
+  US_LARGE_CAP:    z.number().min(0).max(1).optional().default(0),
+  US_MID_CAP:      z.number().min(0).max(1).optional().default(0),
+  US_SMALL_CAP:    z.number().min(0).max(1).optional().default(0),
   DEVELOPED_INTL:  z.number().min(0).max(1),
   EMERGING_INTL:   z.number().min(0).max(1),
   FIXED_INCOME:    z.number().min(0).max(1),
@@ -41,7 +45,8 @@ const targetsSchema = z.object({
   CASH:            z.number().min(0).max(1),
 }).refine(
   t => {
-    const sum = t.US_TOTAL_MARKET + t.DEVELOPED_INTL + t.EMERGING_INTL
+    const sum = t.US_TOTAL_MARKET + (t.US_LARGE_CAP ?? 0) + (t.US_MID_CAP ?? 0) + (t.US_SMALL_CAP ?? 0)
+              + t.DEVELOPED_INTL + t.EMERGING_INTL
               + t.FIXED_INCOME + t.ALTERNATIVES + t.CASH;
     return Math.abs(sum - 1.0) <= 0.001;
   },
@@ -51,7 +56,7 @@ const targetsSchema = z.object({
 export const strategySchema = z.object({
   targets: targetsSchema,
   placement: z.record(
-    z.enum(ASSET_CLASSES),
+    z.string(),
     z.array(z.enum(PLACEMENT_BUCKETS)).min(1),
   ),
   toleranceAbs: z.number().min(0).max(1),
@@ -78,6 +83,8 @@ export function parsePortfolio(raw: unknown): { accounts: Account[]; positions: 
   return { accounts: r.accounts as Account[], positions: r.positions as Position[] };
 }
 
+export const fundDecompositionSchema = z.record(z.string(), z.number().min(0).max(1));
+
 // Full persisted app state — used for localStorage and JSON file export/import.
 export const appStateSchema = z.object({
   version:        z.literal(1),
@@ -85,6 +92,7 @@ export const appStateSchema = z.object({
   positions:      z.array(positionSchema),
   strategy:       strategySchema,
   tickerOverrides: z.record(z.string(), z.enum(ASSET_CLASSES)),
+  decompositions: fundDecompositionSchema.optional().default({}),
 });
 
 export type AppState = z.infer<typeof appStateSchema>;

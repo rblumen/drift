@@ -1,10 +1,15 @@
 export type AssetClass =
   | 'US_TOTAL_MARKET'
+  | 'US_LARGE_CAP'
+  | 'US_MID_CAP'
+  | 'US_SMALL_CAP'
   | 'DEVELOPED_INTL'
   | 'EMERGING_INTL'
   | 'FIXED_INCOME'
   | 'ALTERNATIVES'  // extension point: split into CRYPTO + PRECIOUS_METALS in a future version
   | 'CASH';
+
+export type FundDecomposition = Partial<Record<AssetClass, number>>;
 
 export type AccountType =
   | 'TAXABLE'
@@ -20,6 +25,9 @@ export type PlacementBucket = 'TAXABLE' | 'TAX_ADVANTAGED' | 'EDUCATION';
 
 export const ALL_ASSET_CLASSES: readonly AssetClass[] = [
   'US_TOTAL_MARKET',
+  'US_LARGE_CAP',
+  'US_MID_CAP',
+  'US_SMALL_CAP',
   'DEVELOPED_INTL',
   'EMERGING_INTL',
   'FIXED_INCOME',

@@ -1,4 +1,4 @@
-import type { Account, Position, Strategy, RebalanceResult, AssetClass, Flag } from './types';
+import type { Account, Position, Strategy, RebalanceResult, AssetClass, Flag, FundDecomposition } from './types';
 import { ALL_ASSET_CLASSES } from './types';
 import { makeClassifier } from './classify';
 import { rollup } from './rollup';
@@ -13,12 +13,13 @@ export function rebalance(
   positions: Position[],
   strategy: Strategy,
   tickerOverrides: Record<string, AssetClass> = {},
+  decompositions: Record<string, FundDecomposition> = {},
 ): RebalanceResult {
   const classify = makeClassifier(tickerOverrides);
   const {
     householdValue, currentValue, currentValueByAccount,
     accountValues, lockedValueByAccount, unmappedTickers,
-  } = rollup(accounts, positions, classify);
+  } = rollup(accounts, positions, classify, decompositions);
 
   const flags: Flag[] = [];
 

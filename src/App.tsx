@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Account, AssetClass, Position, Strategy } from './engine/types';
+import type { Account, AssetClass, FundDecomposition, Position, Strategy } from './engine/types';
 import { DEFAULT_STRATEGY } from './engine/strategy';
 import { rebalance } from './engine/rebalance';
 import { AccountsPanel } from './ui/AccountsPanel';
@@ -30,18 +30,19 @@ export default function App() {
   const [positions,        setPositions]         = useState<Position[]>(saved.positions);
   const [strategy,         setStrategy]         = useState<Strategy>(saved.strategy);
   const [tickerOverrides,  setTickerOverrides]  = useState<Record<string, AssetClass>>(saved.tickerOverrides);
+  const [decompositions,   setDecompositions]   = useState<Record<string, FundDecomposition>>(saved.decompositions ?? {});
   const [activeTab,        setActiveTab]        = useState<Tab>('accounts');
   const [importError,      setImportError]      = useState<string | null>(null);
   const importFileRef = useRef<HTMLInputElement>(null);
 
   // Auto-save to localStorage whenever any state slice changes.
   useEffect(() => {
-    saveState(buildState(accounts, positions, strategy, tickerOverrides));
-  }, [accounts, positions, strategy, tickerOverrides]);
+    saveState(buildState(accounts, positions, strategy, tickerOverrides, decompositions));
+  }, [accounts, positions, strategy, tickerOverrides, decompositions]);
 
   const result = useMemo(
-    () => rebalance(accounts, positions, strategy, tickerOverrides),
-    [accounts, positions, strategy, tickerOverrides],
+    () => rebalance(accounts, positions, strategy, tickerOverrides, decompositions),
+    [accounts, positions, strategy, tickerOverrides, decompositions],
   );
 
   const unmappedCount = result.flags.filter(f => f.kind === 'UNMAPPED_HOLDING').length;
@@ -51,7 +52,7 @@ export default function App() {
   }
 
   function handleExport() {
-    exportJson(buildState(accounts, positions, strategy, tickerOverrides));
+    exportJson(buildState(accounts, positions, strategy, tickerOverrides, decompositions));
   }
 
   async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -68,6 +69,7 @@ export default function App() {
     setPositions(result.positions);
     setStrategy(result.strategy);
     setTickerOverrides(result.tickerOverrides);
+    setDecompositions(result.decompositions ?? {});
   }
 
   function handleReset() {
@@ -77,6 +79,7 @@ export default function App() {
     setPositions([]);
     setStrategy(DEFAULT_STRATEGY);
     setTickerOverrides({});
+    setDecompositions({});
     setActiveTab('accounts');
   }
 
@@ -191,6 +194,8 @@ export default function App() {
             flags={result.flags}
             tickerOverrides={tickerOverrides}
             setTickerOverrides={setTickerOverrides}
+            decompositions={decompositions}
+            setDecompositions={setDecompositions}
           />
         )}
         {activeTab === 'strategy' && (
