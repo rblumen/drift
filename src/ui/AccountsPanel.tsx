@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import type { Account, AccountType } from '../engine/types';
-import { ACCT_TYPE_LABEL } from './fmt';
+import type { Account, AccountType, AssetClass } from '../engine/types';
+import { ACCT_TYPE_LABEL, AC_LABEL } from './fmt';
 
 interface Props {
   accounts: Account[];
@@ -16,15 +16,62 @@ const ACCOUNT_TYPES: AccountType[] = [
 
 const INSTITUTIONS = ['Schwab', 'Fidelity', 'Empower', 'Vanguard', 'Other'];
 
-function blankForm() {
-  return { name: '', institution: 'Schwab', type: 'TAXABLE' as AccountType, newCash: '' };
+// Asset classes that can actually be placed (US_TOTAL_MARKET is always redistributed
+// to sub-classes by the engine, so it never appears in placement decisions).
+const PLACEABLE_CLASSES: AssetClass[] = [
+  'US_LARGE_CAP', 'US_MID_CAP', 'US_SMALL_CAP',
+  'DEVELOPED_INTL', 'EMERGING_INTL',
+  'FIXED_INCOME', 'ALTERNATIVES', 'CASH',
+];
+
+interface FormState {
+  name: string;
+  institution: string;
+  type: AccountType;
+  newCash: string;
+  restricted: boolean;
+  allowedClasses: AssetClass[];
+  concentrateClasses: AssetClass[];
+}
+
+function blankForm(): FormState {
+  return {
+    name: '', institution: 'Schwab', type: 'TAXABLE', newCash: '',
+    restricted: false, allowedClasses: [...PLACEABLE_CLASSES], concentrateClasses: [],
+  };
+}
+
+// When the user selects 401k and the form isn't already restricted, pre-populate
+// the most common restriction: no ALTERNATIVES in a 401k menu.
+function applyTypeDefaults(form: FormState, newType: AccountType): FormState {
+  if (newType === 'FOUR_OH_ONE_K' && !form.restricted) {
+    return {
+      ...form,
+      type: newType,
+      restricted: true,
+      allowedClasses: PLACEABLE_CLASSES.filter(c => c !== 'ALTERNATIVES'),
+    };
+  }
+  return { ...form, type: newType };
+}
+
+function toggleClass(classes: AssetClass[], ac: AssetClass, checked: boolean): AssetClass[] {
+  return checked ? [...classes, ac] : classes.filter(c => c !== ac);
+}
+
+// Translate form state to allowedAssetClasses for the Account object.
+// If unrestricted or all classes are allowed, returns undefined (engine treats as unrestricted).
+function toAllowedAssetClasses(form: FormState): AssetClass[] | undefined {
+  if (!form.restricted) return undefined;
+  if (form.allowedClasses.length === PLACEABLE_CLASSES.length) return undefined;
+  return form.allowedClasses.length > 0 ? form.allowedClasses : undefined;
 }
 
 export function AccountsPanel({ accounts, setAccounts, onDeleteAccount }: Props) {
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm]       = useState(blankForm);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm]   = useState(blankForm);
+  const [editForm, setEditForm]   = useState<FormState>(blankForm);
 
   function handleAdd() {
     if (!form.name.trim()) return;
@@ -34,6 +81,8 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount }: Props)
       institution: form.institution,
       type:        form.type,
       newCash:     form.newCash ? parseFloat(form.newCash) : undefined,
+      allowedAssetClasses: toAllowedAssetClasses(form),
+      concentrateClasses:  form.concentrateClasses.length > 0 ? form.concentrateClasses : undefined,
     };
     setAccounts([...accounts, acct]);
     setForm(blankForm());
@@ -41,12 +90,20 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount }: Props)
   }
 
   function startEdit(acct: Account) {
+    const existing = acct.allowedAssetClasses;
     setEditingId(acct.id);
     setEditForm({
       name:        acct.name,
       institution: acct.institution,
       type:        acct.type,
       newCash:     acct.newCash != null ? String(acct.newCash) : '',
+      restricted:  existing !== undefined,
+      allowedClasses: existing
+        ? PLACEABLE_CLASSES.filter(c => existing.includes(c))
+        : [...PLACEABLE_CLASSES],
+      concentrateClasses: (acct.concentrateClasses ?? []).filter(c =>
+        (PLACEABLE_CLASSES as string[]).includes(c),
+      ) as AssetClass[],
     });
   }
 
@@ -58,9 +115,93 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount }: Props)
         institution: editForm.institution,
         type:        editForm.type,
         newCash:     editForm.newCash ? parseFloat(editForm.newCash) : undefined,
+        allowedAssetClasses: toAllowedAssetClasses(editForm),
+        concentrateClasses:  editForm.concentrateClasses.length > 0
+          ? editForm.concentrateClasses : undefined,
       }
     ));
     setEditingId(null);
+  }
+
+  // Constraint badges shown in the view row under the account name.
+  function ConstraintBadges({ acct }: { acct: Account }) {
+    const excluded = acct.allowedAssetClasses
+      ? PLACEABLE_CLASSES.filter(c => !acct.allowedAssetClasses!.includes(c))
+      : [];
+    const concentrated = acct.concentrateClasses ?? [];
+    if (excluded.length === 0 && concentrated.length === 0) return null;
+    return (
+      <div className="mt-0.5 space-y-0.5">
+        {excluded.length > 0 && (
+          <div className="text-xs text-orange-500 font-normal">
+            excl. {excluded.map(c => AC_LABEL[c]).join(', ')}
+          </div>
+        )}
+        {concentrated.length > 0 && (
+          <div className="text-xs text-indigo-400 font-normal">
+            concentrate: {concentrated.map(c => AC_LABEL[c]).join(', ')}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Shared constraint fields used in both the add form and the inline edit form.
+  function ConstraintFields({
+    f, onChange,
+  }: { f: FormState; onChange: (next: FormState) => void }) {
+    return (
+      <div className="space-y-3 pt-1 border-t border-gray-200">
+        {/* Allowed classes */}
+        <div>
+          <label className="flex items-center gap-2 text-xs font-medium text-gray-600 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={f.restricted}
+              onChange={e => onChange({ ...f, restricted: e.target.checked })}
+              className="rounded"
+            />
+            Restrict investable classes
+            <span className="font-normal text-gray-400">(uncheck what this account cannot hold)</span>
+          </label>
+          {f.restricted && (
+            <div className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1 pl-5">
+              {PLACEABLE_CLASSES.map(ac => (
+                <label key={ac} className="flex items-center gap-1.5 text-xs cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={f.allowedClasses.includes(ac)}
+                    onChange={e => onChange({ ...f, allowedClasses: toggleClass(f.allowedClasses, ac, e.target.checked) })}
+                    className="rounded"
+                  />
+                  {AC_LABEL[ac]}
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+        {/* Concentrate classes */}
+        <div>
+          <p className="text-xs font-medium text-gray-600">
+            Concentrate here{' '}
+            <span className="font-normal text-gray-400">(fill this account first for these classes)</span>
+          </p>
+          <div className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1">
+            {PLACEABLE_CLASSES.map(ac => (
+              <label key={ac} className="flex items-center gap-1.5 text-xs cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={f.concentrateClasses.includes(ac)}
+                  onChange={e => onChange({ ...f, concentrateClasses: toggleClass(f.concentrateClasses, ac, e.target.checked) })}
+                  className="rounded"
+                />
+                {AC_LABEL[ac]}
+              </label>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -97,62 +238,77 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount }: Props)
             <tbody className="divide-y divide-gray-100">
               {accounts.map(acct => (
                 editingId === acct.id ? (
-                  <tr key={acct.id} className="bg-indigo-50">
-                    <td className="px-4 py-2">
-                      <input
-                        value={editForm.name}
-                        onChange={e => setEditForm({ ...editForm, name: e.target.value })}
-                        className="w-full border rounded px-2 py-1 text-sm"
-                        autoFocus
-                      />
-                    </td>
-                    <td className="px-4 py-2">
-                      <select
-                        value={editForm.institution}
-                        onChange={e => setEditForm({ ...editForm, institution: e.target.value })}
-                        className="border rounded px-2 py-1 text-sm"
-                      >
-                        {INSTITUTIONS.map(i => <option key={i}>{i}</option>)}
-                      </select>
-                    </td>
-                    <td className="px-4 py-2">
-                      <select
-                        value={editForm.type}
-                        onChange={e => setEditForm({ ...editForm, type: e.target.value as AccountType })}
-                        className="border rounded px-2 py-1 text-sm"
-                      >
-                        {ACCOUNT_TYPES.map(t => (
-                          <option key={t} value={t}>{ACCT_TYPE_LABEL[t]}</option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="px-4 py-2">
-                      <input
-                        type="number"
-                        value={editForm.newCash}
-                        onChange={e => setEditForm({ ...editForm, newCash: e.target.value })}
-                        placeholder="0"
-                        className="w-24 border rounded px-2 py-1 text-sm text-right"
-                      />
-                    </td>
-                    <td className="px-4 py-2 text-center">
-                      {/* Lock state preserved during edit */}
-                      <span className="text-xs text-gray-400">{acct.locked ? '🔒' : '—'}</span>
-                    </td>
-                    <td className="px-4 py-2 text-right space-x-2 whitespace-nowrap">
-                      <button
-                        onClick={() => saveEdit(acct.id)}
-                        className="text-indigo-600 hover:underline text-xs"
-                      >Save</button>
-                      <button
-                        onClick={() => setEditingId(null)}
-                        className="text-gray-400 hover:underline text-xs"
-                      >Cancel</button>
+                  <tr key={acct.id}>
+                    <td colSpan={6} className="px-0 py-0">
+                      <div className="bg-indigo-50 px-4 py-3 space-y-3">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">Name</label>
+                            <input
+                              value={editForm.name}
+                              onChange={e => setEditForm({ ...editForm, name: e.target.value })}
+                              className="w-full border rounded px-2 py-1 text-sm"
+                              autoFocus
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">Institution</label>
+                            <select
+                              value={editForm.institution}
+                              onChange={e => setEditForm({ ...editForm, institution: e.target.value })}
+                              className="w-full border rounded px-2 py-1 text-sm"
+                            >
+                              {INSTITUTIONS.map(i => <option key={i}>{i}</option>)}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">Account type</label>
+                            <select
+                              value={editForm.type}
+                              onChange={e => setEditForm(applyTypeDefaults(editForm, e.target.value as AccountType))}
+                              className="w-full border rounded px-2 py-1 text-sm"
+                            >
+                              {ACCOUNT_TYPES.map(t => (
+                                <option key={t} value={t}>{ACCT_TYPE_LABEL[t]}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">New cash ($)</label>
+                            <input
+                              type="number"
+                              value={editForm.newCash}
+                              onChange={e => setEditForm({ ...editForm, newCash: e.target.value })}
+                              placeholder="Optional"
+                              className="w-full border rounded px-2 py-1 text-sm"
+                            />
+                          </div>
+                        </div>
+                        <ConstraintFields f={editForm} onChange={setEditForm} />
+                        <div className="flex items-center gap-3 pt-1">
+                          <button
+                            onClick={() => saveEdit(acct.id)}
+                            className="bg-indigo-600 text-white text-sm px-4 py-1.5 rounded-md hover:bg-indigo-700"
+                          >Save</button>
+                          <button
+                            onClick={() => setEditingId(null)}
+                            className="text-gray-500 text-sm px-3 py-1.5 rounded-md hover:bg-gray-100"
+                          >Cancel</button>
+                          <span className="text-xs text-gray-400 ml-1">
+                            Lock:{' '}
+                            <span className="font-medium">{acct.locked ? 'on' : 'off'}</span>
+                            {' '}(toggle in the table view)
+                          </span>
+                        </div>
+                      </div>
                     </td>
                   </tr>
                 ) : (
                   <tr key={acct.id} className={`hover:bg-gray-50 ${acct.locked ? 'opacity-60' : ''}`}>
-                    <td className="px-4 py-2 font-medium text-gray-800">{acct.name}</td>
+                    <td className="px-4 py-2 font-medium text-gray-800">
+                      {acct.name}
+                      <ConstraintBadges acct={acct} />
+                    </td>
                     <td className="px-4 py-2 text-gray-600">{acct.institution}</td>
                     <td className="px-4 py-2 text-gray-600">{ACCT_TYPE_LABEL[acct.type]}</td>
                     <td className="px-4 py-2 text-right text-gray-600">
@@ -222,7 +378,7 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount }: Props)
               <label className="block text-xs text-gray-500 mb-1">Account type</label>
               <select
                 value={form.type}
-                onChange={e => setForm({ ...form, type: e.target.value as AccountType })}
+                onChange={e => setForm(applyTypeDefaults(form, e.target.value as AccountType))}
                 className="w-full border rounded px-2 py-1.5 text-sm"
               >
                 {ACCOUNT_TYPES.map(t => (
@@ -241,6 +397,7 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount }: Props)
               />
             </div>
           </div>
+          <ConstraintFields f={form} onChange={setForm} />
           <div className="flex gap-2 pt-1">
             <button
               onClick={handleAdd}
