@@ -82,6 +82,17 @@ export interface Trade {
   inTaxableAccount: boolean;
 }
 
+export interface ResolvedTrade extends Trade {
+  // The specific fund to execute this trade against, when uniquely determinable
+  // from the account's current holdings. Absent for greenfield buys (no existing
+  // position covers the class) or when multiple positions are ambiguous.
+  ticker?: string;
+  // Set when a single blended fund (e.g. a US_TOTAL_MARKET ETF) covers several
+  // engine-level asset-class trades. Lists each constituent trade so the UI can
+  // explain what the merged amount represents.
+  mergedFrom?: Array<{ assetClass: AssetClass; deltaUsd: number }>;
+}
+
 export interface RebalanceResult {
   householdValue: number;
   currentWeights: Record<AssetClass, number>;
