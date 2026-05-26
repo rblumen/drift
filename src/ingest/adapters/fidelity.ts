@@ -21,6 +21,21 @@ import type { CsvParseResult } from '../csv';
 import { positionSchema } from '../schema';
 import type { Position } from '../../engine/types';
 
+// ── Footer stripping ──────────────────────────────────────────────────────────
+
+/**
+ * Fidelity exports append a multi-paragraph legal disclaimer after a blank
+ * line that follows the last data row.  Slicing at the first double-newline
+ * removes all of it before the CSV parser ever sees it.
+ *
+ * This function also normalises line endings, so callers don't need to.
+ */
+function stripFooter(text: string): string {
+  const normalised = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const blank = normalised.indexOf('\n\n');
+  return blank >= 0 ? normalised.slice(0, blank) : normalised;
+}
+
 // ── Column name constants ─────────────────────────────────────────────────────
 
 const COL = {
@@ -35,7 +50,7 @@ const COL = {
 // ── Single-account adapter (backward-compatible) ──────────────────────────────
 
 export function parseFidelityCsv(csvText: string, accountId: string): CsvParseResult {
-  return parseCsv(csvText, accountId, {
+  return parseCsv(stripFooter(csvText), accountId, {
     ticker:      COL.ticker,
     marketValue: COL.marketValue,
     description: COL.description,
@@ -67,7 +82,7 @@ export interface FidelityMultiResult {
 }
 
 export function parseFidelityMultiCsv(csvText: string): FidelityMultiResult {
-  const normalised = csvText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const normalised = stripFooter(csvText);   // also normalises \r\n → \n
 
   const { data, errors: parseErrors } = Papa.parse<Record<string, string>>(
     normalised, { header: true, skipEmptyLines: true },

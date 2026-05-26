@@ -274,6 +274,23 @@ describe('parseFidelityMultiCsv', () => {
     expect(r.discovered).toHaveLength(1);
     expect(r.discovered[0].accountNumber).toBe('Z00000001');
   });
+
+  it('ignores footer disclaimer rows after the first blank line', () => {
+    // Inline CSV that mimics a real Fidelity export with a footer block.
+    const csv = [
+      'Account Number,Account Name,Symbol,Description,Quantity,Last Price,Last Price Change,Current Value,Today\'s Gain/Loss Dollar,Today\'s Gain/Loss Percent,Total Gain/Loss Dollar,Total Gain/Loss Percent,Percent Of Account,Cost Basis Total,Average Cost Basis,Type',
+      'Z99,Test IRA,FZROX,FIDELITY ZERO TOTAL MARKET INDEX FUND,100,$18.34,$0.12,"$1,834.00",,,,,,,,,',
+      '',   // blank line — footer begins here
+      '"The data and information in this spreadsheet is provided to you solely for your use."',
+      '',
+      '"Date downloaded May-25-2026 9:26 p.m ET"',
+    ].join('\n');
+    const r = parseFidelityMultiCsv(csv);
+    expect(r.discovered).toHaveLength(1);
+    expect(r.discovered[0].accountNumber).toBe('Z99');
+    expect(r.positionsByNumber['Z99']).toHaveLength(1);
+    expect(r.errors).toHaveLength(0);
+  });
 });
 
 // ─── Empower CSV adapter ──────────────────────────────────────────────────────
