@@ -2,39 +2,73 @@ import { useState, useEffect } from 'react';
 import type { Strategy, AssetClass, PlacementBucket } from '../engine/types';
 import { ALL_ASSET_CLASSES } from '../engine/types';
 import { DEFAULT_STRATEGY } from '../engine/strategy';
-import { AC_COLOR, AC_LABEL, BUCKET_COLOR, BUCKET_LABEL } from './fmt';
+import { RUSSELL_CAP_SPLIT } from '../engine/rollup';
+import { AC_COLOR, AC_LABEL, BUCKET_LABEL } from './fmt';
 import { DonutChart } from './DonutChart';
 import type { DonutSlice } from './DonutChart';
 
 const ALL_BUCKETS: PlacementBucket[] = ['TAX_ADVANTAGED', 'TAXABLE', 'EDUCATION'];
+const US_CAP_SUBS: readonly AssetClass[] = ['US_LARGE_CAP', 'US_MID_CAP', 'US_SMALL_CAP'];
 
 interface Props {
   strategy: Strategy;
   setStrategy: (s: Strategy) => void;
-  /** Live current weights from the rebalance engine (fractions 0–1). */
   currentWeights: Record<AssetClass, number>;
 }
 
+/** Apply the Russell cap split to a composite US equity total (in percent). */
+function splitComposite(totalPct: number): Record<'US_LARGE_CAP' | 'US_MID_CAP' | 'US_SMALL_CAP', string> {
+  const lc = totalPct * RUSSELL_CAP_SPLIT.US_LARGE_CAP;
+  const mc = totalPct * RUSSELL_CAP_SPLIT.US_MID_CAP;
+  const sc = Math.max(totalPct - lc - mc, 0);
+  return { US_LARGE_CAP: lc.toFixed(1), US_MID_CAP: mc.toFixed(1), US_SMALL_CAP: sc.toFixed(1) };
+}
+
 export function StrategyPanel({ strategy, setStrategy, currentWeights }: Props) {
-  // Local weight state as strings so the user can type freely before committing.
+  // Linked by default when US_TOTAL_MARKET has no standalone target (the normal case).
+  const [usEquityLinked, setUsEquityLinked] = useState<boolean>(
+    (strategy.targets.US_TOTAL_MARKET ?? 0) < 0.001,
+  );
+
+  // Atomic targets for all classes (edit strings, committed on blur).
   const [weights, setWeights] = useState<Record<AssetClass, string>>(
     () => Object.fromEntries(
-      ALL_ASSET_CLASSES.map(ac => [ac, (strategy.targets[ac] * 100).toFixed(1)])
-    ) as Record<AssetClass, string>
+      ALL_ASSET_CLASSES.map(ac => [ac, (strategy.targets[ac] * 100).toFixed(1)]),
+    ) as Record<AssetClass, string>,
   );
+
+  // Composite input string for the US Total Market handle (linked mode only).
+  const [compositeStr, setCompositeStr] = useState<string>(() => {
+    const subTotal = (
+      (strategy.targets.US_LARGE_CAP ?? 0)
+      + (strategy.targets.US_MID_CAP ?? 0)
+      + (strategy.targets.US_SMALL_CAP ?? 0)
+    ) * 100;
+    return (subTotal > 0.001 ? subTotal : strategy.targets.US_TOTAL_MARKET * 100).toFixed(1);
+  });
+
   const [tolerance, setTolerance] = useState(String((strategy.toleranceAbs * 100).toFixed(1)));
   const [minTrade,  setMinTrade]  = useState(String(strategy.minTradeUsd));
 
   // Sync local state if strategy prop changes externally (e.g. JSON import).
   useEffect(() => {
     setWeights(Object.fromEntries(
-      ALL_ASSET_CLASSES.map(ac => [ac, (strategy.targets[ac] * 100).toFixed(1)])
+      ALL_ASSET_CLASSES.map(ac => [ac, (strategy.targets[ac] * 100).toFixed(1)]),
     ) as Record<AssetClass, string>);
+    const subTotal = (
+      (strategy.targets.US_LARGE_CAP ?? 0)
+      + (strategy.targets.US_MID_CAP ?? 0)
+      + (strategy.targets.US_SMALL_CAP ?? 0)
+    ) * 100;
+    setCompositeStr((subTotal > 0.001 ? subTotal : strategy.targets.US_TOTAL_MARKET * 100).toFixed(1));
     setTolerance(String((strategy.toleranceAbs * 100).toFixed(1)));
     setMinTrade(String(strategy.minTradeUsd));
   }, [strategy]);
 
-  const sum = ALL_ASSET_CLASSES.reduce((s, ac) => s + (parseFloat(weights[ac]) || 0), 0);
+  // When linked, US_TOTAL_MARKET is a display handle — exclude it from the sum check.
+  const sum = ALL_ASSET_CLASSES
+    .filter(ac => !(usEquityLinked && ac === 'US_TOTAL_MARKET'))
+    .reduce((s, ac) => s + (parseFloat(weights[ac]) || 0), 0);
   const sumOk = Math.abs(sum - 100) < 0.11;
 
   function commitWeights() {
@@ -42,28 +76,49 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights }: Props) 
     setStrategy({
       ...strategy,
       targets: Object.fromEntries(
-        ALL_ASSET_CLASSES.map(ac => [ac, (parseFloat(weights[ac]) || 0) / 100])
+        ALL_ASSET_CLASSES.map(ac => [
+          ac,
+          // When linked, store 0 for the composite handle — sub-classes carry the weight.
+          usEquityLinked && ac === 'US_TOTAL_MARKET' ? 0 : (parseFloat(weights[ac]) || 0) / 100,
+        ]),
       ) as Record<AssetClass, number>,
       toleranceAbs: (parseFloat(tolerance) || 5) / 100,
       minTradeUsd:  parseFloat(minTrade) || 250,
     });
   }
 
-  function updatePlacement(ac: AssetClass, slot: 0 | 1, bucket: PlacementBucket | '') {
-    const current = [...strategy.placement[ac]] as PlacementBucket[];
-    if (slot === 0) {
-      current[0] = bucket as PlacementBucket; // 1st choice is required
+  function handleCompositeChange(val: string) {
+    setCompositeStr(val);
+    setWeights(prev => ({ ...prev, ...splitComposite(parseFloat(val) || 0) }));
+  }
+
+  function handleToggleLinked() {
+    if (usEquityLinked) {
+      // Release: sub-classes keep their current derived values; US_TOTAL_MARKET becomes editable at 0.
+      setWeights(prev => ({ ...prev, US_TOTAL_MARKET: '0.0' }));
+      setUsEquityLinked(false);
     } else {
-      if (bucket === '') {
-        current.splice(1); // remove 2nd choice
-      } else {
-        current[1] = bucket as PlacementBucket;
-      }
+      // Link: sum the current sub-classes, redistribute via Russell split.
+      const subTotal = (parseFloat(weights.US_LARGE_CAP) || 0)
+                     + (parseFloat(weights.US_MID_CAP) || 0)
+                     + (parseFloat(weights.US_SMALL_CAP) || 0);
+      setCompositeStr(subTotal.toFixed(1));
+      setWeights(prev => ({ ...prev, ...splitComposite(subTotal) }));
+      setUsEquityLinked(true);
+    }
+  }
+
+  function updatePlacement(ac: AssetClass, slot: 0 | 1, bucket: PlacementBucket | '') {
+    const current = [...(strategy.placement[ac] ?? DEFAULT_STRATEGY.placement[ac])] as PlacementBucket[];
+    if (slot === 0) {
+      current[0] = bucket as PlacementBucket;
+    } else {
+      if (bucket === '') current.splice(1);
+      else current[1] = bucket as PlacementBucket;
     }
     setStrategy({ ...strategy, placement: { ...strategy.placement, [ac]: current } });
   }
 
-  // Build donut slices — same order as ALL_ASSET_CLASSES so colours are consistent.
   const innerSlices: DonutSlice[] = ALL_ASSET_CLASSES.map(ac => ({
     label:  AC_LABEL[ac],
     weight: currentWeights[ac] ?? 0,
@@ -75,6 +130,11 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights }: Props) 
     weight: strategy.targets[ac] ?? 0,
     color:  AC_COLOR[ac],
   }));
+
+  // When linked, sub-classes appear as child rows under the composite — exclude from primary list.
+  const primaryClasses = usEquityLinked
+    ? ALL_ASSET_CLASSES.filter(ac => !US_CAP_SUBS.includes(ac))
+    : ALL_ASSET_CLASSES;
 
   return (
     <div className="space-y-6">
@@ -98,42 +158,108 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights }: Props) 
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {ALL_ASSET_CLASSES.map(ac => (
-                <tr key={ac}>
-                  <td className="px-4 py-2">
-                    <span className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-sm shrink-0" style={{ backgroundColor: AC_COLOR[ac] }} />
-                      <span className="text-gray-700">{AC_LABEL[ac]}</span>
-                    </span>
-                  </td>
-                  <td className="px-4 py-2 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <input
-                        type="number"
-                        value={weights[ac]}
-                        step="0.1"
-                        min="0"
-                        max="100"
-                        onChange={e => setWeights({ ...weights, [ac]: e.target.value })}
-                        onBlur={commitWeights}
-                        className="w-16 border rounded px-2 py-1 text-right text-sm"
-                      />
-                      <span className="text-gray-400 text-xs">%</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-2">
-                    <div className="w-48 bg-gray-100 rounded-full h-2">
-                      <div
-                        className="h-2 rounded-full transition-all"
-                        style={{
-                          width:           `${Math.min(parseFloat(weights[ac]) || 0, 100)}%`,
-                          backgroundColor: AC_COLOR[ac],
-                        }}
-                      />
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {primaryClasses.flatMap(ac => {
+                const isComposite = ac === 'US_TOTAL_MARKET' && usEquityLinked;
+                const displayVal  = isComposite ? compositeStr : weights[ac];
+
+                const mainRow = (
+                  <tr key={ac} className="hover:bg-gray-50">
+                    <td className="px-4 py-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="flex items-center gap-2 min-w-0">
+                          <span className="w-2 h-2 rounded-sm shrink-0" style={{ backgroundColor: AC_COLOR[ac] }} />
+                          <span className="text-gray-700 truncate">{AC_LABEL[ac]}</span>
+                        </span>
+                        {ac === 'US_TOTAL_MARKET' && (
+                          <button
+                            type="button"
+                            onClick={handleToggleLinked}
+                            title={usEquityLinked
+                              ? 'Release: edit Large/Mid/Small Cap independently'
+                              : 'Link: drive Large/Mid/Small Cap from a single total using the Russell split'}
+                            className={`shrink-0 text-xs px-1.5 py-0.5 rounded border transition-colors ${
+                              usEquityLinked
+                                ? 'border-indigo-300 text-indigo-600 bg-indigo-50 hover:bg-indigo-100'
+                                : 'border-gray-200 text-gray-400 hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50'
+                            }`}
+                          >
+                            {usEquityLinked ? 'linked' : 'link'}
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <input
+                          type="number"
+                          value={displayVal}
+                          step="0.1"
+                          min="0"
+                          max="100"
+                          onChange={e => isComposite
+                            ? handleCompositeChange(e.target.value)
+                            : setWeights({ ...weights, [ac]: e.target.value })
+                          }
+                          onBlur={commitWeights}
+                          className="w-16 border rounded px-2 py-1 text-right text-sm"
+                        />
+                        <span className="text-gray-400 text-xs">%</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-2">
+                      <div className="w-48 bg-gray-100 rounded-full h-2">
+                        <div
+                          className="h-2 rounded-full transition-all"
+                          style={{
+                            width:           `${Math.min(parseFloat(displayVal) || 0, 100)}%`,
+                            backgroundColor: AC_COLOR[ac],
+                          }}
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                );
+
+                if (!isComposite) return [mainRow];
+
+                // Sub-class rows shown when composite is linked (read-only, indented).
+                const subRows = US_CAP_SUBS.map(sub => (
+                  <tr key={sub} className="bg-gray-50/60">
+                    <td className="pl-10 pr-4 py-1.5">
+                      <span className="flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 rounded-sm shrink-0" style={{ backgroundColor: AC_COLOR[sub] }} />
+                        <span className="text-gray-400 text-xs">{AC_LABEL[sub]}</span>
+                      </span>
+                    </td>
+                    <td className="px-4 py-1.5 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <input
+                          type="number"
+                          value={weights[sub]}
+                          readOnly
+                          disabled
+                          className="w-16 border border-gray-100 rounded px-2 py-1 text-right text-xs text-gray-400 bg-transparent cursor-not-allowed"
+                        />
+                        <span className="text-gray-300 text-xs">%</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-1.5">
+                      <div className="w-48 bg-gray-100 rounded-full h-1.5">
+                        <div
+                          className="h-1.5 rounded-full"
+                          style={{
+                            width:           `${Math.min(parseFloat(weights[sub]) || 0, 100)}%`,
+                            backgroundColor: AC_COLOR[sub],
+                            opacity:         0.55,
+                          }}
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                ));
+
+                return [mainRow, ...subRows];
+              })}
             </tbody>
             <tfoot>
               <tr className="border-t border-gray-200">
