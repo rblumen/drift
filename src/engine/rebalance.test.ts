@@ -628,6 +628,97 @@ describe('step 8.5 — minTradeUsd balance correction', () => {
   });
 });
 
+// ─── freeCash — household-level free cash distribution ───────────────────────
+
+describe('freeCash — household-level cash distribution', () => {
+  // Two deposit-eligible accounts: $200k taxable, $300k IRA.
+  const ACCOUNTS_NO_CASH_ELIGIBLE: Account[] = [
+    { id: 'schwab', name: 'Schwab', institution: 'Schwab',   type: 'TAXABLE',         },
+    { id: 'ira',    name: 'IRA',    institution: 'Fidelity', type: 'TRADITIONAL_IRA', },
+  ];
+  const POSITIONS_TWO_ACCOUNTS: Position[] = [
+    { accountId: 'schwab', ticker: 'MUNY',  marketValue: 200_000 },
+    { accountId: 'ira',    ticker: 'FZROX', marketValue: 300_000 },
+  ];
+
+  it('distributes freeCash proportionally to account value', () => {
+    // Total value $500k; schwab 40%, ira 60%. freeCash $50k → schwab gets $20k, ira gets $30k.
+    const r = rebalance(ACCOUNTS_NO_CASH_ELIGIBLE, POSITIONS_TWO_ACCOUNTS, ZERO_TOL_STRATEGY, {}, {}, 50_000);
+    // Net trade delta per account must equal its share of freeCash.
+    expect(near(accountSum(r.trades, 'schwab'), 20_000, 100)).toBe(true);
+    expect(near(accountSum(r.trades, 'ira'),    30_000, 100)).toBe(true);
+  });
+
+  it('householdValue includes freeCash', () => {
+    const r = rebalance(ACCOUNTS_NO_CASH_ELIGIBLE, POSITIONS_TWO_ACCOUNTS, ZERO_TOL_STRATEGY, {}, {}, 50_000);
+    expect(r.householdValue).toBeCloseTo(550_000, 0);
+  });
+
+  it('freeCash=0 is a no-op (backward compatible)', () => {
+    const withZero    = rebalance(ACCOUNTS_NO_CASH_ELIGIBLE, POSITIONS_TWO_ACCOUNTS, ZERO_TOL_STRATEGY, {}, {}, 0);
+    const withDefault = rebalance(ACCOUNTS_NO_CASH_ELIGIBLE, POSITIONS_TWO_ACCOUNTS, ZERO_TOL_STRATEGY);
+    expect(withZero.trades).toEqual(withDefault.trades);
+    expect(withZero.householdValue).toBe(withDefault.householdValue);
+  });
+
+  it('account with acceptsDeposits=false receives no freeCash share', () => {
+    const accounts: Account[] = [
+      { id: 'schwab', name: 'Schwab', institution: 'Schwab',   type: 'TAXABLE' },
+      { id: 'roth',   name: 'Roth',   institution: 'Fidelity', type: 'ROTH_IRA', acceptsDeposits: false },
+    ];
+    const positions: Position[] = [
+      { accountId: 'schwab', ticker: 'MUNY',  marketValue: 200_000 },
+      { accountId: 'roth',   ticker: 'FZROX', marketValue: 200_000 },
+    ];
+    // freeCash $20k — only schwab is eligible.
+    const r = rebalance(accounts, positions, ZERO_TOL_STRATEGY, {}, {}, 20_000);
+    // schwab gets all $20k; roth net = 0.
+    expect(near(accountSum(r.trades, 'schwab'), 20_000, 100)).toBe(true);
+    expect(near(accountSum(r.trades, 'roth'),   0, 100)).toBe(true);
+  });
+
+  it('freeCash stacks with per-account newCash', () => {
+    const accounts: Account[] = [
+      { id: 'schwab', name: 'Schwab', institution: 'Schwab',   type: 'TAXABLE',         newCash: 5_000 },
+      { id: 'ira',    name: 'IRA',    institution: 'Fidelity', type: 'TRADITIONAL_IRA', newCash: 5_000 },
+    ];
+    const positions: Position[] = [
+      { accountId: 'schwab', ticker: 'MUNY',  marketValue: 200_000 },
+      { accountId: 'ira',    ticker: 'FZROX', marketValue: 300_000 },
+    ];
+    // freeCash $50k; schwab gets 40% = $20k + $5k existing = $25k net; ira gets $30k + $5k = $35k.
+    const r = rebalance(accounts, positions, ZERO_TOL_STRATEGY, {}, {}, 50_000);
+    expect(near(accountSum(r.trades, 'schwab'), 25_000, 100)).toBe(true);
+    expect(near(accountSum(r.trades, 'ira'),    35_000, 100)).toBe(true);
+  });
+
+  it('emits EXCESS_CASH flag when all accounts are ineligible', () => {
+    const accounts: Account[] = [
+      { id: 'schwab', name: 'Schwab', institution: 'Schwab',   type: 'TAXABLE',  acceptsDeposits: false },
+      { id: 'roth',   name: 'Roth',   institution: 'Fidelity', type: 'ROTH_IRA', locked: true },
+    ];
+    const positions: Position[] = [
+      { accountId: 'schwab', ticker: 'MUNY',  marketValue: 200_000 },
+      { accountId: 'roth',   ticker: 'FZROX', marketValue: 300_000 },
+    ];
+    const r = rebalance(accounts, positions, ZERO_TOL_STRATEGY, {}, {}, 10_000);
+    const flag = r.flags.find(f => f.kind === 'EXCESS_CASH');
+    expect(flag).toBeDefined();
+    expect(flag?.kind === 'EXCESS_CASH' && flag.amountUsd).toBe(10_000);
+  });
+
+  it('distributes equally when all eligible accounts have zero value (greenfield)', () => {
+    const accounts: Account[] = [
+      { id: 'schwab', name: 'Schwab', institution: 'Schwab',   type: 'TAXABLE'         },
+      { id: 'roth',   name: 'Roth',   institution: 'Fidelity', type: 'ROTH_IRA'        },
+    ];
+    // $20k freeCash split equally between two zero-value accounts → $10k each.
+    const r = rebalance(accounts, NO_POSITIONS, ZERO_TOL_STRATEGY, {}, {}, 20_000);
+    expect(near(accountSum(r.trades, 'schwab'), 10_000, 100)).toBe(true);
+    expect(near(accountSum(r.trades, 'roth'),   10_000, 100)).toBe(true);
+  });
+});
+
 // ─── step 7.7 — redirect taxable equity sells to tax-advantaged accounts ─────
 //
 // Scenario: taxable holds equity that is overweight at household level. Without

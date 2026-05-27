@@ -33,6 +33,7 @@ export const DEFAULT_APP_STATE: AppState = {
   strategy:        DEFAULT_STRATEGY,
   tickerOverrides: {},
   decompositions:  {},
+  freeCash:        0,
 };
 
 // ─── Internal backup helpers ──────────────────────────────────────────────────
@@ -189,13 +190,14 @@ export async function importJson(
 
 // ─── Convenience state builder ────────────────────────────────────────────────
 
-/** Assemble an AppState object from the five individual state slices. */
+/** Assemble an AppState object from the individual state slices. */
 export function buildState(
   accounts:        Account[],
   positions:       Position[],
   strategy:        Strategy,
   tickerOverrides: Record<string, AssetClass>,
   decompositions:  Record<string, FundDecomposition> = {},
+  freeCash:        number = 0,
 ): AppState {
-  return { version: SCHEMA_VERSION, accounts, positions, strategy, tickerOverrides, decompositions };
+  return { version: SCHEMA_VERSION, accounts, positions, strategy, tickerOverrides, decompositions, freeCash };
 }

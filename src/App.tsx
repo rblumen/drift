@@ -38,6 +38,7 @@ export default function App() {
   const [strategy,         setStrategy]         = useState<Strategy>(saved.strategy);
   const [tickerOverrides,  setTickerOverrides]  = useState<Record<string, AssetClass>>(saved.tickerOverrides);
   const [decompositions,   setDecompositions]   = useState<Record<string, FundDecomposition>>(saved.decompositions ?? {});
+  const [freeCash,         setFreeCash]         = useState<number>(saved.freeCash ?? 0);
   const [activeTab,        setActiveTab]        = useState<Tab>('overview');
   const [importError,      setImportError]      = useState<string | null>(null);
   // Non-null when data was loaded from a backup because the primary slot was invalid.
@@ -52,10 +53,10 @@ export default function App() {
   const importFileRef = useRef<HTMLInputElement>(null);
 
   // Keep a ref to the latest state slices for the backup interval closure.
-  const stateRef = useRef({ accounts, positions, strategy, tickerOverrides, decompositions });
+  const stateRef = useRef({ accounts, positions, strategy, tickerOverrides, decompositions, freeCash });
   useEffect(() => {
-    stateRef.current = { accounts, positions, strategy, tickerOverrides, decompositions };
-  }, [accounts, positions, strategy, tickerOverrides, decompositions]);
+    stateRef.current = { accounts, positions, strategy, tickerOverrides, decompositions, freeCash };
+  }, [accounts, positions, strategy, tickerOverrides, decompositions, freeCash]);
 
   // Skip the very first save so that a schema-validation failure on load can
   // never silently overwrite existing localStorage data with empty defaults.
@@ -68,22 +69,22 @@ export default function App() {
       didMountRef.current = true;
       return;
     }
-    saveState(buildState(accounts, positions, strategy, tickerOverrides, decompositions));
+    saveState(buildState(accounts, positions, strategy, tickerOverrides, decompositions, freeCash));
     setLastSavedAt(new Date());
-  }, [accounts, positions, strategy, tickerOverrides, decompositions]);
+  }, [accounts, positions, strategy, tickerOverrides, decompositions, freeCash]);
 
   // Backup autosave: write a timestamped snapshot every 5 minutes.
   useEffect(() => {
     const id = setInterval(() => {
       const s = stateRef.current;
-      saveBackup(buildState(s.accounts, s.positions, s.strategy, s.tickerOverrides, s.decompositions));
+      saveBackup(buildState(s.accounts, s.positions, s.strategy, s.tickerOverrides, s.decompositions, s.freeCash));
     }, 5 * 60 * 1000);
     return () => clearInterval(id);
   }, []);
 
   const result = useMemo(
-    () => rebalance(accounts, positions, strategy, tickerOverrides, decompositions),
-    [accounts, positions, strategy, tickerOverrides, decompositions],
+    () => rebalance(accounts, positions, strategy, tickerOverrides, decompositions, freeCash),
+    [accounts, positions, strategy, tickerOverrides, decompositions, freeCash],
   );
 
   const resolvedTrades = useMemo(() => {
@@ -102,7 +103,7 @@ export default function App() {
   }
 
   function handleExport() {
-    exportJson(buildState(accounts, positions, strategy, tickerOverrides, decompositions));
+    exportJson(buildState(accounts, positions, strategy, tickerOverrides, decompositions, freeCash));
   }
 
   async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -120,6 +121,7 @@ export default function App() {
     setStrategy(result.strategy);
     setTickerOverrides(result.tickerOverrides);
     setDecompositions(result.decompositions ?? {});
+    setFreeCash(result.freeCash ?? 0);
   }
 
   function handleReset() {
@@ -130,6 +132,7 @@ export default function App() {
     setStrategy(DEFAULT_STRATEGY);
     setTickerOverrides({});
     setDecompositions({});
+    setFreeCash(0);
     setActiveTab('accounts');
     setLastSavedAt(null);
     setRestoredFromBackup(null);
@@ -263,6 +266,8 @@ export default function App() {
             accounts={accounts}
             setAccounts={setAccounts}
             onDeleteAccount={handleDeleteAccount}
+            freeCash={freeCash}
+            setFreeCash={setFreeCash}
           />
         )}
         {activeTab === 'import' && (
@@ -295,6 +300,7 @@ export default function App() {
             result={result}
             accounts={accounts}
             resolvedTrades={resolvedTrades}
+            freeCash={freeCash}
           />
         )}
       </main>

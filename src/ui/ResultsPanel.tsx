@@ -11,6 +11,7 @@ interface Props {
   result: RebalanceResult;
   accounts: Account[];
   resolvedTrades: ResolvedTrade[];
+  freeCash: number;
 }
 
 // ── Flag banners ──────────────────────────────────────────────────────────────
@@ -66,6 +67,16 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
         <strong>No eligible account:</strong>{' '}
         {fmtUsd(flag.amountUsd)} of {AC_LABEL[flag.assetClass]} could not be placed —
         no account has capacity for this asset class.
+      </div>
+    );
+  }
+
+  if (flag.kind === 'EXCESS_CASH') {
+    return (
+      <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
+        <strong>Free cash undeployed:</strong>{' '}
+        {fmtUsd(flag.amountUsd)} of household free cash could not be distributed — all accounts
+        have deposits closed or are locked. Open deposits on at least one account to deploy it.
       </div>
     );
   }
@@ -157,7 +168,7 @@ function buildPieSlices(byClass: Record<AssetClass, number>): PieSlice[] {
 
 // ── Main panel ────────────────────────────────────────────────────────────────
 
-export function ResultsPanel({ result, accounts, resolvedTrades }: Props) {
+export function ResultsPanel({ result, accounts, resolvedTrades, freeCash }: Props) {
   const { householdValue, currentWeights, targetWeights, projectedWeights,
           currentValueByAccount, trades, flags } = result;
 
@@ -173,11 +184,27 @@ export function ResultsPanel({ result, accounts, resolvedTrades }: Props) {
 
   // Separate flags by priority
   const importantFlags = [
+    ...flags.filter(f => f.kind === 'EXCESS_CASH'),
     ...flags.filter(f => f.kind === 'REVISIT_PLACEMENT'),
     ...flags.filter(f => f.kind === 'UNMAPPED_HOLDING'),
     ...flags.filter(f => f.kind === 'TAXABLE_SALE'),
     ...flags.filter(f => f.kind === 'PLACEMENT_SPILLOVER'),
   ];
+
+  // Compute per-account cash deployment summary for the free cash banner.
+  // Show when there is any free cash or per-account newCash to communicate.
+  const cashRows = accounts
+    .filter(a => !a.locked)
+    .map(a => {
+      const ownCash = a.newCash ?? 0;
+      // Net trade delta = buys − sells for this account = cash being deployed.
+      const netDeploy = trades
+        .filter(t => t.accountId === a.id)
+        .reduce((s, t) => s + t.deltaUsd, 0);
+      return { account: a, ownCash, netDeploy };
+    })
+    .filter(r => r.ownCash > 0 || freeCash > 0);
+  const showCashSummary = freeCash > 0 || accounts.some(a => a.newCash);
 
   // Group trades by account; include any account that has trades OR existing positions.
   // Accounts are ordered as they appear in the accounts array.
@@ -277,6 +304,10 @@ export function ResultsPanel({ result, accounts, resolvedTrades }: Props) {
           <HelpDef term="NO_ELIGIBLE_ACCOUNT (red)">
             No account has capacity for a given asset class. Check account restrictions in the Accounts tab.
           </HelpDef>
+          <HelpDef term="EXCESS_CASH (amber)">
+            Household free cash could not be distributed because all accounts have deposits closed or are
+            locked. Open deposits on at least one account in the Accounts tab.
+          </HelpDef>
         </HelpSection>
 
         <p className="text-gray-400 italic">
@@ -291,6 +322,71 @@ export function ResultsPanel({ result, accounts, resolvedTrades }: Props) {
           {importantFlags.map((f, i) => (
             <FlagBanner key={i} flag={f} accounts={accounts} />
           ))}
+        </div>
+      )}
+
+      {/* Cash deployment summary */}
+      {showCashSummary && (
+        <div className="border border-green-200 rounded-lg overflow-hidden">
+          <div className="bg-green-50 px-4 py-2 text-xs font-medium text-green-800 flex items-center justify-between">
+            <span>Cash deployment</span>
+            {freeCash > 0 && (
+              <span className="text-green-600">
+                {fmtUsd(freeCash)} household free cash distributed to deposit-eligible accounts
+              </span>
+            )}
+          </div>
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
+              <tr>
+                <th className="px-4 py-2 text-left">Account</th>
+                <th className="px-4 py-2 text-right">In-account cash</th>
+                {freeCash > 0 && <th className="px-4 py-2 text-right">Free cash share</th>}
+                <th className="px-4 py-2 text-right">Net deployed</th>
+                <th className="px-4 py-2 text-right">Deposits</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {accounts.filter(a => !a.locked).map(a => {
+                const ownCash = a.newCash ?? 0;
+                const netDeploy = trades
+                  .filter(t => t.accountId === a.id)
+                  .reduce((s, t) => s + t.deltaUsd, 0);
+                const depositsOpen = a.acceptsDeposits !== false;
+                const freeCashShare = freeCash > 0 && depositsOpen
+                  ? netDeploy - ownCash  // approximate: net − own cash ≈ free cash routed here
+                  : 0;
+                if (ownCash === 0 && freeCash === 0) return null;
+                return (
+                  <tr key={a.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-2 font-medium text-gray-800">{a.name}</td>
+                    <td className="px-4 py-2 text-right tabular-nums text-gray-600">
+                      {ownCash > 0 ? fmtUsd(ownCash) : '—'}
+                    </td>
+                    {freeCash > 0 && (
+                      <td className="px-4 py-2 text-right tabular-nums text-gray-600">
+                        {depositsOpen && freeCashShare > 0.5
+                          ? <span className="text-green-700">{fmtUsd(freeCashShare)}</span>
+                          : <span className="text-gray-400">—</span>}
+                      </td>
+                    )}
+                    <td className="px-4 py-2 text-right tabular-nums font-medium">
+                      {netDeploy > 0.5
+                        ? <span className="text-green-700">+{fmtUsd(netDeploy)}</span>
+                        : <span className="text-gray-400">—</span>}
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                        depositsOpen ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'
+                      }`}>
+                        {depositsOpen ? 'Open' : 'Closed'}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
 

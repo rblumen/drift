@@ -33,6 +33,7 @@ export const accountSchema = z.object({
   allowedAssetClasses: z.array(z.enum(ASSET_CLASSES)).optional(),
   concentrateClasses: z.array(z.enum(ASSET_CLASSES)).optional(),
   locked: z.boolean().optional(),
+  acceptsDeposits: z.boolean().optional(),
 });
 
 const targetsSchema = z.object({
@@ -147,6 +148,7 @@ export const appStateSchema = z.object({
   strategy:       strategySchema,
   tickerOverrides: z.record(z.string(), z.enum(ASSET_CLASSES)),
   decompositions: decompositionsSchema.optional().default({}),
+  freeCash:       z.number().nonnegative().optional().default(0),
 });
 
 export type AppState = z.infer<typeof appStateSchema>;

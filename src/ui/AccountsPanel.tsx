@@ -8,6 +8,8 @@ interface Props {
   setAccounts: (a: Account[]) => void;
   /** Positions keyed by accountId — used to cascade-delete on account removal. */
   onDeleteAccount: (id: string) => void;
+  freeCash: number;
+  setFreeCash: (v: number) => void;
 }
 
 const ACCOUNT_TYPES: AccountType[] = [
@@ -30,6 +32,7 @@ interface FormState {
   institution: string;
   type: AccountType;
   newCash: string;
+  acceptsDeposits: boolean;
   restricted: boolean;
   allowedClasses: AssetClass[];
   concentrateClasses: AssetClass[];
@@ -38,6 +41,7 @@ interface FormState {
 function blankForm(): FormState {
   return {
     name: '', institution: 'Schwab', type: 'TAXABLE', newCash: '',
+    acceptsDeposits: true,
     restricted: false, allowedClasses: [...PLACEABLE_CLASSES], concentrateClasses: [],
   };
 }
@@ -68,7 +72,8 @@ function toAllowedAssetClasses(form: FormState): AssetClass[] | undefined {
   return form.allowedClasses.length > 0 ? form.allowedClasses : undefined;
 }
 
-export function AccountsPanel({ accounts, setAccounts, onDeleteAccount }: Props) {
+export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash, setFreeCash }: Props) {
+  const [freeCashInput, setFreeCashInput] = useState(freeCash > 0 ? String(freeCash) : '');
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm]       = useState(blankForm);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -77,11 +82,12 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount }: Props)
   function handleAdd() {
     if (!form.name.trim()) return;
     const acct: Account = {
-      id:          crypto.randomUUID(),
-      name:        form.name.trim(),
-      institution: form.institution,
-      type:        form.type,
-      newCash:     form.newCash ? parseFloat(form.newCash) : undefined,
+      id:              crypto.randomUUID(),
+      name:            form.name.trim(),
+      institution:     form.institution,
+      type:            form.type,
+      newCash:         form.newCash ? parseFloat(form.newCash) : undefined,
+      acceptsDeposits: form.acceptsDeposits ? undefined : false,
       allowedAssetClasses: toAllowedAssetClasses(form),
       concentrateClasses:  form.concentrateClasses.length > 0 ? form.concentrateClasses : undefined,
     };
@@ -94,11 +100,12 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount }: Props)
     const existing = acct.allowedAssetClasses;
     setEditingId(acct.id);
     setEditForm({
-      name:        acct.name,
-      institution: acct.institution,
-      type:        acct.type,
-      newCash:     acct.newCash != null ? String(acct.newCash) : '',
-      restricted:  existing !== undefined,
+      name:            acct.name,
+      institution:     acct.institution,
+      type:            acct.type,
+      newCash:         acct.newCash != null ? String(acct.newCash) : '',
+      acceptsDeposits: acct.acceptsDeposits !== false,
+      restricted:      existing !== undefined,
       allowedClasses: existing
         ? PLACEABLE_CLASSES.filter(c => existing.includes(c))
         : [...PLACEABLE_CLASSES],
@@ -112,10 +119,11 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount }: Props)
     setAccounts(accounts.map(a =>
       a.id !== id ? a : {
         ...a,
-        name:        editForm.name.trim(),
-        institution: editForm.institution,
-        type:        editForm.type,
-        newCash:     editForm.newCash ? parseFloat(editForm.newCash) : undefined,
+        name:            editForm.name.trim(),
+        institution:     editForm.institution,
+        type:            editForm.type,
+        newCash:         editForm.newCash ? parseFloat(editForm.newCash) : undefined,
+        acceptsDeposits: editForm.acceptsDeposits ? undefined : false,
         allowedAssetClasses: toAllowedAssetClasses(editForm),
         concentrateClasses:  editForm.concentrateClasses.length > 0
           ? editForm.concentrateClasses : undefined,
@@ -229,6 +237,44 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount }: Props)
         </button>
       </div>
 
+      {/* Household free cash */}
+      <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+        <div className="flex-1">
+          <label className="block text-xs font-medium text-gray-700 mb-1">
+            Household free cash ($)
+            <HelpTip>
+              Cash not yet assigned to a specific account — for example, a check you're about to
+              deposit, or proceeds sitting in a sweep fund you want to invest. The engine distributes
+              it proportionally across accounts with deposits open before running placement. Accounts
+              marked "deposits closed" are excluded.
+            </HelpTip>
+          </label>
+          <input
+            type="number"
+            min="0"
+            value={freeCashInput}
+            onChange={e => {
+              setFreeCashInput(e.target.value);
+              const v = parseFloat(e.target.value);
+              setFreeCash(isNaN(v) || v < 0 ? 0 : v);
+            }}
+            onBlur={() => {
+              if (!freeCashInput.trim() || parseFloat(freeCashInput) === 0) {
+                setFreeCashInput('');
+                setFreeCash(0);
+              }
+            }}
+            placeholder="e.g. 5000"
+            className="w-48 border rounded px-2 py-1 text-sm"
+          />
+        </div>
+        {freeCash > 0 && (
+          <p className="text-xs text-green-700">
+            ${freeCash.toLocaleString()} will be distributed to eligible accounts at run time.
+          </p>
+        )}
+      </div>
+
       <HelpBox label="About accounts">
         <p>
           Register every investment account in your household. The engine uses account type to determine
@@ -243,7 +289,9 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount }: Props)
         </HelpSection>
 
         <HelpSection title="Advanced options">
-          <HelpDef term="New cash">Uninvested cash you plan to deploy this rebalance. It is counted in household value and the engine steers it toward underweight asset classes first.</HelpDef>
+          <HelpDef term="Household free cash">Cash not yet assigned to a specific account. Distributed proportionally to accounts with deposits open before placement runs. Enter it in the green bar above.</HelpDef>
+          <HelpDef term="New cash">Uninvested cash already sitting in a specific account (e.g. a dividend that landed). Counted in that account's value and deployed toward underweight classes.</HelpDef>
+          <HelpDef term="Deposits open / closed">Whether an account can currently accept new external deposits. Toggle to "closed" when an annual contribution limit is reached (e.g. Roth IRA maxed for the year). The account still rebalances its existing holdings — it just won't receive a share of household free cash.</HelpDef>
           <HelpDef term="Locked account">Counted in totals and weights but excluded from trade generation. Use when you're not actively managing the account right now (e.g. a 401k at a former employer).</HelpDef>
           <HelpDef term="Restrict investable classes">Limits which asset classes the engine may place here. Useful for 401(k) plans with a fixed fund menu. The engine spills restricted classes to other eligible accounts.</HelpDef>
           <HelpDef term="Concentrate here">Fills this account first for the listed classes before distributing proportionally to other accounts in the same bucket. Use to keep alternatives concentrated in a single IRA.</HelpDef>
@@ -267,6 +315,17 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount }: Props)
                 <th className="px-4 py-2 text-right">New Cash</th>
                 <th className="px-4 py-2 text-center">
                   <span className="inline-flex items-center gap-0.5">
+                    Deposits
+                    <HelpTip dir="left">
+                      Whether this account can currently accept new external deposits. Toggle to
+                      "closed" when a contribution limit is reached (e.g. Roth IRA maxed for the
+                      year). The account still rebalances internally — it just won't receive a share
+                      of household free cash.
+                    </HelpTip>
+                  </span>
+                </th>
+                <th className="px-4 py-2 text-center">
+                  <span className="inline-flex items-center gap-0.5">
                     Locked
                     <HelpTip dir="left">
                       A locked account counts in household totals and weights but receives no trade
@@ -282,7 +341,7 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount }: Props)
               {accounts.map(acct => (
                 editingId === acct.id ? (
                   <tr key={acct.id}>
-                    <td colSpan={6} className="px-0 py-0">
+                    <td colSpan={7} className="px-0 py-0">
                       <div className="bg-indigo-50 px-4 py-3 space-y-3">
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                           <div>
@@ -320,8 +379,8 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount }: Props)
                             <label className="block text-xs text-gray-500 mb-1">
                               New cash ($)
                               <HelpTip>
-                                Uninvested cash to deploy this rebalance. Added to household total
-                                and steered toward underweight classes before any sells are generated.
+                                Uninvested cash already sitting in this account. Added to this
+                                account's capacity and steered toward underweight classes.
                               </HelpTip>
                             </label>
                             <input
@@ -333,6 +392,21 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount }: Props)
                             />
                           </div>
                         </div>
+                        <label className="flex items-center gap-2 text-xs font-medium text-gray-600 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={editForm.acceptsDeposits}
+                            onChange={e => setEditForm({ ...editForm, acceptsDeposits: e.target.checked })}
+                            className="rounded"
+                          />
+                          Deposits open
+                          <HelpTip>
+                            Uncheck when this account cannot accept new external deposits — for
+                            example, when a Roth IRA annual contribution limit is reached. The
+                            account still rebalances its existing holdings; it just won't receive a
+                            share of household free cash.
+                          </HelpTip>
+                        </label>
                         <ConstraintFields f={editForm} onChange={setEditForm} />
                         <div className="flex items-center gap-3 pt-1">
                           <button
@@ -362,6 +436,25 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount }: Props)
                     <td className="px-4 py-2 text-gray-600">{ACCT_TYPE_LABEL[acct.type]}</td>
                     <td className="px-4 py-2 text-right text-gray-600">
                       {acct.newCash ? `$${acct.newCash.toLocaleString()}` : '—'}
+                    </td>
+                    <td className="px-4 py-2 text-center">
+                      <button
+                        onClick={() => setAccounts(accounts.map(a =>
+                          a.id === acct.id
+                            ? { ...a, acceptsDeposits: a.acceptsDeposits === false ? undefined : false }
+                            : a
+                        ))}
+                        title={acct.acceptsDeposits === false
+                          ? 'Deposits closed — click to reopen'
+                          : 'Deposits open — click to close (e.g. contribution limit reached)'}
+                        className={`text-xs font-medium px-2 py-0.5 rounded-full transition-colors ${
+                          acct.acceptsDeposits === false
+                            ? 'bg-red-100 text-red-600 hover:bg-red-200'
+                            : 'bg-green-100 text-green-700 hover:bg-green-200'
+                        }`}
+                      >
+                        {acct.acceptsDeposits === false ? 'Closed' : 'Open'}
+                      </button>
                     </td>
                     <td className="px-4 py-2 text-center">
                       <button
@@ -437,11 +530,10 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount }: Props)
             </div>
             <div>
               <label className="block text-xs text-gray-500 mb-1">
-                New cash to deploy ($)
+                New cash in account ($)
                 <HelpTip>
-                  Uninvested cash you plan to deploy this rebalance. It is added to the household
-                  total and the engine steers it toward underweight asset classes first, before
-                  generating any sells.
+                  Uninvested cash already sitting in this account (e.g. a dividend). Added to this
+                  account's capacity and steered toward underweight classes.
                 </HelpTip>
               </label>
               <input
@@ -453,6 +545,20 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount }: Props)
               />
             </div>
           </div>
+          <label className="flex items-center gap-2 text-xs font-medium text-gray-600 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={form.acceptsDeposits}
+              onChange={e => setForm({ ...form, acceptsDeposits: e.target.checked })}
+              className="rounded"
+            />
+            Deposits open
+            <HelpTip>
+              Uncheck when this account cannot accept new external deposits — for example, when a
+              Roth IRA annual contribution limit is reached. The account still rebalances its
+              existing holdings; it just won't receive a share of household free cash.
+            </HelpTip>
+          </label>
           <ConstraintFields f={form} onChange={setForm} />
           <div className="flex gap-2 pt-1">
             <button

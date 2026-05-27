@@ -90,14 +90,44 @@ export function rebalance(
   strategy: Strategy,
   tickerOverrides: Record<string, AssetClass> = {},
   decompositions: Record<string, FundDecomposition> = {},
+  freeCash: number = 0,
 ): RebalanceResult {
   const classify = makeClassifier(tickerOverrides);
+
+  const flags: Flag[] = [];
+
+  // Step 0 — Distribute household free cash to deposit-eligible accounts.
+  // Proportional to each account's current position value (pre-rollup sum).
+  // Locked accounts and accounts with acceptsDeposits === false are excluded.
+  if (freeCash > 0) {
+    const baseValue: Record<string, number> = {};
+    for (const acct of accounts) baseValue[acct.id] = acct.newCash ?? 0;
+    for (const pos of positions) baseValue[pos.accountId] = (baseValue[pos.accountId] ?? 0) + pos.marketValue;
+
+    const eligible = accounts.filter(a => !a.locked && a.acceptsDeposits !== false);
+    const eligibleTotal = eligible.reduce((s, a) => s + (baseValue[a.id] ?? 0), 0);
+
+    if (eligible.length === 0) {
+      flags.push({ kind: 'EXCESS_CASH', amountUsd: freeCash });
+    } else {
+      const perAccount: Record<string, number> = {};
+      for (const a of eligible) {
+        perAccount[a.id] = eligibleTotal > 0
+          ? freeCash * ((baseValue[a.id] ?? 0) / eligibleTotal)
+          : freeCash / eligible.length;
+      }
+      accounts = accounts.map(a =>
+        perAccount[a.id] !== undefined
+          ? { ...a, newCash: (a.newCash ?? 0) + perAccount[a.id] }
+          : a,
+      );
+    }
+  }
+
   const {
     householdValue, currentValue, currentValueByAccount,
     accountValues, lockedValueByAccount, unmappedTickers,
   } = rollup(accounts, positions, classify, decompositions);
-
-  const flags: Flag[] = [];
 
   for (const ticker of unmappedTickers) {
     flags.push({ kind: 'UNMAPPED_HOLDING', ticker });

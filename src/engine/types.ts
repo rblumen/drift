@@ -55,6 +55,10 @@ export interface Account {
   /** When true, the account is counted in all totals/weights but excluded from
    *  trade suggestions entirely (zero rebalancing capacity). */
   locked?: boolean;
+  /** When false, this account will not receive a share of household free cash.
+   *  Use when a contribution limit is reached (e.g. Roth IRA maxed for the year).
+   *  Per-account newCash already in the account is still deployed normally. */
+  acceptsDeposits?: boolean;
 }
 
 export interface Position {
@@ -110,4 +114,5 @@ export type Flag =
   | { kind: 'UNMAPPED_HOLDING'; ticker: string }
   | { kind: 'PLACEMENT_SPILLOVER'; assetClass: AssetClass; bucket: PlacementBucket; amountUsd: number }
   | { kind: 'REVISIT_PLACEMENT'; taxableShare: number; fixedIncomeTarget: number }
-  | { kind: 'NO_ELIGIBLE_ACCOUNT'; assetClass: AssetClass; amountUsd: number };
+  | { kind: 'NO_ELIGIBLE_ACCOUNT'; assetClass: AssetClass; amountUsd: number }
+  | { kind: 'EXCESS_CASH'; amountUsd: number };
