@@ -14,7 +14,7 @@
  *    keeps its own progress even when multiple reports coexist.
  */
 
-import type { Account, AssetClass, RebalanceResult } from '../engine/types';
+import type { Account, AssetClass, RebalanceResult, ResolvedTrade } from '../engine/types';
 import { ALL_ASSET_CLASSES } from '../engine/types';
 import { AC_COLOR, AC_LABEL, ACCT_TYPE_LABEL } from './fmt';
 
@@ -173,7 +173,7 @@ function script(reportId: string): string {
 
 // ── Main builder ──────────────────────────────────────────────────────────────
 
-function buildHtml(result: RebalanceResult, accounts: Account[], now: Date): string {
+function buildHtml(result: RebalanceResult, accounts: Account[], resolvedTrades: ResolvedTrade[], now: Date): string {
   const {
     householdValue, currentWeights, targetWeights, projectedWeights,
     currentValueByAccount, trades, flags,
@@ -245,14 +245,17 @@ function buildHtml(result: RebalanceResult, accounts: Account[], now: Date): str
   let tradeIndex = 0;
 
   const accountSections = accounts.map(acct => {
-    const acctTrades = trades
+    // Raw trades for accurate per-class pie projection.
+    const acctRawTrades = trades.filter(t => t.accountId === acct.id);
+    // Resolved trades for the checklist (merged blended-fund rows with tickers).
+    const acctTrades = resolvedTrades
       .filter(t => t.accountId === acct.id)
       .sort((a, b) => Math.abs(b.deltaUsd) - Math.abs(a.deltaUsd));
     const before = buildSlices(currentValueByAccount[acct.id] ?? {} as Record<AssetClass, number>);
 
     const afterByClass = { ...currentValueByAccount[acct.id] } as Record<AssetClass, number>;
     for (const ac of ALL_ASSET_CLASSES) afterByClass[ac] ??= 0;
-    for (const t of acctTrades) afterByClass[t.assetClass] += t.deltaUsd;
+    for (const t of acctRawTrades) afterByClass[t.assetClass] += t.deltaUsd;
     const after = buildSlices(afterByClass);
 
     // Skip accounts with no positions and no trades.
@@ -277,10 +280,15 @@ function buildHtml(result: RebalanceResult, accounts: Account[], now: Date): str
       const id    = `t-${tradeIndex++}`;
       const taxWarn = (!isBuy && t.inTaxableAccount)
         ? `<span style="font-size:11px;color:#d97706;margin-left:8px">⚠ taxable sale</span>` : '';
+      const tradeLabel = t.ticker
+        ? `<span style="font-family:monospace;font-weight:600;color:#111827">${esc(t.ticker)}</span>
+           <span style="font-size:11px;color:#9ca3af;margin-left:4px">${esc(AC_LABEL[t.assetClass])}</span>`
+        : esc(AC_LABEL[t.assetClass]);
+      const ariaLabel = `${t.ticker ?? AC_LABEL[t.assetClass]} ${isBuy ? 'buy' : 'sell'}`;
       return `<div class="trade-item" id="item-${id}">
-        <input type="checkbox" class="trade-check" id="${id}" aria-label="${esc(AC_LABEL[t.assetClass])} ${isBuy ? 'buy' : 'sell'}">
+        <input type="checkbox" class="trade-check" id="${id}" aria-label="${esc(ariaLabel)}">
         <span class="badge ${isBuy ? 'buy' : 'sell'}">${isBuy ? 'BUY' : 'SELL'}</span>
-        <span class="trade-label" style="flex:1;color:#374151">${esc(AC_LABEL[t.assetClass])}</span>
+        <span class="trade-label" style="flex:1;color:#374151">${tradeLabel}</span>
         <span style="font-weight:600;color:${isBuy ? '#16a34a' : '#dc2626'};font-variant-numeric:tabular-nums">${fmtDelta(t.deltaUsd)}</span>
         ${taxWarn}
       </div>`;
@@ -340,8 +348,8 @@ function buildHtml(result: RebalanceResult, accounts: Account[], now: Date): str
   ${allocSection}
 
   <!-- Per-account sections -->
-  <h2 style="margin-bottom:10px">${trades.length > 0 ? 'Recommended Trades' : 'Account Allocations'}</h2>
-  ${trades.length === 0
+  <h2 style="margin-bottom:10px">${resolvedTrades.length > 0 ? 'Recommended Trades' : 'Account Allocations'}</h2>
+  ${resolvedTrades.length === 0
     ? `<div class="flag flag-blue" style="border-color:#86efac;background:#f0fdf4;color:#166534"><strong>Portfolio is within tolerance — no trades needed.</strong></div>`
     : ''
   }
@@ -355,9 +363,9 @@ ${script(reportId)}
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-export function downloadReport(result: RebalanceResult, accounts: Account[]): void {
+export function downloadReport(result: RebalanceResult, accounts: Account[], resolvedTrades: ResolvedTrade[]): void {
   const now  = new Date();
-  const html = buildHtml(result, accounts, now);
+  const html = buildHtml(result, accounts, resolvedTrades, now);
   const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');

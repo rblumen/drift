@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import type { Account, AssetClass, FundDecomposition, Position, Strategy } from './engine/types';
 import { DEFAULT_STRATEGY } from './engine/strategy';
 import { rebalance } from './engine/rebalance';
+import { resolveTradeVehicles } from './engine/resolve';
+import { makeClassifier } from './engine/classify';
 import { AccountsPanel } from './ui/AccountsPanel';
 import { ImportPanel } from './ui/ImportPanel';
 import { ClassifyPanel } from './ui/ClassifyPanel';
@@ -81,6 +83,11 @@ export default function App() {
     () => rebalance(accounts, positions, strategy, tickerOverrides, decompositions),
     [accounts, positions, strategy, tickerOverrides, decompositions],
   );
+
+  const resolvedTrades = useMemo(() => {
+    const classify = makeClassifier(tickerOverrides);
+    return resolveTradeVehicles(result.trades, positions, decompositions, classify);
+  }, [result.trades, positions, decompositions, tickerOverrides]);
 
   const unmappedCount = result.flags.filter(f => f.kind === 'UNMAPPED_HOLDING').length;
 
@@ -232,9 +239,9 @@ export default function App() {
                     {unmappedCount}
                   </span>
                 )}
-                {tab.id === 'results' && result.trades.length > 0 && (
+                {tab.id === 'results' && resolvedTrades.length > 0 && (
                   <span className="ml-1.5 bg-indigo-100 text-indigo-700 text-xs px-1.5 py-0.5 rounded-full">
-                    {result.trades.length}
+                    {resolvedTrades.length}
                   </span>
                 )}
               </button>
@@ -281,6 +288,7 @@ export default function App() {
           <ResultsPanel
             result={result}
             accounts={accounts}
+            resolvedTrades={resolvedTrades}
           />
         )}
       </main>

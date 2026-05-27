@@ -8,6 +8,82 @@ function zeroByClass(): Record<AssetClass, number> {
   return Object.fromEntries(ALL_ASSET_CLASSES.map(ac => [ac, 0])) as Record<AssetClass, number>;
 }
 
+/**
+ * Step 7.7 — Tax-aware sell shaping.
+ *
+ * After greedyPlace and the gap-fill (steps 7–7.5), scan for taxable sells on
+ * TAX_ADVANTAGED-preferred asset classes and redirect them to TA accounts where
+ * possible by performing a 4-way swap of Δ dollars:
+ *
+ *   targetLocation[T][ac] += Δ   T sells Δ less of ac  (keeps the position)
+ *   targetLocation[A][ac] -= Δ   A's ac target shrinks  (A "absorbs" the sell)
+ *   targetLocation[T][Y]  -= Δ   T buys Δ less of Y    (the per-account offset)
+ *   targetLocation[A][Y]  += Δ   A buys Δ more of Y    (restores A's balance)
+ *
+ * Invariants preserved:
+ *   • Σ_ac targetLocation[acct][ac] = freeCapacity[acct]   (per-account net-zero)
+ *   • Σ_acct targetLocation[acct][ac]                       (household class totals)
+ *
+ * Constraints:
+ *   • Δ ≤ targetLocation[A][ac]  → A's target never goes negative
+ *   • Δ ≤ tBuyY                  → T's buy of Y only shrinks, never flips to a sell
+ *   • ac prefers TAX_ADVANTAGED  → don't redirect FIXED_INCOME / CASH sells
+ *   • A must be eligible for both ac and Y
+ */
+function redirectTaxableSells(
+  accounts: Account[],
+  unlockedCurrent: Record<string, Record<AssetClass, number>>,
+  targetLocation: Record<string, Record<AssetClass, number>>,
+  effectiveAllowed: Record<string, Set<AssetClass>>,
+  strategy: Strategy,
+): void {
+  const EPSILON = 0.005;
+  const taxableAccounts = accounts.filter(a => accountBucket(a.type) === 'TAXABLE');
+  const taAccounts      = accounts.filter(a => accountBucket(a.type) === 'TAX_ADVANTAGED');
+
+  for (const T of taxableAccounts) {
+    for (const ac of ALL_ASSET_CLASSES) {
+      // Only redirect sells of classes whose primary home is TAX_ADVANTAGED.
+      const prefBucket = (strategy.placement[ac] ?? ['TAX_ADVANTAGED', 'TAXABLE'])[0];
+      if (prefBucket !== 'TAX_ADVANTAGED') continue;
+
+      let toRedirect = unlockedCurrent[T.id][ac] - targetLocation[T.id][ac];
+      if (toRedirect <= EPSILON) continue; // T is not selling this class
+
+      for (const A of taAccounts) {
+        if (toRedirect <= EPSILON) break;
+        if (!effectiveAllowed[A.id].has(ac)) continue;
+        // Quick pre-check: A must have some ac target to give up.
+        if (targetLocation[A.id][ac] <= EPSILON) continue;
+
+        // Iterate compensating classes Y: T has a net buy of Y and A can hold Y.
+        for (const Y of ALL_ASSET_CLASSES) {
+          if (toRedirect <= EPSILON) break;
+          if (Y === ac) continue;
+
+          // Re-read live value — earlier Y iterations may have reduced it.
+          const aAbsorbNow = targetLocation[A.id][ac];
+          if (aAbsorbNow <= EPSILON) break; // A is exhausted for this ac
+
+          const tBuyY = targetLocation[T.id][Y] - unlockedCurrent[T.id][Y];
+          if (tBuyY <= EPSILON) continue; // T has no net buy of Y to use as offset
+          if (!effectiveAllowed[A.id].has(Y)) continue;
+
+          const redirect = Math.min(toRedirect, aAbsorbNow, tBuyY);
+          if (redirect <= EPSILON) continue;
+
+          targetLocation[T.id][ac] += redirect;
+          targetLocation[A.id][ac] -= redirect;
+          targetLocation[T.id][Y]  -= redirect;
+          targetLocation[A.id][Y]  += redirect;
+
+          toRedirect -= redirect;
+        }
+      }
+    }
+  }
+}
+
 export function rebalance(
   accounts: Account[],
   positions: Position[],
@@ -164,14 +240,51 @@ export function rebalance(
   );
   flags.push(...placementFlags);
 
-  // Step 8 — Compute trades.
-  //   delta = targetLocation[acct][ac] − unlockedCurrent[acct][ac]
-  //   Because Σ_ac targetLocation[acct][ac] = freeCapacity[acct]
-  //                                         = Σ_{OOT ac} unlockedCurrent[acct][ac] + newCash
-  //   the net delta per account equals newCash (buys exceed sells by exactly the new-cash
-  //   amount, which is the correct behaviour for deployment).
+  // Step 7.5 — Per-account net-zero enforcement.
+  //
+  // greedyPlace guarantees Σ_ac targetLocation[acct][ac] ≤ freeCapacity[acct], but when
+  // NO_ELIGIBLE_ACCOUNT fires the unplaced dollars are never assigned to any account,
+  // leaving some accounts with a gap (placed total < freeCapacity). Without correction
+  // those accounts produce net-negative trades — selling assets with no intra-account buy
+  // to absorb the proceeds, implying cash that must leave the account. For tax-advantaged
+  // accounts (Roth, 401k) that cash can't simply be redeployed elsewhere.
+  //
+  // Fix: distribute the gap back proportionally to the account's own OOT unlocked
+  // holdings. This tells step 8 "sell less of what you already own" rather than
+  // generating an unmatched sell that would require an external cash transfer.
+  for (const acct of nonLockedAccounts) {
+    const placed = ALL_ASSET_CLASSES.reduce(
+      (s, ac) => s + (targetLocation[acct.id][ac] ?? 0), 0,
+    );
+    const gap = freeCapacity[acct.id] - placed;
+    if (gap < 0.005) continue;
 
-  const trades = [];
+    const totalOOT = ALL_ASSET_CLASSES.reduce(
+      (s, ac) => s + unlockedCurrent[acct.id][ac], 0,
+    );
+    if (totalOOT < 0.005) continue;
+
+    for (const ac of ALL_ASSET_CLASSES) {
+      targetLocation[acct.id][ac] += gap * (unlockedCurrent[acct.id][ac] / totalOOT);
+    }
+  }
+
+  // Step 7.7 — Redirect taxable equity sells to tax-advantaged accounts.
+  redirectTaxableSells(
+    nonLockedAccounts, unlockedCurrent, targetLocation, effectiveAllowed, strategy,
+  );
+
+  // Step 8 — Compute raw trades (before minTradeUsd filtering is balanced out).
+  //   delta = targetLocation[acct][ac] − unlockedCurrent[acct][ac]
+  //   After step 7.5, Σ_ac targetLocation[acct][ac] = freeCapacity[acct]
+  //                                                  = Σ_{OOT ac} unlockedCurrent[acct][ac] + newCash
+  //   so the pre-filter net delta per account equals newCash.
+  //
+  //   However, minTradeUsd filtering can drop small trades on one side of the ledger
+  //   without dropping the matching trade on the other side, re-introducing a net imbalance.
+  //   Step 8.5 corrects this after filtering.
+
+  const rawTrades = [];
   for (const acct of nonLockedAccounts) {
     const inTaxable = accountBucket(acct.type) === 'TAXABLE';
     for (const ac of ALL_ASSET_CLASSES) {
@@ -180,10 +293,54 @@ export function rebalance(
       const target  = targetLocation[acct.id]?.[ac] ?? 0;
       const delta   = target - current;
       if (Math.abs(delta) < strategy.minTradeUsd) continue;
-      trades.push({ accountId: acct.id, assetClass: ac, deltaUsd: delta, inTaxableAccount: inTaxable });
-      if (delta < 0 && inTaxable) {
-        flags.push({ kind: 'TAXABLE_SALE', accountId: acct.id, assetClass: ac, amountUsd: Math.abs(delta) });
+      rawTrades.push({ accountId: acct.id, assetClass: ac, deltaUsd: delta, inTaxableAccount: inTaxable });
+    }
+  }
+
+  // Step 8.5 — Post-filter per-account balance correction.
+  //
+  // For each account: compute net = Σ deltaUsd across all kept trades.
+  // A non-zero net means small trades were filtered asymmetrically.
+  // The expected net is newCash (zero when no contributions are being deployed).
+  //
+  // Fix: find the largest kept trade on the imbalanced side and shrink it by the
+  // residual imbalance. If the adjustment would push it below minTradeUsd, drop it
+  // entirely and apply the residual to the next-largest, repeating as needed.
+
+  const trades = [...rawTrades];
+  for (const acct of nonLockedAccounts) {
+    const expectedNet = acct.newCash ?? 0;
+    const acctTrades = trades.filter(t => t.accountId === acct.id);
+    const net = acctTrades.reduce((s, t) => s + t.deltaUsd, 0);
+    const residual = net - expectedNet;
+    if (Math.abs(residual) < 0.005) continue;
+
+    // residual > 0 means we sold too much (or bought too little) → shrink the largest buy
+    // residual < 0 means we bought too much (or sold too little) → shrink the largest sell
+    const targetSign = residual > 0 ? 1 : -1;
+    const candidates = acctTrades
+      .filter(t => Math.sign(t.deltaUsd) === targetSign)
+      .sort((a, b) => Math.abs(b.deltaUsd) - Math.abs(a.deltaUsd));
+
+    let remaining = Math.abs(residual);
+    for (const cand of candidates) {
+      if (remaining < 0.005) break;
+      const idx = trades.indexOf(cand);
+      const adjust = Math.min(remaining, Math.abs(cand.deltaUsd));
+      const newDelta = cand.deltaUsd - targetSign * adjust;
+      remaining -= adjust;
+      if (Math.abs(newDelta) < strategy.minTradeUsd) {
+        trades.splice(idx, 1);
+      } else {
+        trades[idx] = { ...cand, deltaUsd: newDelta };
       }
+    }
+  }
+
+  // Generate TAXABLE_SALE flags from the corrected trade list.
+  for (const trade of trades) {
+    if (trade.deltaUsd < 0 && trade.inTaxableAccount) {
+      flags.push({ kind: 'TAXABLE_SALE', accountId: trade.accountId, assetClass: trade.assetClass, amountUsd: Math.abs(trade.deltaUsd) });
     }
   }
 

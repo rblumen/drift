@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Account, AssetClass, Flag, RebalanceResult, Trade } from '../engine/types';
+import type { Account, AssetClass, Flag, RebalanceResult, ResolvedTrade } from '../engine/types';
 import { ALL_ASSET_CLASSES } from '../engine/types';
 import { AC_COLOR, AC_LABEL, ACCT_TYPE_LABEL, fmtUsd, fmtPct, fmtDelta } from './fmt';
 import { PieChart } from './PieChart';
@@ -9,6 +9,7 @@ import { downloadReport } from './exportReport';
 interface Props {
   result: RebalanceResult;
   accounts: Account[];
+  resolvedTrades: ResolvedTrade[];
 }
 
 // ── Flag banners ──────────────────────────────────────────────────────────────
@@ -112,11 +113,20 @@ function AllocationRow({
 
 // ── Trade table row ───────────────────────────────────────────────────────────
 
-function TradeRow({ trade }: { trade: Trade }) {
+function TradeRow({ trade }: { trade: ResolvedTrade }) {
   const isBuy = trade.deltaUsd > 0;
   return (
     <tr className="border-t border-gray-100 hover:bg-gray-50">
-      <td className="px-4 py-2 text-gray-600">{AC_LABEL[trade.assetClass]}</td>
+      <td className="px-4 py-2">
+        {trade.ticker ? (
+          <div>
+            <span className="font-mono font-medium text-gray-800">{trade.ticker}</span>
+            <div className="text-xs text-gray-400">{AC_LABEL[trade.assetClass]}</div>
+          </div>
+        ) : (
+          <span className="text-gray-600">{AC_LABEL[trade.assetClass]}</span>
+        )}
+      </td>
       <td className="px-4 py-2">
         <span className={`text-xs font-semibold px-2 py-0.5 rounded-full
           ${isBuy ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
@@ -146,7 +156,7 @@ function buildPieSlices(byClass: Record<AssetClass, number>): PieSlice[] {
 
 // ── Main panel ────────────────────────────────────────────────────────────────
 
-export function ResultsPanel({ result, accounts }: Props) {
+export function ResultsPanel({ result, accounts, resolvedTrades }: Props) {
   const { householdValue, currentWeights, targetWeights, projectedWeights,
           currentValueByAccount, trades, flags } = result;
 
@@ -172,15 +182,18 @@ export function ResultsPanel({ result, accounts }: Props) {
   // Accounts are ordered as they appear in the accounts array.
   const tradesByAccount = accounts
     .map(account => {
-      const acctTrades = trades
+      // Raw trades used for per-class pie projection (accurate sub-class deltas).
+      const acctRawTrades = trades.filter(t => t.accountId === account.id);
+      // Resolved trades used for the table (merged blended-fund rows with tickers).
+      const acctTrades = resolvedTrades
         .filter(t => t.accountId === account.id)
         .sort((a, b) => Math.abs(b.deltaUsd) - Math.abs(a.deltaUsd));
       const before = buildPieSlices(currentValueByAccount[account.id] ?? {});
 
-      // After: apply trade deltas on top of current values.
+      // After: apply raw trade deltas on top of current values.
       const afterByClass = { ...currentValueByAccount[account.id] } as Record<AssetClass, number>;
       for (const ac of ALL_ASSET_CLASSES) afterByClass[ac] ??= 0;
-      for (const t of acctTrades) afterByClass[t.assetClass] += t.deltaUsd;
+      for (const t of acctRawTrades) afterByClass[t.assetClass] += t.deltaUsd;
       const after = buildPieSlices(afterByClass);
 
       return { account, trades: acctTrades, before, after };
@@ -209,7 +222,7 @@ export function ResultsPanel({ result, accounts }: Props) {
           </span>
         </div>
         <button
-          onClick={() => downloadReport(result, accounts)}
+          onClick={() => downloadReport(result, accounts, resolvedTrades)}
           title="Download interactive HTML report with trade checklist"
           className="text-xs text-gray-500 hover:text-gray-800 border border-gray-200 rounded px-2 py-1 hover:bg-gray-50 transition-colors shrink-0"
         >
@@ -263,7 +276,7 @@ export function ResultsPanel({ result, accounts }: Props) {
       </div>
 
       {/* Per-account sections */}
-      {trades.length === 0 ? (
+      {resolvedTrades.length === 0 ? (
         <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
           Portfolio is within tolerance — no trades needed.
         </div>
