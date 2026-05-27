@@ -68,7 +68,7 @@ export function PieChart({ slices, title, size = 112 }: Props) {
               <span className="w-2 h-2 rounded-sm shrink-0" style={{ backgroundColor: sl.color }} />
               <span className="text-gray-600 truncate">{sl.label}</span>
               <span className="ml-auto text-gray-400 tabular-nums shrink-0">
-                {((sl.value / total) * 100).toFixed(1)}%
+                {fmtUsd(sl.value)} ({((sl.value / total) * 100).toFixed(1)}%)
               </span>
             </div>
           ))}
