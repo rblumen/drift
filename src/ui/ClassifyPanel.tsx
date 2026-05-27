@@ -8,6 +8,7 @@ import { PieChart } from './PieChart';
 import { StackedBars } from './StackedBars';
 import type { StackedRow, LegendEntry } from './StackedBars';
 import { detectTargetDateFund } from '../data/targetDateFunds';
+import { HelpBox, HelpDef, HelpSection } from './HelpBox';
 
 const PLACEMENT_BUCKETS: PlacementBucket[] = ['TAX_ADVANTAGED', 'TAXABLE', 'EDUCATION'];
 
@@ -277,6 +278,38 @@ export function ClassifyPanel({
         <h2 className="text-lg font-semibold text-gray-800">Classify Holdings</h2>
         <span className="text-sm text-gray-500">{rows.length} ticker{rows.length !== 1 ? 's' : ''}</span>
       </div>
+
+      <HelpBox label="About classifying holdings">
+        <p>
+          Every holding must be mapped to an asset class before the engine can run a full rebalance.
+          Tickers that aren't in the built-in map appear in the <strong>Unmapped</strong> section below —
+          assign them an asset class and the engine updates immediately.
+        </p>
+
+        <HelpSection title="Classification sources">
+          <HelpDef term="Built-in map">Common ETFs and mutual funds (VTI, FZROX, MUNY, etc.) are pre-mapped. No action needed.</HelpDef>
+          <HelpDef term="Your overrides">Assignments you make here are saved and take precedence over the built-in map.</HelpDef>
+          <HelpDef term="Decomposed">For blended funds — target-date funds, balanced funds — you can define a custom split by percentage across multiple asset classes. The engine treats each portion independently.</HelpDef>
+        </HelpSection>
+
+        <HelpSection title="US Total Market — the Russell split">
+          <p>
+            Holdings mapped to <strong>US Total Market</strong> (e.g. VTI, FZROX) are automatically redistributed
+            to Large Cap (67%), Mid Cap (25%), and Small Cap (8%) using the Russell index methodology.
+            This means the engine tracks cap-class drift precisely — you don't need separate Large/Mid/Small ETFs
+            for this split to work, but you can use them if your accounts hold them individually.
+          </p>
+        </HelpSection>
+
+        <HelpSection title="Target-date funds">
+          <p>
+            The app will auto-detect common Fidelity Freedom and Vanguard Target Retirement tickers and suggest
+            a decomposition based on the fund's current glide-path allocation.
+            You can accept the estimate or edit the percentages to match the fund's actual fact sheet.
+            These funds are always treated as locked in trade calculations — the engine won't suggest trading sub-components.
+          </p>
+        </HelpSection>
+      </HelpBox>
 
       {/* ── Charts ─────────────────────────────────────────────────────────── */}
       {acSlices.length > 0 && (

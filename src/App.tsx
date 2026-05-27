@@ -4,6 +4,7 @@ import { DEFAULT_STRATEGY } from './engine/strategy';
 import { rebalance } from './engine/rebalance';
 import { resolveTradeVehicles } from './engine/resolve';
 import { makeClassifier } from './engine/classify';
+import { OverviewPanel } from './ui/OverviewPanel';
 import { AccountsPanel } from './ui/AccountsPanel';
 import { ImportPanel } from './ui/ImportPanel';
 import { ClassifyPanel } from './ui/ClassifyPanel';
@@ -15,9 +16,10 @@ import {
   loadState, saveState, saveBackup,
 } from './store';
 
-type Tab = 'accounts' | 'import' | 'classify' | 'strategy' | 'results';
+type Tab = 'overview' | 'accounts' | 'import' | 'classify' | 'strategy' | 'results';
 
 const TABS: { id: Tab; label: string }[] = [
+  { id: 'overview', label: 'Overview' },
   { id: 'accounts', label: 'Accounts' },
   { id: 'import',   label: 'Import' },
   { id: 'classify', label: 'Classify' },
@@ -36,7 +38,7 @@ export default function App() {
   const [strategy,         setStrategy]         = useState<Strategy>(saved.strategy);
   const [tickerOverrides,  setTickerOverrides]  = useState<Record<string, AssetClass>>(saved.tickerOverrides);
   const [decompositions,   setDecompositions]   = useState<Record<string, FundDecomposition>>(saved.decompositions ?? {});
-  const [activeTab,        setActiveTab]        = useState<Tab>('accounts');
+  const [activeTab,        setActiveTab]        = useState<Tab>('overview');
   const [importError,      setImportError]      = useState<string | null>(null);
   // Non-null when data was loaded from a backup because the primary slot was invalid.
   const [restoredFromBackup, setRestoredFromBackup] = useState<number | null>(
@@ -252,6 +254,9 @@ export default function App() {
 
       {/* Panel */}
       <main className="max-w-5xl mx-auto px-4 py-6">
+        {activeTab === 'overview' && (
+          <OverviewPanel onStart={() => setActiveTab('accounts')} />
+        )}
         {activeTab === 'accounts' && (
           <AccountsPanel
             accounts={accounts}

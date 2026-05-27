@@ -6,6 +6,7 @@ import { RUSSELL_CAP_SPLIT } from '../engine/rollup';
 import { AC_COLOR, AC_LABEL, BUCKET_LABEL } from './fmt';
 import { DonutChart } from './DonutChart';
 import type { DonutSlice } from './DonutChart';
+import { HelpBox, HelpDef, HelpSection, HelpTip } from './HelpBox';
 
 const ALL_BUCKETS: PlacementBucket[] = ['TAX_ADVANTAGED', 'TAXABLE', 'EDUCATION'];
 const US_CAP_SUBS: readonly AssetClass[] = ['US_LARGE_CAP', 'US_MID_CAP', 'US_SMALL_CAP'];
@@ -139,6 +140,64 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights }: Props) 
   return (
     <div className="space-y-6">
       <h2 className="text-lg font-semibold text-gray-800">Strategy</h2>
+
+      <HelpBox label="About the strategy">
+        <p>
+          The strategy has three parts: <strong>target allocation</strong> (how much of each asset class
+          to hold), <strong>placement rules</strong> (which account type each class prefers), and{' '}
+          <strong>rebalance parameters</strong> (when to act). All values are fully editable — defaults
+          reflect a specific household and should be reviewed before first use.
+        </p>
+
+        <HelpSection title="Target allocation">
+          <HelpDef term="US equity (57.5% default)">
+            Set via a single "US Total Market" handle (linked mode) or per cap-class. Linked mode
+            distributes your total using the Russell index weights: Large Cap 67%, Mid Cap 25%, Small Cap 8%.
+            Click "link / linked" on the US Total Market row to toggle between modes.
+          </HelpDef>
+          <HelpDef term="Fixed Income (20% default)">
+            Held as NY tax-free muni bonds (e.g. MUNY) in the taxable account by default. This target
+            also sets the threshold for the REVISIT_PLACEMENT flag — see below.
+          </HelpDef>
+          <HelpDef term="Alternatives (2.5% default)">
+            Crypto, precious metals, and similar. Routed to tax-advantaged accounts because these assets
+            attract the less favorable collectibles tax treatment if sold in a taxable account.
+          </HelpDef>
+        </HelpSection>
+
+        <HelpSection title="Placement rules">
+          <p>
+            Placement rules control which account type hosts each asset class. The engine fills the
+            <strong> 1st-choice bucket</strong> first. If that bucket is full (or no eligible account
+            exists), it spills to the <strong>2nd-choice bucket</strong>, and if that too is exhausted,
+            to any remaining account.
+          </p>
+          <HelpDef term="Why bonds in taxable (the default)?">
+            Municipal bond interest is exempt from federal and NY state taxes, so holding munis in a
+            taxable account is nearly as tax-efficient as holding them in an IRA — and it frees the
+            tax-advantaged space for equities, where long-term compounding is most valuable.
+          </HelpDef>
+          <HelpDef term="The REVISIT_PLACEMENT trigger">
+            This strategy has a built-in expiry: once the taxable account grows larger than the fixed-income
+            sleeve, it can no longer be bonds-only. The engine fires a <strong>REVISIT_PLACEMENT</strong>{' '}
+            flag when <em>taxable share &gt; Fixed Income target</em>. When you see it, consider adding
+            Taxable as a 2nd-choice bucket for equities, so equity spillover goes to the taxable account
+            instead of generating a NO_ELIGIBLE_ACCOUNT error.
+          </HelpDef>
+        </HelpSection>
+
+        <HelpSection title="Rebalance parameters">
+          <HelpDef term="Drift tolerance (±5% default)">
+            Any asset class within this many percentage points of its target is left alone — no trades
+            are generated for it. Wider tolerance = fewer, larger trades. Narrower = more precise but
+            more trading activity.
+          </HelpDef>
+          <HelpDef term="Min trade size ($250 default)">
+            Trade recommendations smaller than this dollar amount are dropped. Prevents dust-level orders
+            that add transaction friction without meaningfully improving the allocation.
+          </HelpDef>
+        </HelpSection>
+      </HelpBox>
 
       {/* ── Current vs. target donut ─────────────────────────────────────────── */}
       <div className="border border-gray-200 rounded-lg p-5">
@@ -295,8 +354,21 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights }: Props) 
             <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
               <tr>
                 <th className="px-4 py-2 text-left">Asset class</th>
-                <th className="px-4 py-2 text-left">1st choice</th>
-                <th className="px-4 py-2 text-left">2nd choice</th>
+                <th className="px-4 py-2 text-left">
+                  1st choice
+                  <HelpTip>
+                    The engine fills accounts in this bucket first. If the bucket has enough
+                    capacity, the entire class lands here and no spillover occurs.
+                  </HelpTip>
+                </th>
+                <th className="px-4 py-2 text-left">
+                  2nd choice
+                  <HelpTip>
+                    Used only when the 1st-choice bucket is full or has no eligible account.
+                    Selecting "none" means any remaining capacity anywhere will be used as a
+                    last resort — a PLACEMENT_SPILLOVER flag will be emitted.
+                  </HelpTip>
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -348,6 +420,11 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights }: Props) 
             <label className="block text-xs text-gray-500 mb-1">
               Drift tolerance
               <span className="ml-1 text-gray-400">(±%)</span>
+              <HelpTip>
+                Any asset class within this many percentage points of its target is left alone —
+                no trades generated. Default ±5 pp. Wider = fewer, larger trades per rebalance.
+                Narrower = more frequent small trades.
+              </HelpTip>
             </label>
             <div className="flex items-center gap-1">
               <input
@@ -367,7 +444,14 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights }: Props) 
             </p>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Min trade size ($)</label>
+            <label className="block text-xs text-gray-500 mb-1">
+              Min trade size ($)
+              <HelpTip>
+                Recommendations below this dollar amount are dropped. Prevents dust-level orders
+                that add transaction overhead without meaningfully improving the allocation.
+                Raise it if you want to reduce the number of trades per rebalance.
+              </HelpTip>
+            </label>
             <div className="flex items-center gap-1">
               <span className="text-gray-400 text-xs">$</span>
               <input

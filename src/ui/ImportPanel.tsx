@@ -7,6 +7,7 @@ import type { FidelityMultiResult } from '../ingest/adapters/fidelity';
 import { parseEmpowerCsv, parseEmpowerTotals } from '../ingest/adapters/empower';
 import { AC_LABEL, ACCT_TYPE_COLOR, ACCT_TYPE_LABEL, fmtUsd } from './fmt';
 import { PieChart } from './PieChart';
+import { HelpBox, HelpDef, HelpSection } from './HelpBox';
 
 type Adapter = 'schwab' | 'fidelity' | 'empower' | 'empower-totals' | 'manual';
 
@@ -238,6 +239,27 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
   return (
     <div className="space-y-6">
       <h2 className="text-lg font-semibold text-gray-800">Import Positions</h2>
+
+      <HelpBox label="About importing positions">
+        <p>
+          Load the current market value of each holding. Positions replace any existing data for the
+          selected account — re-importing an account always starts fresh for that account.
+        </p>
+
+        <HelpSection title="Which format to use">
+          <HelpDef term="Schwab CSV">Accounts → Positions tab → Export (top-right link). Exports all positions in the selected account.</HelpDef>
+          <HelpDef term="Fidelity CSV">Accounts &amp; Trade → Portfolio → Download (CSV). The app detects multiple accounts in a single file and lets you map each to a registered account.</HelpDef>
+          <HelpDef term="Empower CSV">Copy the "My Investments" table and save as a <code>.csv</code> file. Works best when Empower shows individual fund-level holdings.</HelpDef>
+          <HelpDef term="Empower Totals">Enter dollar amounts per asset class from Empower's Allocation/Holdings view. Fastest path when you don't need individual ticker detail — trade recommendations will be at the asset-class level only.</HelpDef>
+          <HelpDef term="Manual entry">Type ticker + market value directly. Use for any position a CSV doesn't cover, or to add a one-off holding.</HelpDef>
+        </HelpSection>
+
+        <HelpSection title="Tips">
+          <HelpDef term="Price (optional)">Supplying a share price is not required. If present, the Results tab shows share counts alongside dollar amounts.</HelpDef>
+          <HelpDef term="Locked positions">Click the 🔓 icon on any position row to freeze it. Locked positions count in totals and weights but are excluded from trades — useful for employer stock units or other positions you can't freely sell.</HelpDef>
+          <HelpDef term="Unmapped tickers">If an imported ticker isn't in the built-in classification map, it will appear in the Classify tab with an amber badge. Resolve it there before running the final rebalance.</HelpDef>
+        </HelpSection>
+      </HelpBox>
 
       {/* Step 1 — Pick account + format */}
       <div className="border border-gray-200 rounded-lg divide-y divide-gray-100">

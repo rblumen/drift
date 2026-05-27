@@ -5,6 +5,7 @@ import { AC_COLOR, AC_LABEL, ACCT_TYPE_LABEL, fmtUsd, fmtPct, fmtDelta } from '.
 import { PieChart } from './PieChart';
 import type { PieSlice } from './PieChart';
 import { downloadReport } from './exportReport';
+import { HelpBox, HelpDef, HelpSection, HelpTip } from './HelpBox';
 
 interface Props {
   result: RebalanceResult;
@@ -230,6 +231,60 @@ export function ResultsPanel({ result, accounts, resolvedTrades }: Props) {
         </button>
       </div>
 
+      <HelpBox label="About these results">
+        <p>
+          Results show the <strong>household allocation</strong> (all accounts combined) vs. your target,
+          followed by per-account trade recommendations. Everything recalculates live — change your
+          strategy or positions and the output updates immediately.
+        </p>
+
+        <HelpSection title="Household allocation table">
+          <HelpDef term="Current">Your actual allocation today, based on loaded positions.</HelpDef>
+          <HelpDef term="Target">The target weight from your strategy.</HelpDef>
+          <HelpDef term="Drift">Current minus Target. Amber = over target; Blue = under target; Green = within tolerance.</HelpDef>
+          <HelpDef term="After trades">Projected allocation once the recommended trades are executed. Should closely match the target.</HelpDef>
+          <HelpDef term="Classes within tolerance">Shown in the table but generate no trades. The tolerance band (±5% by default) suppresses small drift to avoid over-trading.</HelpDef>
+        </HelpSection>
+
+        <HelpSection title="Recommended trades">
+          <p>
+            Trades are grouped by account. Each entry shows the asset class, direction (BUY / SELL),
+            and dollar amount. If a position has a share price loaded, share counts are shown too.
+          </p>
+          <HelpDef term="Net per account">
+            The header row of each account shows the net dollar flow. In a pure rebalance (no new cash),
+            this should be near zero — buys and sells within the account offset each other.
+          </HelpDef>
+          <HelpDef term="Before / After pies">
+            Each account shows its current allocation (Before) and the projected allocation after executing
+            the recommended trades (After). Useful for a quick sanity check before placing orders.
+          </HelpDef>
+        </HelpSection>
+
+        <HelpSection title="Flags">
+          <HelpDef term="REVISIT_PLACEMENT (orange)">
+            Taxable share of household exceeds your Fixed Income target. The bonds-only taxable strategy
+            is no longer viable — update placement rules in the Strategy tab.
+          </HelpDef>
+          <HelpDef term="TAXABLE_SALE (amber)">
+            A sell lands in a taxable account. No gain estimate is provided in this version — review
+            manually for capital gain implications before executing.
+          </HelpDef>
+          <HelpDef term="PLACEMENT_SPILLOVER (blue)">
+            An asset class couldn't fully fit in its preferred bucket and spilled to a secondary one.
+            This is informational; the engine handled it automatically.
+          </HelpDef>
+          <HelpDef term="NO_ELIGIBLE_ACCOUNT (red)">
+            No account has capacity for a given asset class. Check account restrictions in the Accounts tab.
+          </HelpDef>
+        </HelpSection>
+
+        <p className="text-gray-400 italic">
+          These recommendations are mechanical calculations from your own inputs. They are not investment advice.
+          Review every trade, especially taxable sells, before placing any orders.
+        </p>
+      </HelpBox>
+
       {/* Priority flags */}
       {importantFlags.length > 0 && (
         <div className="space-y-2">
@@ -249,8 +304,26 @@ export function ResultsPanel({ result, accounts, resolvedTrades }: Props) {
                 <th className="px-4 py-3 text-left">Asset class</th>
                 <th className="px-4 py-3 text-right">Current</th>
                 <th className="px-4 py-3 text-right">Target</th>
-                <th className="px-4 py-3 text-right">Drift</th>
-                <th className="px-4 py-3 text-right">After trades</th>
+                <th className="px-4 py-3 text-right">
+                  <span className="inline-flex items-center justify-end gap-0.5">
+                    Drift
+                    <HelpTip dir="up">
+                      Current minus Target. Positive (amber) = over target. Negative (blue) =
+                      under target. Classes within the tolerance band are shown in gray — no
+                      trade is generated for them.
+                    </HelpTip>
+                  </span>
+                </th>
+                <th className="px-4 py-3 text-right">
+                  <span className="inline-flex items-center justify-end gap-0.5">
+                    After trades
+                    <HelpTip dir="left">
+                      Projected allocation once all recommended trades are executed. Should
+                      closely match the target. Small residuals are normal due to the tolerance
+                      band and minimum trade size filter.
+                    </HelpTip>
+                  </span>
+                </th>
                 <th className="px-4 py-3 text-left w-36">Chart</th>
               </tr>
             </thead>

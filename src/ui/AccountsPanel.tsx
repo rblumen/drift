@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Account, AccountType, AssetClass } from '../engine/types';
 import { ACCT_TYPE_LABEL, AC_LABEL } from './fmt';
+import { HelpBox, HelpDef, HelpSection, HelpTip } from './HelpBox';
 
 interface Props {
   accounts: Account[];
@@ -162,7 +163,12 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount }: Props)
               className="rounded"
             />
             Restrict investable classes
-            <span className="font-normal text-gray-400">(uncheck what this account cannot hold)</span>
+            <HelpTip>
+              Use for 401(k) or similar accounts with a fixed fund menu that doesn't offer every
+              asset class. The engine spills restricted classes to other eligible accounts instead
+              of leaving them unplaced.
+            </HelpTip>
+            <span className="font-normal text-gray-400 ml-1">(uncheck what this account cannot hold)</span>
           </label>
           {f.restricted && (
             <div className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1 pl-5">
@@ -183,7 +189,14 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount }: Props)
         {/* Concentrate classes */}
         <div>
           <p className="text-xs font-medium text-gray-600">
-            Concentrate here{' '}
+            Concentrate here
+            <HelpTip>
+              The engine fills this account first for the listed classes before distributing
+              proportionally to other accounts in the same bucket. Unlike "Restrict", this doesn't
+              exclude other accounts — it just establishes priority. Useful for keeping alternatives
+              concentrated in a single IRA.
+            </HelpTip>
+            {' '}
             <span className="font-normal text-gray-400">(fill this account first for these classes)</span>
           </p>
           <div className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1">
@@ -216,6 +229,27 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount }: Props)
         </button>
       </div>
 
+      <HelpBox label="About accounts">
+        <p>
+          Register every investment account in your household. The engine uses account type to determine
+          which asset classes belong here — this is how tax-efficient placement works.
+        </p>
+
+        <HelpSection title="Account types and tax treatment">
+          <HelpDef term="Taxable">Regular brokerage account (Schwab, Fidelity, etc.). Dividends and realized gains are taxable each year. The default strategy concentrates <em>muni bonds</em> here because muni interest is tax-exempt.</HelpDef>
+          <HelpDef term="Traditional IRA / 401(k) / HSA">Tax-advantaged accounts. Contributions reduce taxable income now; withdrawals are taxed. The engine concentrates equities and alternatives here so growth compounds tax-deferred.</HelpDef>
+          <HelpDef term="Roth IRA">Tax-advantaged. Contributions are after-tax; qualified withdrawals are tax-free. Excellent for high-growth equities.</HelpDef>
+          <HelpDef term="529">Education savings account. Separate placement bucket — not mixed with tax-advantaged.</HelpDef>
+        </HelpSection>
+
+        <HelpSection title="Advanced options">
+          <HelpDef term="New cash">Uninvested cash you plan to deploy this rebalance. It is counted in household value and the engine steers it toward underweight asset classes first.</HelpDef>
+          <HelpDef term="Locked account">Counted in totals and weights but excluded from trade generation. Use when you're not actively managing the account right now (e.g. a 401k at a former employer).</HelpDef>
+          <HelpDef term="Restrict investable classes">Limits which asset classes the engine may place here. Useful for 401(k) plans with a fixed fund menu. The engine spills restricted classes to other eligible accounts.</HelpDef>
+          <HelpDef term="Concentrate here">Fills this account first for the listed classes before distributing proportionally to other accounts in the same bucket. Use to keep alternatives concentrated in a single IRA.</HelpDef>
+        </HelpSection>
+      </HelpBox>
+
       {accounts.length === 0 && !showAdd && (
         <p className="text-sm text-gray-500 py-8 text-center border border-dashed rounded-lg">
           No accounts yet. Add one to get started.
@@ -231,7 +265,16 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount }: Props)
                 <th className="px-4 py-2 text-left">Institution</th>
                 <th className="px-4 py-2 text-left">Type</th>
                 <th className="px-4 py-2 text-right">New Cash</th>
-                <th className="px-4 py-2 text-center" title="Locked accounts count in totals but receive no trade suggestions">Locked</th>
+                <th className="px-4 py-2 text-center">
+                  <span className="inline-flex items-center gap-0.5">
+                    Locked
+                    <HelpTip dir="left">
+                      A locked account counts in household totals and weights but receives no trade
+                      suggestions. Use for accounts you're not actively managing right now — e.g. a
+                      401k at a former employer.
+                    </HelpTip>
+                  </span>
+                </th>
                 <th className="px-4 py-2" />
               </tr>
             </thead>
@@ -274,7 +317,13 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount }: Props)
                             </select>
                           </div>
                           <div>
-                            <label className="block text-xs text-gray-500 mb-1">New cash ($)</label>
+                            <label className="block text-xs text-gray-500 mb-1">
+                              New cash ($)
+                              <HelpTip>
+                                Uninvested cash to deploy this rebalance. Added to household total
+                                and steered toward underweight classes before any sells are generated.
+                              </HelpTip>
+                            </label>
                             <input
                               type="number"
                               value={editForm.newCash}
@@ -387,7 +436,14 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount }: Props)
               </select>
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">New cash to deploy ($)</label>
+              <label className="block text-xs text-gray-500 mb-1">
+                New cash to deploy ($)
+                <HelpTip>
+                  Uninvested cash you plan to deploy this rebalance. It is added to the household
+                  total and the engine steers it toward underweight asset classes first, before
+                  generating any sells.
+                </HelpTip>
+              </label>
               <input
                 type="number"
                 value={form.newCash}
