@@ -141,9 +141,10 @@ export default function App() {
       <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-4">
           <div className="flex items-center justify-between py-3">
-            <h1 className="text-base font-semibold text-gray-900 tracking-tight">
-              Portfolio Rebalancer
-            </h1>
+            <div className="flex items-baseline gap-2">
+              <h1 className="text-base font-semibold text-gray-900 tracking-tight">Drift</h1>
+              <span className="text-xs text-gray-400 hidden sm:inline">DIY Portfolio Rebalancer</span>
+            </div>
 
             <div className="flex items-center gap-3">
               {result.householdValue > 0 && (

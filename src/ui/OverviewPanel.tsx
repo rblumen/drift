@@ -79,7 +79,8 @@ export function OverviewPanel({ onStart }: Props) {
 
       {/* Hero */}
       <div>
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">Portfolio Rebalancer</h2>
+        <h2 className="text-xl font-semibold text-gray-900 mb-0.5">Drift</h2>
+        <p className="text-xs text-gray-400 mb-2 uppercase tracking-wide">DIY Portfolio Rebalancer</p>
         <p className="text-sm text-gray-600 leading-relaxed">
           A household-level rebalancing tool for multi-account portfolios. You enter your current
           positions, set a target allocation and placement strategy, and the engine produces

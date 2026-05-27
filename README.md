@@ -1,4 +1,4 @@
-# Portfolio Rebalancer
+# Drift — DIY Portfolio Rebalancer
 
 A local, browser-only tool for household-level investment rebalancing across multiple accounts (Empower, Schwab, Fidelity). Runs entirely in your browser — no server, no login, no data leaves your machine.
 
