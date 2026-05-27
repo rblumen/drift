@@ -4,8 +4,8 @@ import { ALL_ASSET_CLASSES } from '../engine/types';
 import { DEFAULT_STRATEGY } from '../engine/strategy';
 import { RUSSELL_CAP_SPLIT } from '../engine/rollup';
 import { AC_COLOR, AC_LABEL, BUCKET_LABEL } from './fmt';
-import { DonutChart } from './DonutChart';
-import type { DonutSlice } from './DonutChart';
+import { WeightPie } from './WeightPie';
+import type { WeightSlice } from './WeightPie';
 import { HelpBox, HelpDef, HelpSection, HelpTip } from './HelpBox';
 
 const ALL_BUCKETS: PlacementBucket[] = ['TAX_ADVANTAGED', 'TAXABLE', 'EDUCATION'];
@@ -25,7 +25,7 @@ function splitComposite(totalPct: number): Record<'US_LARGE_CAP' | 'US_MID_CAP' 
   return { US_LARGE_CAP: lc.toFixed(1), US_MID_CAP: mc.toFixed(1), US_SMALL_CAP: sc.toFixed(1) };
 }
 
-export function StrategyPanel({ strategy, setStrategy, currentWeights }: Props) {
+export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentWeights }: Props) {
   // Linked by default when US_TOTAL_MARKET has no standalone target (the normal case).
   const [usEquityLinked, setUsEquityLinked] = useState<boolean>(
     (strategy.targets.US_TOTAL_MARKET ?? 0) < 0.001,
@@ -120,15 +120,10 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights }: Props) 
     setStrategy({ ...strategy, placement: { ...strategy.placement, [ac]: current } });
   }
 
-  const innerSlices: DonutSlice[] = ALL_ASSET_CLASSES.map(ac => ({
+  // Pie slices reflect the live (uncommitted) weight inputs so the chart updates as you type.
+  const targetPieSlices: WeightSlice[] = ALL_ASSET_CLASSES.map(ac => ({
     label:  AC_LABEL[ac],
-    weight: currentWeights[ac] ?? 0,
-    color:  AC_COLOR[ac],
-  }));
-
-  const outerSlices: DonutSlice[] = ALL_ASSET_CLASSES.map(ac => ({
-    label:  AC_LABEL[ac],
-    weight: strategy.targets[ac] ?? 0,
+    weight: (parseFloat(weights[ac]) || 0) / 100,
     color:  AC_COLOR[ac],
   }));
 
@@ -199,140 +194,127 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights }: Props) 
         </HelpSection>
       </HelpBox>
 
-      {/* ── Current vs. target donut ─────────────────────────────────────────── */}
-      <div className="border border-gray-200 rounded-lg p-5">
-        <DonutChart inner={innerSlices} outer={outerSlices} size={180} />
-      </div>
-
       {/* ── Target allocation ────────────────────────────────────────────────── */}
       <div className="space-y-3">
         <h3 className="text-sm font-medium text-gray-700">Target allocation</h3>
-        <div className="overflow-hidden border border-gray-200 rounded-lg">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
-              <tr>
-                <th className="px-4 py-2 text-left">Asset class</th>
-                <th className="px-4 py-2 text-right w-32">Target %</th>
-                <th className="px-4 py-2 text-left">Bar</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {primaryClasses.flatMap(ac => {
-                const isComposite = ac === 'US_TOTAL_MARKET' && usEquityLinked;
-                const displayVal  = isComposite ? compositeStr : weights[ac];
 
-                const mainRow = (
-                  <tr key={ac} className="hover:bg-gray-50">
-                    <td className="px-4 py-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="flex items-center gap-2 min-w-0">
+        {/* Single card: table on the left, pie on the right */}
+        <div className="overflow-hidden border border-gray-200 rounded-lg flex items-stretch">
+
+          {/* ── Allocation table — centred in its half of the card ── */}
+          <div className="flex-1 flex justify-center">
+            <table className="text-sm">
+              <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
+                <tr>
+                  <th className="px-4 py-2 text-left whitespace-nowrap">Asset class</th>
+                  <th className="px-4 py-2 text-right whitespace-nowrap">Target %</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {primaryClasses.flatMap(ac => {
+                  const isComposite = ac === 'US_TOTAL_MARKET' && usEquityLinked;
+                  const displayVal  = isComposite ? compositeStr : weights[ac];
+
+                  const mainRow = (
+                    <tr key={ac} className="hover:bg-gray-50">
+                      <td className="px-4 py-1.5">
+                        <div className="flex items-center gap-2 whitespace-nowrap">
                           <span className="w-2 h-2 rounded-sm shrink-0" style={{ backgroundColor: AC_COLOR[ac] }} />
-                          <span className="text-gray-700 truncate">{AC_LABEL[ac]}</span>
+                          <span className="text-gray-700">{AC_LABEL[ac]}</span>
+                          {ac === 'US_TOTAL_MARKET' && (
+                            <button
+                              type="button"
+                              onClick={handleToggleLinked}
+                              title={usEquityLinked
+                                ? 'Release: edit Large/Mid/Small Cap independently'
+                                : 'Link: drive Large/Mid/Small Cap from a single total using the Russell split'}
+                              className={`text-xs px-1.5 py-0.5 rounded border transition-colors ${
+                                usEquityLinked
+                                  ? 'border-indigo-300 text-indigo-600 bg-indigo-50 hover:bg-indigo-100'
+                                  : 'border-gray-200 text-gray-400 hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50'
+                              }`}
+                            >
+                              {usEquityLinked ? 'linked' : 'link'}
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-1.5 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <input
+                            type="number"
+                            value={displayVal}
+                            step="0.1"
+                            min="0"
+                            max="100"
+                            onChange={e => isComposite
+                              ? handleCompositeChange(e.target.value)
+                              : setWeights({ ...weights, [ac]: e.target.value })
+                            }
+                            onBlur={commitWeights}
+                            className="w-16 border rounded px-2 py-1 text-right text-sm"
+                          />
+                          <span className="text-gray-400 text-xs">%</span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+
+                  if (!isComposite) return [mainRow];
+
+                  // Sub-class rows shown when composite is linked (read-only, indented).
+                  const subRows = US_CAP_SUBS.map(sub => (
+                    <tr key={sub} className="bg-gray-50/60">
+                      <td className="pl-10 pr-4 py-1">
+                        <span className="flex items-center gap-2 whitespace-nowrap">
+                          <span className="w-1.5 h-1.5 rounded-sm shrink-0" style={{ backgroundColor: AC_COLOR[sub] }} />
+                          <span className="text-gray-400 text-xs">{AC_LABEL[sub]}</span>
                         </span>
-                        {ac === 'US_TOTAL_MARKET' && (
-                          <button
-                            type="button"
-                            onClick={handleToggleLinked}
-                            title={usEquityLinked
-                              ? 'Release: edit Large/Mid/Small Cap independently'
-                              : 'Link: drive Large/Mid/Small Cap from a single total using the Russell split'}
-                            className={`shrink-0 text-xs px-1.5 py-0.5 rounded border transition-colors ${
-                              usEquityLinked
-                                ? 'border-indigo-300 text-indigo-600 bg-indigo-50 hover:bg-indigo-100'
-                                : 'border-gray-200 text-gray-400 hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50'
-                            }`}
-                          >
-                            {usEquityLinked ? 'linked' : 'link'}
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-2 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <input
-                          type="number"
-                          value={displayVal}
-                          step="0.1"
-                          min="0"
-                          max="100"
-                          onChange={e => isComposite
-                            ? handleCompositeChange(e.target.value)
-                            : setWeights({ ...weights, [ac]: e.target.value })
-                          }
-                          onBlur={commitWeights}
-                          className="w-16 border rounded px-2 py-1 text-right text-sm"
-                        />
-                        <span className="text-gray-400 text-xs">%</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-2">
-                      <div className="w-48 bg-gray-100 rounded-full h-2">
-                        <div
-                          className="h-2 rounded-full transition-all"
-                          style={{
-                            width:           `${Math.min(parseFloat(displayVal) || 0, 100)}%`,
-                            backgroundColor: AC_COLOR[ac],
-                          }}
-                        />
-                      </div>
-                    </td>
-                  </tr>
-                );
+                      </td>
+                      <td className="px-4 py-1 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <input
+                            type="number"
+                            value={weights[sub]}
+                            readOnly
+                            disabled
+                            className="w-16 border border-gray-100 rounded px-2 py-0.5 text-right text-xs text-gray-400 bg-transparent cursor-not-allowed"
+                          />
+                          <span className="text-gray-300 text-xs">%</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ));
 
-                if (!isComposite) return [mainRow];
+                  return [mainRow, ...subRows];
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="border-t border-gray-200">
+                  <td className="px-4 py-2 text-xs font-medium text-gray-500">
+                    Total
+                    {sumOk && (
+                      <span className="ml-2 font-normal text-green-500">✓ sums to 100%</span>
+                    )}
+                  </td>
+                  <td className={`px-4 py-2 text-right text-sm font-semibold ${sumOk ? 'text-green-600' : 'text-red-600'}`}>
+                    {sum.toFixed(1)}%
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
 
-                // Sub-class rows shown when composite is linked (read-only, indented).
-                const subRows = US_CAP_SUBS.map(sub => (
-                  <tr key={sub} className="bg-gray-50/60">
-                    <td className="pl-10 pr-4 py-1.5">
-                      <span className="flex items-center gap-2">
-                        <span className="w-1.5 h-1.5 rounded-sm shrink-0" style={{ backgroundColor: AC_COLOR[sub] }} />
-                        <span className="text-gray-400 text-xs">{AC_LABEL[sub]}</span>
-                      </span>
-                    </td>
-                    <td className="px-4 py-1.5 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <input
-                          type="number"
-                          value={weights[sub]}
-                          readOnly
-                          disabled
-                          className="w-16 border border-gray-100 rounded px-2 py-1 text-right text-xs text-gray-400 bg-transparent cursor-not-allowed"
-                        />
-                        <span className="text-gray-300 text-xs">%</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-1.5">
-                      <div className="w-48 bg-gray-100 rounded-full h-1.5">
-                        <div
-                          className="h-1.5 rounded-full"
-                          style={{
-                            width:           `${Math.min(parseFloat(weights[sub]) || 0, 100)}%`,
-                            backgroundColor: AC_COLOR[sub],
-                            opacity:         0.55,
-                          }}
-                        />
-                      </div>
-                    </td>
-                  </tr>
-                ));
+          {/* ── Vertical divider ── */}
+          <div className="w-px self-stretch bg-gray-100" />
 
-                return [mainRow, ...subRows];
-              })}
-            </tbody>
-            <tfoot>
-              <tr className="border-t border-gray-200">
-                <td className="px-4 py-2 text-xs font-medium text-gray-500">Total</td>
-                <td className={`px-4 py-2 text-right text-sm font-semibold ${sumOk ? 'text-green-600' : 'text-red-600'}`}>
-                  {sum.toFixed(1)}%
-                </td>
-                <td className="px-4 py-2 text-xs text-gray-400">
-                  {sumOk ? '✓ sums to 100%' : 'Must sum to 100%'}
-                </td>
-              </tr>
-            </tfoot>
-          </table>
+          {/* ── Pie chart — fills remaining space, vertically centred ── */}
+          <div className="flex-1 flex flex-col items-center justify-center gap-2 py-6 px-8">
+            <WeightPie slices={targetPieSlices} size={200} />
+            <span className="text-xs text-gray-400">Target allocation</span>
+          </div>
         </div>
+
         {!sumOk && (
           <p className="text-xs text-red-600">
             Weights must sum to 100% (±0.1%). Adjust the values above, then click outside to apply.
