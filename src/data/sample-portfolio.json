@@ -1,34 +1,195 @@
 {
-  "_comment": "SYNTHETIC FIXTURE — no real balances. Values are from the §9 worked example.",
+  "_note": "SYNTHETIC FIXTURE — all values are fictional. Safe to commit. Load via ↑ Import in the app.",
+  "_scenario": [
+    "Five-account household ($1,035k total) that has drifted meaningfully after a two-year equity rally.",
+    "",
+    "Accounts",
+    "  schwab-taxable  Schwab Joint Taxable        TAXABLE           $260k",
+    "  fidelity-ira    Fidelity Trad IRA            TRADITIONAL_IRA   $275k positions + $15k newCash",
+    "  empower-401k    Empower 401k                 FOUR_OH_ONE_K     $390k  (no ALTERNATIVES allowed)",
+    "  fidelity-roth   Fidelity Roth IRA            ROTH_IRA          $80k   (concentrates ALTERNATIVES)",
+    "  fidelity-hsa    Fidelity HSA                 HSA               $15k",
+    "",
+    "Expected flags from the engine",
+    "  REVISIT_PLACEMENT   — taxable $260k / $1,035k = 25.1% > Fixed Income target 20%",
+    "  WITHIN_TOLERANCE    — Mid Cap, Small Cap, Developed Intl, Emerging Intl, Alternatives, Cash",
+    "  OOT / trades        — Large Cap ~+9 pp over target (equity rally); Fixed Income ~-7 pp under",
+    "",
+    "Features exercised",
+    "  Locked position      VOO in taxable (large unrealised gain — user doesn't want to sell)",
+    "  Locked position      IAU in Trad IRA (inherited; can't easily liquidate)",
+    "  Account restriction  Empower 401k has no ALTERNATIVES in its fund menu",
+    "  Concentrate          Roth IRA is first-priority for ALTERNATIVES placement",
+    "  Ticker override      RSP (Invesco Equal Weight S&P 500) → US_LARGE_CAP",
+    "  TDF decomposition    FDKLX (Fidelity Freedom Index 2060): 54% US equity / 37% Intl / 9% FI",
+    "  New cash             $15k IRA rollover contribution ready to deploy"
+  ],
+
+  "version": 1,
+
   "accounts": [
     {
       "id": "schwab-taxable",
-      "name": "Schwab Brokerage",
+      "name": "Schwab Joint Taxable",
       "institution": "Schwab",
       "type": "TAXABLE"
     },
     {
       "id": "fidelity-ira",
-      "name": "Fidelity Traditional IRA",
+      "name": "Fidelity Trad IRA",
       "institution": "Fidelity",
-      "type": "TRADITIONAL_IRA"
+      "type": "TRADITIONAL_IRA",
+      "newCash": 15000
     },
     {
       "id": "empower-401k",
       "name": "Empower 401k",
       "institution": "Empower",
-      "type": "FOUR_OH_ONE_K"
+      "type": "FOUR_OH_ONE_K",
+      "allowedAssetClasses": [
+        "US_LARGE_CAP", "US_MID_CAP", "US_SMALL_CAP",
+        "DEVELOPED_INTL", "EMERGING_INTL",
+        "FIXED_INCOME", "CASH"
+      ]
+    },
+    {
+      "id": "fidelity-roth",
+      "name": "Fidelity Roth IRA",
+      "institution": "Fidelity",
+      "type": "ROTH_IRA",
+      "concentrateClasses": ["ALTERNATIVES"]
+    },
+    {
+      "id": "fidelity-hsa",
+      "name": "Fidelity HSA",
+      "institution": "Fidelity",
+      "type": "HSA"
     }
   ],
+
   "positions": [
-    { "accountId": "schwab-taxable",  "ticker": "MUNY",  "marketValue": 190000, "price": 52.10 },
-    { "accountId": "schwab-taxable",  "ticker": "VMFXX", "marketValue": 10000 },
-    { "accountId": "fidelity-ira",    "ticker": "FZROX", "marketValue": 200000, "price": 18.34 },
-    { "accountId": "fidelity-ira",    "ticker": "FZILX", "marketValue": 60000,  "price": 12.85 },
-    { "accountId": "fidelity-ira",    "ticker": "FPADX", "marketValue": 25000,  "price": 10.72 },
-    { "accountId": "fidelity-ira",    "ticker": "GLD",   "marketValue": 15000,  "price": 227.50 },
-    { "accountId": "empower-401k",    "ticker": "FSKAX", "marketValue": 370000 },
-    { "accountId": "empower-401k",    "ticker": "VXUS",  "marketValue": 110000 },
-    { "accountId": "empower-401k",    "ticker": "VWO",   "marketValue": 20000 }
-  ]
+    {
+      "_account": "Schwab Joint Taxable — $260k",
+      "_note": "Muni bonds (FI) are correctly placed in taxable for tax-exempt income.",
+      "accountId": "schwab-taxable", "ticker": "MUNY",  "description": "VanEck Short Muni ETF",
+      "marketValue": 130000, "price": 52.10
+    },
+    {
+      "accountId": "schwab-taxable", "ticker": "VMFXX", "description": "Vanguard Federal Money Market",
+      "marketValue": 22000, "price": 1.00
+    },
+    {
+      "_note": "Equity that drifted in during a bull run. Locked — large unrealised long-term gain.",
+      "accountId": "schwab-taxable", "ticker": "VOO",   "description": "Vanguard S&P 500 ETF",
+      "marketValue": 100000, "price": 530.00,
+      "locked": true
+    },
+    {
+      "_note": "Not in built-in map — classified via tickerOverride below (US_LARGE_CAP).",
+      "accountId": "schwab-taxable", "ticker": "RSP",   "description": "Invesco Equal Weight S&P 500 ETF",
+      "marketValue": 8000, "price": 165.00
+    },
+
+    {
+      "_account": "Fidelity Trad IRA — $275k positions + $15k newCash",
+      "accountId": "fidelity-ira",   "ticker": "FZROX", "description": "Fidelity ZERO Total Market Index",
+      "marketValue": 200000, "price": 18.50
+    },
+    {
+      "accountId": "fidelity-ira",   "ticker": "FZILX", "description": "Fidelity ZERO International Index",
+      "marketValue": 55000, "price": 13.10
+    },
+    {
+      "accountId": "fidelity-ira",   "ticker": "FPADX", "description": "Fidelity Emerging Markets Index",
+      "marketValue": 13000, "price": 10.85
+    },
+    {
+      "_note": "Inherited position — locked pending estate review.",
+      "accountId": "fidelity-ira",   "ticker": "IAU",   "description": "iShares Gold Trust",
+      "marketValue": 7000, "price": 45.20,
+      "locked": true
+    },
+
+    {
+      "_account": "Empower 401k — $390k. allowedAssetClasses excludes ALTERNATIVES (standard fund menu).",
+      "accountId": "empower-401k",   "ticker": "FSKAX", "description": "Fidelity Total Market Index Fund",
+      "marketValue": 270000
+    },
+    {
+      "accountId": "empower-401k",   "ticker": "FITFX", "description": "Fidelity International Index Fund",
+      "marketValue": 88000, "price": 43.00
+    },
+    {
+      "accountId": "empower-401k",   "ticker": "FPADX", "description": "Fidelity Emerging Markets Index",
+      "marketValue": 27000, "price": 10.85
+    },
+    {
+      "_note": "Target-date fund — decomposed in 'decompositions' below. Engine treats it as locked.",
+      "accountId": "empower-401k",   "ticker": "FDKLX", "description": "Fidelity Freedom Index 2060",
+      "marketValue": 5000, "price": 24.80
+    },
+
+    {
+      "_account": "Fidelity Roth IRA — $80k. concentrateClasses: [ALTERNATIVES].",
+      "accountId": "fidelity-roth",  "ticker": "VOO",   "description": "Vanguard S&P 500 ETF",
+      "marketValue": 62000, "price": 530.00
+    },
+    {
+      "accountId": "fidelity-roth",  "ticker": "VEA",   "description": "Vanguard FTSE Developed Markets ETF",
+      "marketValue": 13000, "price": 50.80
+    },
+    {
+      "accountId": "fidelity-roth",  "ticker": "GLD",   "description": "SPDR Gold Shares",
+      "marketValue": 5000, "price": 230.00
+    },
+
+    {
+      "_account": "Fidelity HSA — $15k invested long-term.",
+      "accountId": "fidelity-hsa",   "ticker": "FZROX", "description": "Fidelity ZERO Total Market Index",
+      "marketValue": 12000, "price": 18.50
+    },
+    {
+      "accountId": "fidelity-hsa",   "ticker": "SPAXX", "description": "Fidelity Government Money Market",
+      "marketValue": 3000, "price": 1.00
+    }
+  ],
+
+  "strategy": {
+    "targets": {
+      "US_TOTAL_MARKET": 0.000,
+      "US_LARGE_CAP":    0.385,
+      "US_MID_CAP":      0.144,
+      "US_SMALL_CAP":    0.046,
+      "DEVELOPED_INTL":  0.170,
+      "EMERGING_INTL":   0.030,
+      "FIXED_INCOME":    0.200,
+      "ALTERNATIVES":    0.025,
+      "CASH":            0.000
+    },
+    "placement": {
+      "FIXED_INCOME":    ["TAXABLE"],
+      "ALTERNATIVES":    ["TAX_ADVANTAGED"],
+      "EMERGING_INTL":   ["TAX_ADVANTAGED", "TAXABLE"],
+      "DEVELOPED_INTL":  ["TAX_ADVANTAGED", "TAXABLE"],
+      "US_TOTAL_MARKET": ["TAX_ADVANTAGED", "TAXABLE"],
+      "US_LARGE_CAP":    ["TAX_ADVANTAGED", "TAXABLE"],
+      "US_MID_CAP":      ["TAX_ADVANTAGED", "TAXABLE"],
+      "US_SMALL_CAP":    ["TAX_ADVANTAGED", "TAXABLE"],
+      "CASH":            ["TAXABLE", "TAX_ADVANTAGED"]
+    },
+    "toleranceAbs": 0.05,
+    "minTradeUsd":  250
+  },
+
+  "tickerOverrides": {
+    "RSP": "US_LARGE_CAP"
+  },
+
+  "decompositions": {
+    "FDKLX": {
+      "US_TOTAL_MARKET": 0.54,
+      "DEVELOPED_INTL":  0.37,
+      "FIXED_INCOME":    0.09
+    }
+  }
 }
