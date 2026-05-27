@@ -127,6 +127,46 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentW
     color:  AC_COLOR[ac],
   }));
 
+  // Risk-profile score: growth assets vs defensive, derived from live weights.
+  const GROWTH_CLASSES = new Set<AssetClass>([
+    'US_TOTAL_MARKET', 'US_LARGE_CAP', 'US_MID_CAP', 'US_SMALL_CAP',
+    'DEVELOPED_INTL', 'EMERGING_INTL', 'ALTERNATIVES',
+  ]);
+  const growthPct    = ALL_ASSET_CLASSES
+    .filter(ac => GROWTH_CLASSES.has(ac))
+    .reduce((s, ac) => s + (parseFloat(weights[ac]) || 0), 0);
+  const defensivePct = Math.max(0, 100 - growthPct);
+
+  const { label: riskLabel, color: riskColor } = ((): { label: string; color: string } => {
+    if (growthPct < 25) return { label: 'Very Conservative',     color: 'text-sky-600'     };
+    if (growthPct < 45) return { label: 'Conservative',          color: 'text-sky-500'     };
+    if (growthPct < 65) return { label: 'Moderate',              color: 'text-emerald-600' };
+    if (growthPct < 80) return { label: 'Moderately Aggressive', color: 'text-amber-600'   };
+    if (growthPct < 95) return { label: 'Aggressive',            color: 'text-orange-500'  };
+    return               { label: 'Very Aggressive',             color: 'text-red-500'     };
+  })();
+
+  // Diversification score via Herfindahl-Hirschman Index (sum of squared weights).
+  // HHI = 1/N for a perfectly equal N-way split; HHI = 1.0 for a single holding.
+  const hhi = ALL_ASSET_CLASSES.reduce((s, ac) => {
+    const w = (parseFloat(weights[ac]) || 0) / 100;
+    return s + w * w;
+  }, 0);
+  // Gauge position: 0 = equal-weight across all 9 classes (HHI ≈ 0.111), 100 = all in one.
+  const concentrationScore = Math.round(
+    Math.max(0, Math.min(100, (hhi - 1 / 9) / (1 - 1 / 9) * 100)),
+  );
+  const activeClasses = ALL_ASSET_CLASSES.filter(ac => (parseFloat(weights[ac]) || 0) >= 0.5).length;
+  const maxWeight     = Math.max(...ALL_ASSET_CLASSES.map(ac => parseFloat(weights[ac]) || 0));
+
+  const { label: diversLabel, color: diversColor } = ((): { label: string; color: string } => {
+    if (hhi < 0.15) return { label: 'Well Diversified',        color: 'text-sky-600'     };
+    if (hhi < 0.25) return { label: 'Diversified',             color: 'text-emerald-600' };
+    if (hhi < 0.35) return { label: 'Mod. Concentrated',       color: 'text-amber-600'   };
+    if (hhi < 0.50) return { label: 'Concentrated',            color: 'text-orange-500'  };
+    return               { label: 'Highly Concentrated',       color: 'text-red-500'     };
+  })();
+
   // When linked, sub-classes appear as child rows under the composite — exclude from primary list.
   const primaryClasses = usEquityLinked
     ? ALL_ASSET_CLASSES.filter(ac => !US_CAP_SUBS.includes(ac))
@@ -308,10 +348,55 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentW
           {/* ── Vertical divider ── */}
           <div className="w-px self-stretch bg-gray-100" />
 
-          {/* ── Pie chart — fills remaining space, vertically centred ── */}
-          <div className="flex-1 flex flex-col items-center justify-center gap-2 py-6 px-8">
-            <WeightPie slices={targetPieSlices} size={200} />
-            <span className="text-xs text-gray-400">Target allocation</span>
+          {/* ── Pie chart + risk profile — fills remaining space, vertically centred ── */}
+          <div className="flex-1 flex flex-col items-center justify-center gap-5 py-6 px-8">
+
+            {/* Pie */}
+            <div className="flex flex-col items-center gap-2">
+              <span className="text-xs font-medium text-gray-500">Target allocation</span>
+              <WeightPie slices={targetPieSlices} size={200} />
+            </div>
+
+            {/* Risk-profile gauge */}
+            <div className="w-full max-w-[200px] space-y-1.5 pt-4 border-t border-gray-100">
+              <p className={`text-center text-xs font-semibold ${riskColor}`}>{riskLabel}</p>
+              <div className="relative h-2 rounded-full overflow-visible" style={{
+                background: 'linear-gradient(to right, #7dd3fc, #86efac, #fde68a, #fb923c, #f87171)',
+              }}>
+                <div
+                  className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-white border-2 border-gray-500 shadow-sm transition-all"
+                  style={{ left: `${Math.min(Math.max(growthPct, 2), 98)}%` }}
+                />
+              </div>
+              <div className="flex justify-between text-[10px] text-gray-300 leading-none">
+                <span>Conservative</span>
+                <span>Aggressive</span>
+              </div>
+              <p className="text-center text-[10px] text-gray-400 leading-none pt-0.5">
+                {growthPct.toFixed(0)}% growth · {defensivePct.toFixed(0)}% defensive
+              </p>
+            </div>
+
+            {/* Diversification gauge */}
+            <div className="w-full max-w-[200px] space-y-1.5 pt-4 border-t border-gray-100">
+              <p className={`text-center text-xs font-semibold ${diversColor}`}>{diversLabel}</p>
+              <div className="relative h-2 rounded-full overflow-visible" style={{
+                background: 'linear-gradient(to right, #f87171, #fb923c, #fde68a, #86efac)',
+              }}>
+                <div
+                  className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-white border-2 border-gray-500 shadow-sm transition-all"
+                  style={{ left: `${Math.min(Math.max(100 - concentrationScore, 2), 98)}%` }}
+                />
+              </div>
+              <div className="flex justify-between text-[10px] text-gray-300 leading-none">
+                <span>Concentrated</span>
+                <span>Diversified</span>
+              </div>
+              <p className="text-center text-[10px] text-gray-400 leading-none pt-0.5">
+                {activeClasses} of 9 classes · {maxWeight.toFixed(0)}% largest
+              </p>
+            </div>
+
           </div>
         </div>
 
