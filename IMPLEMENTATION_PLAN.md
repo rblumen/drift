@@ -4,6 +4,33 @@
 
 ---
 
+## Build Status (as of 2026-05-27)
+
+| Milestone | Status | Notes |
+|---|---|---|
+| M0 — Scaffold | ✅ Complete | Vite/React/TS/Tailwind/Vitest, CLAUDE.md, .gitignore, fixtures |
+| M1 — Engine | ✅ Complete | All engine modules + tests; extended with cap sub-classes, Russell split, redirectTaxableSells, resolve layer |
+| M2 — Ingest | ✅ Complete | All four adapters + zod schema + fixtures; Plaid stub in place |
+| M3 — UI | ✅ Complete | All five panels + extra chart/viz components (DonutChart, WeightPie, StackedBars, OverviewPanel) |
+| M4 — Persistence & polish | ✅ Complete | localStorage with 3-slot rolling backups, JSON export/import, freeCash, TDF decompositions |
+
+**Extensions beyond the original plan (shipped):**
+- US equity split into `US_LARGE_CAP` / `US_MID_CAP` / `US_SMALL_CAP` with automatic Russell-weight redistribution of `US_TOTAL_MARKET` holdings
+- `redirectTaxableSells()` — tax-aware trade shaping that swaps equity sells out of taxable into tax-advantaged accounts when possible
+- Per-account constraints: `locked`, `acceptsDeposits`, `concentrateClasses`, `allowedAssetClasses`, `availableTickers`
+- Per-position `locked` flag (freezes individual holdings)
+- `resolve.ts` — resolves engine trades to specific tickers for actionable output
+- Household-level `freeCash` for new cash that isn't yet attributed to a specific account
+- Target date fund decomposition map (`targetDateFunds.ts`) with automatic multi-class splitting
+- `EXCESS_CASH` and `NO_ELIGIBLE_ACCOUNT` flag types
+- `appStateSchema` v1 with forward-migration logic for schema changes
+
+**Next focus:** see `FEATURE_BACKLOG.md` for P0–P2 enhancements sourced from Bogleheads research.
+
+---
+
+---
+
 ## 1. What we're building
 
 A small, local, browser-based tool that ingests current investment positions from multiple accounts and institutions, classifies each holding into an asset class, compares the household's combined allocation against an editable target strategy, and produces concrete **buy/sell recommendations for each account**.
@@ -338,12 +365,12 @@ Five panels, all driven off engine output, everything editable (recompute on cha
 
 ## 12. Milestones (each = one branch, one review, one merge)
 
-- **M0 — Scaffold:** repo, tooling, Tailwind, `CLAUDE.md`, `.gitignore`, sample fixture. *(§4)*
-- **M1 — Engine:** types, default strategy, rollup, placement, rebalance, plus the §9 tests. Pure logic, no UI. This is the heart; get it green before any UI.
-- **M2 — Ingest:** manual + generic CSV + Schwab/Fidelity + Empower-totals adapters, normalized schema, fixtures.
-- **M3 — UI:** all five panels wired to the engine.
-- **M4 — Persistence & polish:** save/load setup via localStorage and JSON file export/import; surface flags; "sums to 100%" guard; alts-split extension point.
-- **Future:** Plaid adapter; optional cost-basis + realized-gain estimates; crypto/metals sub-targets.
+- ✅ **M0 — Scaffold:** repo, tooling, Tailwind, `CLAUDE.md`, `.gitignore`, sample fixture. *(§4)*
+- ✅ **M1 — Engine:** types, default strategy, rollup, placement, rebalance, plus the §9 tests. Pure logic, no UI. This is the heart; get it green before any UI.
+- ✅ **M2 — Ingest:** manual + generic CSV + Schwab/Fidelity + Empower-totals adapters, normalized schema, fixtures.
+- ✅ **M3 — UI:** all five panels wired to the engine.
+- ✅ **M4 — Persistence & polish:** save/load setup via localStorage and JSON file export/import; surface flags; "sums to 100%" guard; alts-split extension point.
+- **Future:** Plaid adapter; optional cost-basis + realized-gain estimates; crypto/metals sub-targets. See `FEATURE_BACKLOG.md` for full prioritized list.
 
 ---
 
