@@ -68,10 +68,12 @@ describe('base case — §9 worked example (greenfield $1M)', () => {
     expect(tradeFor(r.trades, 'schwab', 'FIXED_INCOME')?.deltaUsd).toBeCloseTo(200_000, 0);
   });
 
-  it('ALTERNATIVES splits IRA:401k at 300:500 ratio', () => {
+  it('ALTERNATIVES goes entirely to k401 (largest-capacity TA account, backlog #17)', () => {
+    // Concentrate-then-spill: k401 has the most TAX_ADVANTAGED capacity ($500k vs IRA $300k)
+    // so it absorbs all $25k of ALTERNATIVES before IRA is touched.
     const r = rebalance(BASE_ACCOUNTS, NO_POSITIONS, ZERO_TOL_STRATEGY);
-    expect(tradeFor(r.trades, 'ira',  'ALTERNATIVES')?.deltaUsd).toBeCloseTo(25_000 * (300 / 800), 0);
-    expect(tradeFor(r.trades, 'k401', 'ALTERNATIVES')?.deltaUsd).toBeCloseTo(25_000 * (500 / 800), 0);
+    expect(tradeFor(r.trades, 'k401', 'ALTERNATIVES')?.deltaUsd).toBeCloseTo(25_000, 0);
+    expect(tradeFor(r.trades, 'ira',  'ALTERNATIVES')).toBeUndefined();
   });
 
   it('schwab holds nothing except FIXED_INCOME (taxable is exactly full)', () => {
@@ -924,5 +926,193 @@ describe('step 7.7 — redirectTaxableSells', () => {
     // Projected weights must still match targets.
     expect(r.projectedWeights.US_LARGE_CAP).toBeCloseTo(0.6, 2);
     expect(r.projectedWeights.FIXED_INCOME).toBeCloseTo(0.4, 2);
+  });
+});
+
+// ─── backlog #17 — account-count minimization (concentrate-then-spill) ────────
+//
+// greedyPlace now fills the largest-capacity eligible account first, spilling to
+// additional accounts only when the first is exhausted.  Proportional spreading
+// across all same-bucket accounts is replaced by this "waterfall" logic.
+
+describe('account-count minimization — concentrate-then-spill (backlog #17)', () => {
+  // ── single-account fill ────────────────────────────────────────────────────
+  // 401k ($500k) and IRA ($300k) are both TAX_ADVANTAGED.  ALTERNATIVES target
+  // is $25k — easily fits inside either account alone.  The engine should send
+  // it entirely to the larger account (401k) and leave IRA untouched for ALTS.
+  it('small ALTERNATIVES sleeve fits in one account — IRA receives no ALTS', () => {
+    const r = rebalance(BASE_ACCOUNTS, NO_POSITIONS, ZERO_TOL_STRATEGY);
+    expect(tradeFor(r.trades, 'k401', 'ALTERNATIVES')?.deltaUsd).toBeCloseTo(25_000, 0);
+    expect(tradeFor(r.trades, 'ira',  'ALTERNATIVES')).toBeUndefined();
+  });
+
+  // ── per-account balance still preserved ───────────────────────────────────
+  it('account totals still match newCash after concentrate-then-spill', () => {
+    const r = rebalance(BASE_ACCOUNTS, NO_POSITIONS, ZERO_TOL_STRATEGY);
+    expect(near(accountSum(r.trades, 'schwab'), 200_000)).toBe(true);
+    expect(near(accountSum(r.trades, 'ira'),    300_000)).toBe(true);
+    expect(near(accountSum(r.trades, 'k401'),   500_000)).toBe(true);
+  });
+
+  // ── spill fires when single account is insufficient ────────────────────────
+  // US_LARGE_CAP target ($385k) > 401k remaining capacity after prior fills,
+  // so it spills to IRA.  Verify that the two accounts together receive the
+  // full LC target and the capacity invariant holds.
+  it('US_LARGE_CAP spills to IRA after k401 is partially filled', () => {
+    const r = rebalance(BASE_ACCOUNTS, NO_POSITIONS, ZERO_TOL_STRATEGY);
+    const k401Lc = tradeFor(r.trades, 'k401', 'US_LARGE_CAP')?.deltaUsd ?? 0;
+    const iraLc  = tradeFor(r.trades, 'ira',  'US_LARGE_CAP')?.deltaUsd ?? 0;
+    // Combined LC allocation must equal the target ($385k scaled to free capacity).
+    // (greenfield ⇒ scale = 1, total = $385k)
+    expect(near(k401Lc + iraLc, 385_000, 2)).toBe(true);
+    // IRA receives the larger LC share: by the time LC is placed, k401 has already
+    // absorbed ALTS + EMINTL + DEVINTL ($225k), leaving it with $275k — less than
+    // IRA's untouched $300k — so IRA is filled first and gets the bulk of LC.
+    expect(iraLc).toBeGreaterThan(k401Lc);
+  });
+
+  // ── three TA accounts — fills cascade from largest to smallest ────────────
+  it('three TA accounts: ALTS fills largest first, never touches smallest', () => {
+    const accounts: Account[] = [
+      { id: 'schwab', name: 'Schwab',  institution: 'Schwab',   type: 'TAXABLE',         newCash: 200_000 },
+      { id: 'big',    name: 'Big IRA', institution: 'Fidelity', type: 'TRADITIONAL_IRA', newCash: 600_000 },
+      { id: 'mid',    name: 'Mid 401', institution: 'Empower',  type: 'FOUR_OH_ONE_K',   newCash: 150_000 },
+      { id: 'tiny',   name: 'Tiny Roth', institution: 'Fidelity', type: 'ROTH_IRA',       newCash:  50_000 },
+    ];
+    // ALTS target = 2.5% × $1M = $25k.  big IRA ($600k) absorbs it all.
+    const r = rebalance(accounts, NO_POSITIONS, ZERO_TOL_STRATEGY);
+    expect(tradeFor(r.trades, 'big',  'ALTERNATIVES')?.deltaUsd).toBeCloseTo(25_000, 0);
+    expect(tradeFor(r.trades, 'mid',  'ALTERNATIVES')).toBeUndefined();
+    expect(tradeFor(r.trades, 'tiny', 'ALTERNATIVES')).toBeUndefined();
+    // Balance invariants.
+    expect(near(accountSum(r.trades, 'big'),  600_000)).toBe(true);
+    expect(near(accountSum(r.trades, 'mid'),  150_000)).toBe(true);
+    expect(near(accountSum(r.trades, 'tiny'),  50_000)).toBe(true);
+  });
+
+  // ── concentrateClasses accounts still get priority within their group ──────
+  // This verifies that the existing concentrateClasses feature interacts
+  // correctly with the new concentrate-then-spill logic: a designated account
+  // still wins even if a larger non-designated account exists.
+  it('concentrateClasses account takes ALTS before a larger plain account', () => {
+    const accounts: Account[] = [
+      { id: 'schwab', name: 'Schwab',       institution: 'Schwab',   type: 'TAXABLE',         newCash: 200_000 },
+      { id: 'big',    name: 'Big IRA',      institution: 'Fidelity', type: 'TRADITIONAL_IRA', newCash: 700_000 },
+      { id: 'roth',   name: 'Roth IRA',     institution: 'Fidelity', type: 'ROTH_IRA',         newCash: 100_000,
+        concentrateClasses: ['ALTERNATIVES'] as AssetClass[] },
+    ];
+    // ALTS target = $25k.  Roth (smaller, $100k) is the concentrate account and
+    // wins over big IRA ($700k).
+    const r = rebalance(accounts, NO_POSITIONS, ZERO_TOL_STRATEGY);
+    expect(tradeFor(r.trades, 'roth', 'ALTERNATIVES')?.deltaUsd).toBeCloseTo(25_000, 0);
+    expect(tradeFor(r.trades, 'big',  'ALTERNATIVES')).toBeUndefined();
+    // Balance invariants.
+    expect(near(accountSum(r.trades, 'big'),  700_000)).toBe(true);
+    expect(near(accountSum(r.trades, 'roth'), 100_000)).toBe(true);
+  });
+});
+
+// ─── backlog #16 — trade-count minimization (post-placement consolidation) ────
+//
+// After all trades are balanced, the engine greedily drops small trades whose
+// removal (plus a compensating adjustment to the opposite-sign partner trade in
+// the same account) keeps every asset-class projected weight within toleranceAbs.
+
+describe('trade-count minimization — drop marginal trades (backlog #16)', () => {
+  // ── small-account pair collapses when both classes stay within tolerance ───
+  //
+  // Portfolio:
+  //   A1 (TAX_ADVANTAGED, $900k): LC $780k, FI $120k
+  //   A2 (TAX_ADVANTAGED, $100k): LC $80k,  FI $20k
+  //   Household $1M. Target: LC 70%, FI 30%. toleranceAbs = 5%.
+  //
+  // Trades before minimization:
+  //   A1: sell LC $100k, buy FI $100k        (needed — 8% drift)
+  //   A2: sell LC $10k,  buy FI $10k         (marginal)
+  //
+  // Dropping A2 buy FI (+$10k) → projected FI = 31% (within 5% of 30%).
+  //   Compensation: shrink A2 sell LC from -$10k to $0 → projected LC = 69% (within 5%).
+  // Both checks pass → both A2 trades are eliminated.
+
+  const A1A2_ACCOUNTS: Account[] = [
+    { id: 'a1', name: 'A1', institution: 'Fidelity', type: 'TRADITIONAL_IRA' },
+    { id: 'a2', name: 'A2', institution: 'Fidelity', type: 'ROTH_IRA'        },
+  ];
+  const A1A2_POSITIONS: Position[] = [
+    { accountId: 'a1', ticker: 'FXAIX', marketValue: 780_000 },  // US_LARGE_CAP
+    { accountId: 'a1', ticker: 'MUNY',  marketValue: 120_000 },  // FIXED_INCOME
+    { accountId: 'a2', ticker: 'FXAIX', marketValue:  80_000 },  // US_LARGE_CAP
+    { accountId: 'a2', ticker: 'MUNY',  marketValue:  20_000 },  // FIXED_INCOME
+  ];
+  const LC70_FI30_STRATEGY = {
+    ...DEFAULT_STRATEGY,
+    targets: {
+      US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.7, US_MID_CAP: 0, US_SMALL_CAP: 0,
+      DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0.3, ALTERNATIVES: 0, CASH: 0,
+    },
+    toleranceAbs: 0.05,  // 5% band — both A2 trades end up within it after compensation
+    minTradeUsd: 0,
+  };
+
+  it('A2 trades are eliminated when both classes stay within 5% tolerance', () => {
+    const r = rebalance(A1A2_ACCOUNTS, A1A2_POSITIONS, LC70_FI30_STRATEGY);
+    // A2's small trades should be gone.
+    expect(r.trades.filter(t => t.accountId === 'a2')).toHaveLength(0);
+  });
+
+  it('A1 trades survive (large correction still required)', () => {
+    const r = rebalance(A1A2_ACCOUNTS, A1A2_POSITIONS, LC70_FI30_STRATEGY);
+    expect(tradeFor(r.trades, 'a1', 'US_LARGE_CAP')).toBeDefined();
+    expect(tradeFor(r.trades, 'a1', 'FIXED_INCOME')).toBeDefined();
+  });
+
+  it('projected weights stay within toleranceAbs after minimization', () => {
+    const r = rebalance(A1A2_ACCOUNTS, A1A2_POSITIONS, LC70_FI30_STRATEGY);
+    expect(Math.abs(r.projectedWeights.US_LARGE_CAP - 0.7)).toBeLessThanOrEqual(0.05 + 0.001);
+    expect(Math.abs(r.projectedWeights.FIXED_INCOME  - 0.3)).toBeLessThanOrEqual(0.05 + 0.001);
+  });
+
+  it('per-account net = 0 after minimization (no new cash)', () => {
+    const r = rebalance(A1A2_ACCOUNTS, A1A2_POSITIONS, LC70_FI30_STRATEGY);
+    expect(near(accountSum(r.trades, 'a1'), 0, 1)).toBe(true);
+    expect(near(accountSum(r.trades, 'a2'), 0, 1)).toBe(true);
+  });
+
+  // ── zero-tolerance disables minimization ──────────────────────────────────
+  // With toleranceAbs = 0 every trade is needed to hit exact targets.
+  it('does NOT drop trades when toleranceAbs = 0', () => {
+    const strictStrategy = { ...LC70_FI30_STRATEGY, toleranceAbs: 0 };
+    const r = rebalance(A1A2_ACCOUNTS, A1A2_POSITIONS, strictStrategy);
+    // Both accounts should still have trades (A2 has $10k drift that must be corrected).
+    expect(r.trades.filter(t => t.accountId === 'a2').length).toBeGreaterThan(0);
+  });
+
+  // ── trade too large to drop stays ─────────────────────────────────────────
+  // If dropping a trade would push projected weight beyond toleranceAbs, it must
+  // be kept regardless of its size.
+  it('does NOT drop A1 trades — removal would breach tolerance', () => {
+    const r = rebalance(A1A2_ACCOUNTS, A1A2_POSITIONS, LC70_FI30_STRATEGY);
+    // A1 has $100k sell of LC ($780k→$700k target). Without it, LC projected ≈ 78%,
+    // which is 8% away from the 70% target — outside the 5% band.
+    const a1LcSell = tradeFor(r.trades, 'a1', 'US_LARGE_CAP');
+    expect(a1LcSell).toBeDefined();
+    expect(Math.abs(a1LcSell!.deltaUsd)).toBeGreaterThan(50_000);
+  });
+
+  // ── no compensating trade → cannot drop ───────────────────────────────────
+  // When all trades in an account have the same sign (pure contribution deployment),
+  // there is nothing to compensate with so no trade can be dropped.
+  it('does not drop trades when the account has no opposite-sign partner', () => {
+    // Greenfield: all trades are buys (deploying newCash).  Nothing can be dropped.
+    const accounts: Account[] = [
+      { id: 'ira',  name: 'IRA',  institution: 'Fidelity', type: 'TRADITIONAL_IRA', newCash: 800_000 },
+      { id: 'tiny', name: 'Tiny', institution: 'Fidelity', type: 'ROTH_IRA',         newCash:  10_000 },
+    ];
+    const r = rebalance(accounts, NO_POSITIONS, { ...LC70_FI30_STRATEGY, toleranceAbs: 0.05 });
+    // Tiny account still receives at least one trade (its newCash must go somewhere).
+    expect(r.trades.filter(t => t.accountId === 'tiny').length).toBeGreaterThan(0);
+    // All account nets equal newCash (no dropped-trade imbalance).
+    expect(near(accountSum(r.trades, 'ira'),  800_000, 10)).toBe(true);
+    expect(near(accountSum(r.trades, 'tiny'),  10_000, 10)).toBe(true);
   });
 });

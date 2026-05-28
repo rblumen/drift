@@ -36,20 +36,30 @@ function partition<T>(arr: T[], pred: (x: T) => boolean): [T[], T[]] {
   return [yes, no];
 }
 
-// Distributes `toPlace` dollars across `eligible` accounts proportionally to
-// each account's remaining capacity. Mutates remainingCapacity and targetLocation.
-function distributeProportional(
+// Distributes `toPlace` dollars across `eligible` accounts using a
+// concentrate-then-spill strategy: fills the largest-capacity account first,
+// then spills the remainder to the next-largest, and so on.  This minimises
+// the number of accounts touched per asset class (backlog #17).
+// Mutates remainingCapacity and targetLocation.
+function distributeConcentrate(
   eligible: Account[],
   toPlace: number,
-  totalCap: number,
   assetClass: AssetClass,
   remainingCapacity: Record<string, number>,
   targetLocation: Record<string, Record<AssetClass, number>>,
 ): void {
-  for (const acct of eligible) {
-    const share = (remainingCapacity[acct.id] / totalCap) * toPlace;
-    targetLocation[acct.id][assetClass] += share;
-    remainingCapacity[acct.id] -= share;
+  // Sort largest-capacity first so the single-account path is taken whenever
+  // one account can absorb the entire need.
+  const sorted = [...eligible].sort(
+    (a, b) => remainingCapacity[b.id] - remainingCapacity[a.id],
+  );
+  let remaining = toPlace;
+  for (const acct of sorted) {
+    if (remaining <= EPSILON) break;
+    const take = Math.min(remaining, remainingCapacity[acct.id]);
+    targetLocation[acct.id][assetClass] += take;
+    remainingCapacity[acct.id] -= take;
+    remaining -= take;
   }
 }
 
@@ -104,7 +114,7 @@ export function greedyPlace(
         const cap = group.reduce((s, a) => s + remainingCapacity[a.id], 0);
         if (cap <= EPSILON) continue;
         const toPlace = Math.min(remainingNeed[ac], cap);
-        distributeProportional(group, toPlace, cap, ac, remainingCapacity, targetLocation);
+        distributeConcentrate(group, toPlace, ac, remainingCapacity, targetLocation);
         remainingNeed[ac] -= toPlace;
         placed += toPlace;
       }
@@ -127,7 +137,8 @@ export function greedyPlace(
       }
 
       // Track spill per destination bucket for flags.
-      // Fill concentrated accounts first, then the rest.
+      // Fill concentrated accounts first, then the rest — largest-capacity first
+      // within each group (concentrate-then-spill, backlog #17).
       const spillByBucket = new Map<PlacementBucket, number>();
       const [concSpill, restSpill] = partition(anyEligible, a => !!a.concentrateClasses?.includes(ac));
       for (const group of [concSpill, restSpill]) {
@@ -135,12 +146,16 @@ export function greedyPlace(
         const cap = group.reduce((s, a) => s + remainingCapacity[a.id], 0);
         if (cap <= EPSILON) continue;
         const toPlace = Math.min(remainingNeed[ac], cap);
-        for (const acct of group) {
-          const share = (remainingCapacity[acct.id] / cap) * toPlace;
-          targetLocation[acct.id][ac] += share;
-          remainingCapacity[acct.id] -= share;
+        const sorted = [...group].sort((a, b) => remainingCapacity[b.id] - remainingCapacity[a.id]);
+        let remaining = toPlace;
+        for (const acct of sorted) {
+          if (remaining <= EPSILON) break;
+          const take = Math.min(remaining, remainingCapacity[acct.id]);
+          targetLocation[acct.id][ac] += take;
+          remainingCapacity[acct.id] -= take;
           const bkt = accountBucket(acct.type);
-          spillByBucket.set(bkt, (spillByBucket.get(bkt) ?? 0) + share);
+          spillByBucket.set(bkt, (spillByBucket.get(bkt) ?? 0) + take);
+          remaining -= take;
         }
         remainingNeed[ac] -= toPlace;
       }

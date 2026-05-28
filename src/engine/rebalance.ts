@@ -370,6 +370,84 @@ export function rebalance(
     }
   }
 
+  // Step 8.6 — Trade-count minimization (backlog #16).
+  //
+  // After balance correction, greedily drop the smallest remaining trades whose
+  // removal keeps all projected weights within toleranceAbs.  When a trade is
+  // dropped, the per-account net invariant is restored by shrinking the largest
+  // opposite-sign trade in the same account by the same amount (the "comp"
+  // trade).  Both the dropped class and the comp class are checked against
+  // toleranceAbs before committing.  The loop repeats until no more trades can
+  // be dropped (convergence is guaranteed because the trade list strictly shrinks
+  // each successful iteration).
+  //
+  // Only runs when toleranceAbs > 0 — with zero tolerance every trade is needed
+  // to hit the exact target weights.
+  if (strategy.toleranceAbs > 0 && trades.length > 0) {
+    // Build projected-value map: currentValue + sum of all kept trade deltas.
+    const projVal: Record<AssetClass, number> = {} as Record<AssetClass, number>;
+    for (const ac of ALL_ASSET_CLASSES) projVal[ac] = currentValue[ac];
+    for (const t of trades) projVal[t.assetClass] += t.deltaUsd;
+
+    let changed = true;
+    while (changed) {
+      changed = false;
+      // Process smallest trades first — most likely to be droppable.
+      trades.sort((a, b) => Math.abs(a.deltaUsd) - Math.abs(b.deltaUsd));
+
+      for (let i = 0; i < trades.length; i++) {
+        const t = trades[i];
+
+        // Would dropping t push t's class out of tolerance?
+        const newProjAC = projVal[t.assetClass] - t.deltaUsd;
+        if (
+          Math.abs(newProjAC / householdValue - strategy.targets[t.assetClass]) >
+          strategy.toleranceAbs
+        ) continue;
+
+        // Find the largest opposite-sign trade in the same account to absorb the
+        // balance gap left by removing t.
+        const compCandidates = trades
+          .filter((c, j) => j !== i && c.accountId === t.accountId &&
+            Math.sign(c.deltaUsd) === -Math.sign(t.deltaUsd))
+          .sort((a, b) => Math.abs(b.deltaUsd) - Math.abs(a.deltaUsd));
+
+        if (compCandidates.length === 0) continue; // Nothing to compensate with.
+
+        const comp = compCandidates[0];
+        // comp.deltaUsd + t.deltaUsd: shrinks comp toward zero (opposite signs).
+        const compNewDelta = comp.deltaUsd + t.deltaUsd;
+
+        // Skip if the adjusted comp would fall in the minTradeUsd dead zone.
+        if (
+          Math.abs(compNewDelta) > EPSILON &&
+          Math.abs(compNewDelta) < strategy.minTradeUsd
+        ) continue;
+
+        // Would adjusting comp push its class out of tolerance?
+        // Adjusting comp by t.deltaUsd shifts projected[comp.assetClass] by t.deltaUsd.
+        const newProjComp = projVal[comp.assetClass] + t.deltaUsd;
+        if (
+          Math.abs(newProjComp / householdValue - strategy.targets[comp.assetClass]) >
+          strategy.toleranceAbs
+        ) continue;
+
+        // Commit the drop.
+        projVal[t.assetClass]    -= t.deltaUsd;
+        projVal[comp.assetClass] += t.deltaUsd;
+        trades.splice(i, 1); // remove t
+        const compIdx = trades.indexOf(comp);
+        if (Math.abs(compNewDelta) <= EPSILON) {
+          trades.splice(compIdx, 1); // comp also cancels out entirely
+        } else {
+          trades[compIdx] = { ...comp, deltaUsd: compNewDelta };
+        }
+        changed = true;
+        break; // Restart with the updated list and projVal.
+      }
+    }
+  }
+
   // Generate TAXABLE_SALE flags from the corrected trade list.
   for (const trade of trades) {
     if (trade.deltaUsd < 0 && trade.inTaxableAccount) {
