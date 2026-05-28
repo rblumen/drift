@@ -4,3 +4,4 @@ dist
 .env.*
 /private/
 *.local.json
+*.html

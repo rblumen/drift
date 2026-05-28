@@ -57,6 +57,13 @@ function redirectTaxableSells(
           if (toRedirect <= EPSILON) break;
           if (Y === ac) continue;
 
+          // For TAXABLE-preferred classes (e.g. FIXED_INCOME), only allow as Y when
+          // A already has a greedyPlace allocation for Y. That means FI was already
+          // being put in A as a spillover — extending it is acceptable. Creating a
+          // brand-new FI-in-TA position would silently undo the placement intent.
+          const yPrefBucket = (strategy.placement[Y] ?? ['TAX_ADVANTAGED', 'TAXABLE'])[0];
+          if (yPrefBucket !== 'TAX_ADVANTAGED' && targetLocation[A.id][Y] <= EPSILON) continue;
+
           // Re-read live value — earlier Y iterations may have reduced it.
           const aAbsorbNow = targetLocation[A.id][ac];
           if (aAbsorbNow <= EPSILON) break; // A is exhausted for this ac

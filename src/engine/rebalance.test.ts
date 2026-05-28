@@ -843,6 +843,57 @@ describe('step 7.7 — redirectTaxableSells', () => {
     expect(fiSaleFlag).toBeDefined();
   });
 
+  // ── TAXABLE-preferred class must not be used as compensating Y ───────────────
+  // Setup: taxable holds LC (overweight) + FI; 401k holds LC + FI.
+  // FI target is 60% — greedyPlace routes all $180k FI to taxable (fits within
+  // the $200k taxable capacity). The taxable LC surplus ($130k) would—without the
+  // guard—be redirected using FI as the compensating Y class, pushing $100k of FI
+  // into the 401k and leaving taxable with only $30k of FI. The guard must prevent
+  // FI from ever being used as Y because its primary placement preference is TAXABLE.
+  it('FI-as-Y guard: FIXED_INCOME never used as redirect compensator', () => {
+    const accts: Account[] = [
+      { id: 'taxable', name: 'Schwab', institution: 'Schwab', type: 'TAXABLE' },
+      { id: 'k401',    name: '401k',   institution: 'Empower', type: 'FOUR_OH_ONE_K',
+        allowedAssetClasses: ['US_LARGE_CAP', 'FIXED_INCOME'] as AssetClass[] },
+    ];
+    const positions: Position[] = [
+      { accountId: 'taxable', ticker: 'FXAIX', marketValue: 150_000 }, // US_LARGE_CAP
+      { accountId: 'taxable', ticker: 'MUNY',  marketValue:  50_000 }, // FIXED_INCOME
+      { accountId: 'k401',    ticker: 'FXAIX', marketValue:  50_000 }, // US_LARGE_CAP
+      { accountId: 'k401',    ticker: 'FXNAX', marketValue:  50_000 }, // FIXED_INCOME
+    ];
+    // Total $300k. Target: 40% LC ($120k), 60% FI ($180k).
+    // Placement: FI → TAXABLE only; LC → TAX_ADVANTAGED first.
+    const strategy = {
+      ...DEFAULT_STRATEGY,
+      targets: {
+        US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.4, US_MID_CAP: 0, US_SMALL_CAP: 0,
+        DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0.6, ALTERNATIVES: 0, CASH: 0,
+      },
+      toleranceAbs: 0,
+      minTradeUsd: 0,
+    };
+    const r = rebalance(accts, positions, strategy);
+
+    // FI buy must land in taxable — not in the 401k.
+    const taxableFiBuy = tradeFor(r.trades, 'taxable', 'FIXED_INCOME');
+    expect(taxableFiBuy).toBeDefined();
+    expect(taxableFiBuy!.deltaUsd).toBeGreaterThan(0);
+
+    // 401k must not buy FI. It may sell its existing position (delta < 0) or have no trade.
+    // A positive delta means FI was incorrectly swapped into the 401k as compensating Y.
+    const k401FiTrade = tradeFor(r.trades, 'k401', 'FIXED_INCOME');
+    expect(k401FiTrade?.deltaUsd ?? -1).toBeLessThan(0);
+
+    // Projected weights must still reach targets despite the constrained redirect.
+    expect(r.projectedWeights.FIXED_INCOME).toBeCloseTo(0.6, 2);
+    expect(r.projectedWeights.US_LARGE_CAP).toBeCloseTo(0.4, 2);
+
+    // Per-account net = 0 (no new cash).
+    expect(near(accountSum(r.trades, 'taxable'), 0, 2)).toBe(true);
+    expect(near(accountSum(r.trades, 'k401'),    0, 2)).toBe(true);
+  });
+
   // ── invariants survive redirect ───────────────────────────────────────────────
   it('multi-account net-zero preserved across all accounts after redirect', () => {
     const accounts: Account[] = [
