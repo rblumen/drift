@@ -62,25 +62,9 @@ Trigger when: a sell in a taxable account AND a buy of the same asset class occu
 
 ---
 
-### 6. Dynamic PLACEMENT_ORDER from Strategy Constraints
-
-**What:** `placement.ts` hardcodes `PLACEMENT_ORDER` — a static array that fixes which asset class is processed first during greedy placement. PRINCIPLES.md states "Most-constrained classes (fewest eligible bucket options) are placed first," but this ordering is not derived from `strategy.placement` at runtime. If a user customizes placement to change constraint counts (e.g., giving `FIXED_INCOME` two bucket options), the processing order will not reflect the actual constraint landscape; the stated principle is only honored for the default strategy.
-
-**Gap vs. plan:** Remove the hardcoded `PLACEMENT_ORDER` constant in `src/engine/placement.ts`. At the top of `greedyPlace`, derive sort order dynamically:
-
-```ts
-const sortedClasses = ALL_ASSET_CLASSES
-  .slice()
-  .sort((a, b) => (strategy.placement[a]?.length ?? 2) - (strategy.placement[b]?.length ?? 2));
-```
-
-Use `sortedClasses` in place of `PLACEMENT_ORDER` for the iteration in Pass 1 and Pass 2. Backward-compatible: the default strategy's constraint counts already match the existing static order, so tests pass unchanged.
-
----
-
 ## P1 — High-Value Enhancements (v2 scope)
 
-### 7. Tax-Adjusted Asset Allocation Mode
+### 6. Tax-Adjusted Asset Allocation Mode
 
 **What:** Equal dollar amounts across account types have different after-tax values. The Bogleheads wiki ("Tax-adjusted asset allocation") describes:
 
@@ -104,7 +88,7 @@ When enabled, scale each account's market value before running the allocation en
 
 ---
 
-### 8. HSA as a Distinct Tier ("Triple-Tax-Advantaged")
+### 7. HSA as a Distinct Tier ("Triple-Tax-Advantaged")
 
 **What:** The HSA is triple-tax-advantaged (contributions pre-tax, growth untaxed, withdrawals tax-free for qualified medical). Many Bogleheads treat it as the best account type in the hierarchy and prioritize filling it with the most tax-inefficient assets (e.g., bonds or REITs).
 
@@ -112,7 +96,7 @@ When enabled, scale each account's market value before running the allocation en
 
 ---
 
-### 9. Institution-Aware Fund Recommendations
+### 8. Institution-Aware Fund Recommendations
 
 **What:** The engine currently recommends "buy $X of US_TOTAL_MARKET in your Fidelity IRA." Bogleheads consistently map asset classes to specific low-cost index funds by institution. A ticker suggestion layer would make recommendations immediately actionable:
 
@@ -128,7 +112,7 @@ When enabled, scale each account's market value before running the allocation en
 
 ---
 
-### 10. Dividend / Distribution Directed Rebalancing Mode
+### 9. Dividend / Distribution Directed Rebalancing Mode
 
 **What:** Instead of selling to rebalance, many Bogleheads redirect dividends and capital gain distributions to underweight asset classes. This avoids triggering taxable events entirely.
 
@@ -136,7 +120,7 @@ When enabled, scale each account's market value before running the allocation en
 
 ---
 
-### 11. RMD-Aware Rebalancing Input
+### 10. RMD-Aware Rebalancing Input
 
 **What:** Required Minimum Distributions from Traditional IRA and 401k accounts force annual withdrawals once the account holder reaches RMD age. These mandatory outflows can be used strategically to rebalance by choosing which asset class to sell when satisfying the RMD.
 
@@ -146,7 +130,7 @@ When enabled, scale each account's market value before running the allocation en
 
 ## P2 — Longer-Term / Nice-to-Have
 
-### 12. Glide Path / Scheduled Target Drift
+### 11. Glide Path / Scheduled Target Drift
 
 **What:** A glide path gradually shifts the target allocation over time — typically reducing equity exposure as the investor approaches and enters retirement. Bogleheads debate the "to vs. through" retirement glide path and the counterintuitive "rising equity glidepath" in early retirement (to combat sequence-of-returns risk).
 
@@ -160,7 +144,7 @@ The UI's Strategy panel would show where the user's current targets stand relati
 
 ---
 
-### 13. Spouse / Joint Household Account Grouping
+### 12. Spouse / Joint Household Account Grouping
 
 **What:** Many households manage accounts for multiple people (spouses, partners). Bogleheads note that wash-sale rules apply across spouse accounts, and some couples prefer to track which accounts "belong" to whom for estate planning purposes, even while rebalancing at the household level.
 
@@ -168,7 +152,7 @@ The UI's Strategy panel would show where the user's current targets stand relati
 
 ---
 
-### 14. Retirement Drawdown / Spending Mode
+### 13. Retirement Drawdown / Spending Mode
 
 **What:** Once in retirement, the user is spending from the portfolio rather than contributing. The tool should support a "drawdown mode" where the user enters annual spending needs and the engine recommends which accounts and asset classes to liquidate to fund expenses while maintaining the target allocation.
 
@@ -176,18 +160,18 @@ The UI's Strategy panel would show where the user's current targets stand relati
 
 ---
 
-### 15. Multi-Snapshot Drift History
+### 14. Multi-Snapshot Drift History
 
 **What:** The current tool is a one-shot calculator. Bogleheads who rebalance on a calendar (annual, semiannual) would benefit from seeing how their allocation has drifted across multiple saved snapshots — to understand whether drift is accelerating, which asset classes trend overweight, and whether their tolerance bands have been breached.
 
 **Suggested feature:** Save each rebalance run to localStorage (or a JSON export) and display a simple allocation-over-time chart in the Results panel. This builds naturally on the M4 persistence milestone.
 
-### 16. Aggressive/Diversification plot in Results
+### 15. Aggressive/Diversification plot in Results
 Add a simple 2d plot to the Household Allocation card of the "Results" pane showing points for before/after in conservative/aggressive and concentrated/diversified space, with a vector between them to show the impact of the rebalance.
 
 ---
 
-### 17. Trade-Count Minimization (PRINCIPLES.md goal #10)
+### 16. Trade-Count Minimization (PRINCIPLES.md goal #10)
 
 **What:** The greedy proportional fill currently spreads trades across all eligible accounts, often generating small buy/sell pairs in every account. The engine should prefer solutions that hit the household target with fewer discrete trades.
 
@@ -195,7 +179,7 @@ Add a simple 2d plot to the Household Allocation card of the "Results" pane show
 
 ---
 
-### 18. Account-Count Minimization (PRINCIPLES.md goal #11)
+### 17. Account-Count Minimization (PRINCIPLES.md goal #11)
 
 **What:** Related to #16 — when the allocation target can be met by touching fewer accounts, the simpler plan is preferable. For example, if drift in one asset class can be corrected entirely within a single tax-advantaged account, the engine should prefer that over splitting the correction across three accounts.
 
