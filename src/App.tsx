@@ -15,6 +15,8 @@ import {
   buildState, clearState, DEFAULT_APP_STATE, exportJson, importJson,
   loadState, saveState, saveBackup,
 } from './store';
+import { appStateSchema } from './ingest/schema';
+import SAMPLE_PORTFOLIO from './data/sample-portfolio.json';
 
 type Tab = 'overview' | 'accounts' | 'import' | 'classify' | 'strategy' | 'results';
 
@@ -27,10 +29,19 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'results',  label: 'Results' },
 ];
 
+// Demo mode: ?demo in the URL → load sample portfolio instead of localStorage.
+// The param is stripped from the URL immediately so a page refresh doesn't re-trigger.
+const _demoRequested = new URLSearchParams(window.location.search).has('demo');
+const _demoParsed    = _demoRequested ? appStateSchema.safeParse(SAMPLE_PORTFOLIO) : null;
+const _isDemoInit    = _demoParsed?.success === true;
+if (_isDemoInit) window.history.replaceState({}, '', window.location.pathname);
+
 // Initialise from localStorage (or defaults if nothing saved / schema mismatch).
 // loadState() falls back to the most-recent valid backup automatically.
-const loadResult = loadState();
-const saved = loadResult?.state ?? DEFAULT_APP_STATE;
+const loadResult = _isDemoInit ? null : loadState();
+const saved = (_isDemoInit && _demoParsed?.success)
+  ? _demoParsed.data
+  : (loadResult?.state ?? DEFAULT_APP_STATE);
 
 export default function App() {
   const [accounts,         setAccounts]         = useState<Account[]>(saved.accounts);
@@ -41,6 +52,7 @@ export default function App() {
   const [freeCash,         setFreeCash]         = useState<number>(saved.freeCash ?? 0);
   const [activeTab,        setActiveTab]        = useState<Tab>('overview');
   const [importError,      setImportError]      = useState<string | null>(null);
+  const [isDemoMode,       setIsDemoMode]       = useState<boolean>(_isDemoInit);
   // Non-null when data was loaded from a backup because the primary slot was invalid.
   const [restoredFromBackup, setRestoredFromBackup] = useState<number | null>(
     loadResult?.source === 'backup' ? (loadResult.backupTs ?? Date.now()) : null,
@@ -199,6 +211,22 @@ export default function App() {
               </div>
             </div>
           </div>
+
+          {/* Demo mode banner */}
+          {isDemoMode && (
+            <div className="mb-2 bg-indigo-50 border border-indigo-200 rounded px-3 py-2 text-xs text-indigo-800 flex items-center justify-between">
+              <span>
+                Demo — showing a synthetic 5-account sample portfolio. Your saved data is untouched.
+                {' '}Use ↑ Import or Reset to switch to your own portfolio.
+              </span>
+              <button
+                onClick={() => setIsDemoMode(false)}
+                className="ml-3 text-indigo-400 hover:text-indigo-700 flex-shrink-0"
+              >
+                ✕
+              </button>
+            </div>
+          )}
 
           {/* Restored-from-backup banner */}
           {restoredFromBackup !== null && (
