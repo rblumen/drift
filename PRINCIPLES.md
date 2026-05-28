@@ -46,7 +46,7 @@ Within the same placement bucket, accounts designated to concentrate a class are
 ## Low-Priority / Simplicity Objectives
 
 **10. Minimize the number of trades.**
-Prefer solutions that achieve the target allocation with fewer individual buy/sell orders. Dust trades below `minTradeUsd` are always suppressed. *(Algorithmic enforcement of broader trade minimization is a planned enhancement — see `FEATURE_BACKLOG.md`.)*
+Prefer solutions that achieve the target allocation with fewer individual buy/sell orders. Dust trades below `minTradeUsd` are always suppressed. After balance correction, a consolidation pass greedily drops marginal trades whose removal keeps every projected weight within `toleranceAbs` (step 8.6, `rebalance.ts`).
 
 **11. Minimize the number of accounts touched.**
-Prefer concentrating trades in fewer accounts when the allocation outcome is otherwise equivalent. *(Not yet enforced algorithmically — see `FEATURE_BACKLOG.md`.)*
+Prefer concentrating trades in fewer accounts when the allocation outcome is otherwise equivalent. `greedyPlace` fills the largest-capacity eligible account first and spills to additional accounts only when that one is exhausted (concentrate-then-spill, `placement.ts`).

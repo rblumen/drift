@@ -46,6 +46,95 @@ const STEPS = [
   },
 ];
 
+// Engine priority tiers, sourced from PRINCIPLES.md.
+// Each item has a short label shown in the numbered badge and a one-line
+// description suitable for a general audience.
+const PRINCIPLES: {
+  tier: string;
+  color: string;           // Tailwind classes for the tier pill
+  items: { num: number; heading: string; body: string }[];
+}[] = [
+  {
+    tier: 'Hard constraints',
+    color: 'bg-rose-100 text-rose-700',
+    items: [
+      {
+        num: 1,
+        heading: 'Respect locked accounts and positions',
+        body: 'Locked accounts generate zero trades. Individually locked positions are frozen in place and excluded from trade math.',
+      },
+      {
+        num: 2,
+        heading: 'Respect per-account asset class restrictions',
+        body: 'Explicit allowlists (allowedAssetClasses) or ticker menus (availableTickers) limit which classes can land in an account. No trade places a class in an account that can\'t hold it.',
+      },
+      {
+        num: 3,
+        heading: 'Keep each account\'s trades balance-preserving',
+        body: 'Buys and sells within an account must net to that account\'s new-cash contribution (zero if nothing is being deployed). No phantom cash transfers in or out.',
+      },
+    ],
+  },
+  {
+    tier: 'Primary objectives',
+    color: 'bg-indigo-100 text-indigo-700',
+    items: [
+      {
+        num: 4,
+        heading: 'Hit the household-level target allocation',
+        body: 'Target weights apply to all accounts combined — not per-account. The engine decides which account holds each dollar.',
+      },
+      {
+        num: 5,
+        heading: 'Suppress trivial drift',
+        body: 'Classes within ±toleranceAbs of their target weight are left alone entirely — no trades are generated for them in any account.',
+      },
+      {
+        num: 6,
+        heading: 'Place asset classes in their tax-preferred buckets',
+        body: 'Most-constrained classes (fewest eligible bucket options) are placed first. If a preferred bucket is full, the class spills into the next preferred bucket and is flagged.',
+      },
+    ],
+  },
+  {
+    tier: 'Secondary objectives',
+    color: 'bg-amber-100 text-amber-700',
+    items: [
+      {
+        num: 7,
+        heading: 'Minimize taxable sells',
+        body: 'Sells in taxable accounts are avoided or redirected to tax-advantaged accounts wherever possible.',
+      },
+      {
+        num: 8,
+        heading: 'Concentrate each class in the fewest accounts',
+        body: 'Within a placement bucket the engine fills the largest-capacity account first, spilling to smaller accounts only when it is exhausted.',
+      },
+      {
+        num: 9,
+        heading: 'Fill concentrateClasses accounts before general accounts',
+        body: 'Accounts designated to concentrate a class (e.g. a Roth IRA earmarked for alternatives) are filled ahead of other accounts in the same bucket.',
+      },
+    ],
+  },
+  {
+    tier: 'Simplicity objectives',
+    color: 'bg-gray-100 text-gray-600',
+    items: [
+      {
+        num: 10,
+        heading: 'Minimize the number of trades',
+        body: 'Dust trades below minTradeUsd are always suppressed. A post-placement pass also drops marginal trades whose removal keeps every projected weight within toleranceAbs.',
+      },
+      {
+        num: 11,
+        heading: 'Minimize the number of accounts touched',
+        body: 'When the allocation target can be met by touching fewer accounts, the simpler plan is preferred. Trades are concentrated before being spread.',
+      },
+    ],
+  },
+];
+
 const ASSUMPTIONS = [
   {
     heading: 'Household-level, not account-by-account',
@@ -126,6 +215,39 @@ export function OverviewPanel({ onStart }: Props) {
             >
               <p className="text-sm font-medium text-gray-800 mb-0.5">{a.heading}</p>
               <p className="text-xs text-gray-500 leading-relaxed">{a.body}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Engine priority order */}
+      <div>
+        <h3 className="text-sm font-semibold text-gray-700 mb-1 uppercase tracking-wide">
+          How the engine prioritises
+        </h3>
+        <p className="text-xs text-gray-500 mb-3 leading-relaxed">
+          When goals conflict the higher-ranked goal always wins. Within a tier, goals are
+          applied in order.
+        </p>
+        <div className="space-y-4">
+          {PRINCIPLES.map(tier => (
+            <div key={tier.tier}>
+              <span className={`inline-block text-xs font-semibold px-2 py-0.5 rounded-full mb-2 ${tier.color}`}>
+                {tier.tier}
+              </span>
+              <div className="space-y-2">
+                {tier.items.map(item => (
+                  <div key={item.num} className="flex gap-3 items-start">
+                    <span className="shrink-0 w-5 h-5 mt-0.5 rounded-full bg-gray-100 text-gray-500 text-xs font-bold flex items-center justify-center leading-none">
+                      {item.num}
+                    </span>
+                    <div>
+                      <p className="text-xs font-medium text-gray-800">{item.heading}</p>
+                      <p className="text-xs text-gray-500 leading-relaxed mt-0.5">{item.body}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           ))}
         </div>
