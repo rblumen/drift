@@ -3,10 +3,7 @@ import { ALL_ASSET_CLASSES } from './types';
 import { makeClassifier } from './classify';
 import { rollup } from './rollup';
 import { accountBucket, greedyPlace } from './placement';
-
-function zeroByClass(): Record<AssetClass, number> {
-  return Object.fromEntries(ALL_ASSET_CLASSES.map(ac => [ac, 0])) as Record<AssetClass, number>;
-}
+import { EPSILON, zeroByClass } from './utils';
 
 /**
  * Step 7.7 — Tax-aware sell shaping.
@@ -37,7 +34,6 @@ function redirectTaxableSells(
   effectiveAllowed: Record<string, Set<AssetClass>>,
   strategy: Strategy,
 ): void {
-  const EPSILON = 0.005;
   const taxableAccounts = accounts.filter(a => accountBucket(a.type) === 'TAXABLE');
   const taAccounts      = accounts.filter(a => accountBucket(a.type) === 'TAX_ADVANTAGED');
 
@@ -287,12 +283,12 @@ export function rebalance(
       (s, ac) => s + (targetLocation[acct.id][ac] ?? 0), 0,
     );
     const gap = freeCapacity[acct.id] - placed;
-    if (gap < 0.005) continue;
+    if (gap < EPSILON) continue;
 
     const totalOOT = ALL_ASSET_CLASSES.reduce(
       (s, ac) => s + unlockedCurrent[acct.id][ac], 0,
     );
-    if (totalOOT < 0.005) continue;
+    if (totalOOT < EPSILON) continue;
 
     for (const ac of ALL_ASSET_CLASSES) {
       targetLocation[acct.id][ac] += gap * (unlockedCurrent[acct.id][ac] / totalOOT);
@@ -343,7 +339,7 @@ export function rebalance(
     const acctTrades = trades.filter(t => t.accountId === acct.id);
     const net = acctTrades.reduce((s, t) => s + t.deltaUsd, 0);
     const residual = net - expectedNet;
-    if (Math.abs(residual) < 0.005) continue;
+    if (Math.abs(residual) < EPSILON) continue;
 
     // residual > 0 means we sold too much (or bought too little) → shrink the largest buy
     // residual < 0 means we bought too much (or sold too little) → shrink the largest sell
@@ -354,7 +350,7 @@ export function rebalance(
 
     let remaining = Math.abs(residual);
     for (const cand of candidates) {
-      if (remaining < 0.005) break;
+      if (remaining < EPSILON) break;
       const idx = trades.indexOf(cand);
       const adjust = Math.min(remaining, Math.abs(cand.deltaUsd));
       const newDelta = cand.deltaUsd - targetSign * adjust;

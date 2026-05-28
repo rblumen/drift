@@ -1,6 +1,7 @@
 import type { Account, Position, AssetClass, FundDecomposition } from './types';
 import { ALL_ASSET_CLASSES } from './types';
 import type { ClassifyFn } from './classify';
+import { zeroByClass } from './utils';
 
 /**
  * Russell index cap-class weights used to redistribute US_TOTAL_MARKET holdings.
@@ -27,10 +28,6 @@ export interface RollupResult {
   // Does NOT include account-level locking (handled in rebalance).
   lockedValueByAccount: Record<string, Record<AssetClass, number>>;
   unmappedTickers: string[];
-}
-
-function zeroByClass(): Record<AssetClass, number> {
-  return Object.fromEntries(ALL_ASSET_CLASSES.map(ac => [ac, 0])) as Record<AssetClass, number>;
 }
 
 export function rollup(
