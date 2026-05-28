@@ -166,6 +166,9 @@ The UI's Strategy panel would show where the user's current targets stand relati
 
 **Suggested feature:** Save each rebalance run to localStorage (or a JSON export) and display a simple allocation-over-time chart in the Results panel. This builds naturally on the M4 persistence milestone.
 
+### 15. Aggressive/Diversification plot in Results
+Add a simple 2d plot to the Household Allocation card of the "Results" pane showing points for before/after in conservative/aggressive and concentrated/diversified space, with a vector between them to show the impact of the rebalance.
+
 ---
 
 ## Already Covered by the Implementation Plan
