@@ -1,17 +1,18 @@
 {
   "_note": "SYNTHETIC FIXTURE — all values are fictional. Safe to commit. Load via ↑ Import in the app.",
   "_scenario": [
-    "Five-account household ($1,035k total) that has drifted meaningfully after a two-year equity rally.",
+    "Five-account household ($1,045k total) that has drifted meaningfully after a two-year equity rally.",
+    "Includes $10k household free cash (year-end bonus not yet assigned to an account).",
     "",
     "Accounts",
     "  schwab-taxable  Schwab Joint Taxable        TAXABLE           $260k",
     "  fidelity-ira    Fidelity Trad IRA            TRADITIONAL_IRA   $275k positions + $15k newCash",
     "  empower-401k    Empower 401k                 FOUR_OH_ONE_K     $390k  (no ALTERNATIVES allowed)",
-    "  fidelity-roth   Fidelity Roth IRA            ROTH_IRA          $80k   (concentrates ALTERNATIVES)",
+    "  fidelity-roth   Fidelity Roth IRA            ROTH_IRA          $80k   (concentrates ALTERNATIVES; acceptsDeposits: false — Roth maxed for the year)",
     "  fidelity-hsa    Fidelity HSA                 HSA               $15k",
     "",
     "Expected flags from the engine",
-    "  REVISIT_PLACEMENT   — taxable $260k / $1,035k = 25.1% > Fixed Income target 20%",
+    "  REVISIT_PLACEMENT   — taxable $260k / $1,045k ≈ 24.9% > Fixed Income target 20%",
     "  WITHIN_TOLERANCE    — Mid Cap, Small Cap, Developed Intl, Emerging Intl, Alternatives, Cash",
     "  OOT / trades        — Large Cap ~+9 pp over target (equity rally); Fixed Income ~-7 pp under",
     "",
@@ -22,7 +23,9 @@
     "  Concentrate          Roth IRA is first-priority for ALTERNATIVES placement",
     "  Ticker override      RSP (Invesco Equal Weight S&P 500) → US_LARGE_CAP",
     "  TDF decomposition    FDKLX (Fidelity Freedom Index 2060): 54% US equity / 37% Intl / 9% FI",
-    "  New cash             $15k IRA rollover contribution ready to deploy"
+    "  New cash             $15k IRA rollover contribution ready to deploy",
+    "  Household free cash  $10k year-end bonus distributed proportionally to deposit-eligible accounts",
+    "  Deposits closed      Roth IRA annual contribution limit already reached — excluded from free cash"
   ],
 
   "version": 1,
@@ -57,7 +60,8 @@
       "name": "Fidelity Roth IRA",
       "institution": "Fidelity",
       "type": "ROTH_IRA",
-      "concentrateClasses": ["ALTERNATIVES"]
+      "concentrateClasses": ["ALTERNATIVES"],
+      "acceptsDeposits": false
     },
     {
       "id": "fidelity-hsa",
@@ -191,5 +195,7 @@
       "DEVELOPED_INTL":  0.37,
       "FIXED_INCOME":    0.09
     }
-  }
+  },
+
+  "freeCash": 10000
 }
