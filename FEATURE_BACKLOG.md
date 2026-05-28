@@ -171,22 +171,6 @@ Add a simple 2d plot to the Household Allocation card of the "Results" pane show
 
 ---
 
-### 16. Trade-Count Minimization (PRINCIPLES.md goal #10)
-
-**What:** The greedy proportional fill currently spreads trades across all eligible accounts, often generating small buy/sell pairs in every account. The engine should prefer solutions that hit the household target with fewer discrete trades.
-
-**Suggested implementation:** After the greedy placement pass, add a post-placement consolidation step that merges or drops marginal trades while keeping projected weights within tolerance. One approach: sort pending trades by `|deltaUsd|` ascending and greedily drop trades whose removal keeps all classes within `toleranceAbs`; repeat until no more can be dropped.
-
----
-
-### 17. Account-Count Minimization (PRINCIPLES.md goal #11)
-
-**What:** Related to #16 — when the allocation target can be met by touching fewer accounts, the simpler plan is preferable. For example, if drift in one asset class can be corrected entirely within a single tax-advantaged account, the engine should prefer that over splitting the correction across three accounts.
-
-**Suggested implementation:** Before proportional distribution, attempt to fully satisfy each asset class need within a single account (the largest-capacity eligible account in the preferred bucket). Only distribute across multiple accounts if the single-account approach leaves the class under-placed. This produces a "concentrate then spill" behavior rather than the current "always spread proportionally."
-
----
-
 ## Already Covered by the Implementation Plan
 
 The following commonly-discussed Bogleheads considerations are already handled in `IMPLEMENTATION_PLAN.md` and need no additional work:
@@ -201,6 +185,8 @@ The following commonly-discussed Bogleheads considerations are already handled i
 - **Alternatives split (crypto / precious metals)** — extension point noted for v2 (§7, §12).
 - **No cost-basis tracking in v1** — explicitly deferred (§2).
 - **Client-side only, no telemetry** — hard guardrail (§13).
+- **Account-count minimization** — `greedyPlace` uses concentrate-then-spill: fills the largest-capacity eligible account first, spilling to additional accounts only when capacity is exhausted (backlog #17, `placement.ts`).
+- **Trade-count minimization** — step 8.6 post-placement consolidation: greedily drops marginal trades (smallest first) whose removal keeps projected weights within `toleranceAbs`, with a compensating adjustment to the opposite-sign partner trade to preserve per-account net (backlog #16, `rebalance.ts`).
 
 ---
 
