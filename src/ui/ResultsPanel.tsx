@@ -91,9 +91,7 @@ function AllocationRow({
 }: {
   ac: AssetClass; current: number; target: number; projected: number;
 }) {
-  const drift  = current - target;
-  const within = Math.abs(drift) <= 0.001;
-  const barMax = Math.max(current, target, 0.01);
+  const drift = current - target;
 
   return (
     <tr className="border-t border-gray-100">
@@ -106,19 +104,6 @@ function AllocationRow({
         </span>
       </td>
       <td className="px-4 py-3 text-right tabular-nums text-gray-500">{fmtPct(projected)}</td>
-      <td className="px-4 py-3 w-36">
-        <div className="relative h-3 bg-gray-100 rounded-full overflow-hidden">
-          <div
-            className="absolute top-0 bottom-0 w-0.5 bg-gray-400 z-10"
-            style={{ left: `${(target / barMax) * 100}%` }}
-          />
-          <div
-            className={`absolute inset-y-0 left-0 rounded-full
-              ${within ? 'bg-green-400' : current > target ? 'bg-amber-400' : 'bg-blue-400'}`}
-            style={{ width: `${(current / barMax) * 100}%` }}
-          />
-        </div>
-      </td>
     </tr>
   );
 }
@@ -164,6 +149,119 @@ function buildPieSlices(byClass: Record<AssetClass, number>): PieSlice[] {
   return ALL_ASSET_CLASSES
     .filter(ac => byClass[ac] > 0.5)   // skip sub-dollar noise
     .map(ac => ({ label: AC_LABEL[ac], value: byClass[ac], color: AC_COLOR[ac] }));
+}
+
+// ── Concentric donut: outer ring = current, inner ring = target ───────────────
+
+function ConcentricDonutChart({
+  currentWeights, targetWeights, size = 160,
+}: {
+  currentWeights: Record<AssetClass, number>;
+  targetWeights:  Record<AssetClass, number>;
+  size?: number;
+}) {
+  const cx = size / 2;
+  const cy = size / 2;
+  const outerR    = size / 2 - 4;
+  const outerInR  = Math.round(outerR * 0.68);  // inner edge of outer ring
+  const innerOutR = Math.round(outerR * 0.62);  // outer edge of inner ring
+  const innerInR  = Math.round(outerR * 0.30);  // center hole edge
+
+  const pt = (deg: number, r: number) => {
+    const rad = (deg - 90) * (Math.PI / 180);
+    return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+  };
+
+  // Annular sector path: outer arc CW → line → inner arc CCW → close.
+  // With the default SVG non-zero fill rule this naturally creates a ring.
+  function annularPath(oR: number, iR: number, startDeg: number, endDeg: number): string {
+    if (endDeg - startDeg >= 359.999) {
+      // Full ring: outer circle CW + inner circle CCW (non-zero creates the hole).
+      const oT = pt(0, oR), oB = pt(180, oR);
+      const iT = pt(0, iR), iB = pt(180, iR);
+      return [
+        `M ${oT.x} ${oT.y} A ${oR} ${oR} 0 1 1 ${oB.x} ${oB.y}`,
+        `A ${oR} ${oR} 0 1 1 ${oT.x} ${oT.y}`,
+        `M ${iT.x} ${iT.y} A ${iR} ${iR} 0 1 0 ${iB.x} ${iB.y}`,
+        `A ${iR} ${iR} 0 1 0 ${iT.x} ${iT.y} Z`,
+      ].join(' ');
+    }
+    const oS = pt(startDeg, oR), oE = pt(endDeg, oR);
+    const iS = pt(startDeg, iR), iE = pt(endDeg, iR);
+    const large = endDeg - startDeg > 180 ? 1 : 0;
+    return [
+      `M ${oS.x} ${oS.y}`,
+      `A ${oR} ${oR} 0 ${large} 1 ${oE.x} ${oE.y}`,
+      `L ${iE.x} ${iE.y}`,
+      `A ${iR} ${iR} 0 ${large} 0 ${iS.x} ${iS.y}`,
+      `Z`,
+    ].join(' ');
+  }
+
+  function toSegments(weights: Record<AssetClass, number>) {
+    const total = ALL_ASSET_CLASSES.reduce((s, ac) => s + weights[ac], 0);
+    if (total === 0) return [];
+    let cursor = 0;
+    return ALL_ASSET_CLASSES
+      .filter(ac => weights[ac] > 0.001)
+      .map(ac => {
+        const start = cursor;
+        cursor += (weights[ac] / total) * 360;
+        return { ac, start, end: cursor };
+      });
+  }
+
+  const outerSegs = toSegments(targetWeights);
+  const innerSegs = toSegments(currentWeights);
+  const legendClasses = ALL_ASSET_CLASSES.filter(
+    ac => currentWeights[ac] > 0.001 || targetWeights[ac] > 0.001,
+  );
+
+  return (
+    <div className="flex items-start gap-5">
+      <svg width={size} height={size} className="shrink-0">
+        {outerSegs.map(({ ac, start, end }) => (
+          <path key={`o-${ac}`} d={annularPath(outerR, outerInR, start, end)}
+            fill={AC_COLOR[ac]} stroke="white" strokeWidth={1.5}>
+            <title>{AC_LABEL[ac]}: target {fmtPct(targetWeights[ac])}</title>
+          </path>
+        ))}
+        {innerSegs.map(({ ac, start, end }) => (
+          <path key={`i-${ac}`} d={annularPath(innerOutR, innerInR, start, end)}
+            fill={AC_COLOR[ac]} stroke="white" strokeWidth={1.5}>
+            <title>{AC_LABEL[ac]}: current {fmtPct(currentWeights[ac])}</title>
+          </path>
+        ))}
+      </svg>
+
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 text-xs text-gray-400 mb-1">
+          <span className="w-2 h-2 shrink-0" />
+          <span className="flex-1" />
+          <span className="w-14 text-right">Current</span>
+          <span className="w-14 text-right">Target</span>
+        </div>
+        <div className="space-y-0.5">
+          {legendClasses.map(ac => (
+            <div key={ac} className="flex items-center gap-2 text-xs">
+              <span className="w-2 h-2 rounded-sm shrink-0" style={{ backgroundColor: AC_COLOR[ac] }} />
+              <span className="text-gray-600 flex-1 truncate">{AC_LABEL[ac]}</span>
+              <span className="w-14 text-right tabular-nums text-gray-500">
+                {currentWeights[ac] > 0.001 ? fmtPct(currentWeights[ac]) : '—'}
+              </span>
+              <span className="w-14 text-right tabular-nums text-gray-500">
+                {targetWeights[ac] > 0.001 ? fmtPct(targetWeights[ac]) : '—'}
+              </span>
+            </div>
+          ))}
+        </div>
+        <div className="mt-2 flex gap-3 text-xs text-gray-400">
+          <span>outer = target</span>
+          <span>inner = current</span>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ── Main panel ────────────────────────────────────────────────────────────────
@@ -394,6 +492,9 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash }: Pro
       <div className="space-y-2">
         <h3 className="text-sm font-medium text-gray-700">Household allocation</h3>
         <div className="overflow-hidden border border-gray-200 rounded-lg">
+          <div className="p-4 border-b border-gray-100">
+            <ConcentricDonutChart currentWeights={currentWeights} targetWeights={targetWeights} />
+          </div>
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
               <tr>
@@ -420,7 +521,6 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash }: Pro
                     </HelpTip>
                   </span>
                 </th>
-                <th className="px-4 py-3 text-left w-36">Chart</th>
               </tr>
             </thead>
             <tbody>
@@ -436,12 +536,6 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash }: Pro
             </tbody>
           </table>
         </div>
-        <p className="text-xs text-gray-400">
-          Bar: <span className="text-blue-400">■</span> under target &nbsp;
-          <span className="text-amber-400">■</span> over target &nbsp;
-          <span className="text-green-400">■</span> on target &nbsp;
-          ╎ target line
-        </p>
       </div>
 
       {/* Per-account sections */}
