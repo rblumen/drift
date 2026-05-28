@@ -1,5 +1,6 @@
 import type { Account, AccountType, AssetClass, PlacementBucket, Strategy, Flag } from './types';
 import { ALL_ASSET_CLASSES } from './types';
+import { EPSILON, zeroByClass } from './utils';
 
 // Processing order: most-placement-constrained class first.
 // FIXED_INCOME and ALTERNATIVES have a single preferred bucket; equities are flexible.
@@ -27,10 +28,6 @@ export interface PlacementResult {
   // targetLocation[accountId][assetClass] = target dollar amount
   targetLocation: Record<string, Record<AssetClass, number>>;
   placementFlags: Flag[];
-}
-
-function zeroByClass(): Record<AssetClass, number> {
-  return Object.fromEntries(ALL_ASSET_CLASSES.map(ac => [ac, 0])) as Record<AssetClass, number>;
 }
 
 function partition<T>(arr: T[], pred: (x: T) => boolean): [T[], T[]] {
@@ -67,7 +64,6 @@ export function greedyPlace(
   const remainingCapacity: Record<string, number> = { ...accountCapacities };
   const targetLocation: Record<string, Record<AssetClass, number>> = {};
   const flags: Flag[] = [];
-  const EPSILON = 0.005;
 
   for (const acct of accounts) {
     targetLocation[acct.id] = zeroByClass();

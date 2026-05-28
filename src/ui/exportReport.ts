@@ -16,21 +16,7 @@
 
 import type { Account, AssetClass, RebalanceResult, ResolvedTrade } from '../engine/types';
 import { ALL_ASSET_CLASSES } from '../engine/types';
-import { AC_COLOR, AC_LABEL, ACCT_TYPE_LABEL } from './fmt';
-
-// ── Formatting helpers (standalone — no Intl dependency on caller side) ──────
-
-function fmtUsd(v: number): string {
-  return v.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
-}
-
-function fmtPct(v: number): string {
-  return `${(v * 100).toFixed(1)}%`;
-}
-
-function fmtDelta(v: number): string {
-  return (v >= 0 ? '+' : '−') + fmtUsd(Math.abs(v));
-}
+import { AC_COLOR, AC_LABEL, ACCT_TYPE_LABEL, fmtUsd, fmtPct, fmtDelta } from './fmt';
 
 function esc(s: string): string {
   return s

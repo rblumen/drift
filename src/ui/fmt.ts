@@ -13,8 +13,7 @@ export function fmtPct(n: number, decimals = 1): string {
 }
 
 export function fmtDelta(n: number): string {
-  const sign = n >= 0 ? '+' : '';
-  return sign + fmtUsd(n);
+  return (n >= 0 ? '+' : '−') + fmtUsd(Math.abs(n));
 }
 
 export function fmtShares(deltaUsd: number, price: number | undefined): string | null {
