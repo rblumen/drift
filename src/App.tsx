@@ -12,7 +12,7 @@ import { StrategyPanel } from './ui/StrategyPanel';
 import { ResultsPanel } from './ui/ResultsPanel';
 import { fmtUsd } from './ui/fmt';
 import {
-  buildState, clearState, DEFAULT_APP_STATE, exportJson, importJson,
+  buildState, clearState, DEFAULT_APP_STATE, saveJson, loadJson,
   loadState, saveState, saveBackup,
 } from './store';
 import { appStateSchema } from './ingest/schema';
@@ -51,7 +51,7 @@ export default function App() {
   const [decompositions,   setDecompositions]   = useState<Record<string, FundDecomposition>>(saved.decompositions ?? {});
   const [freeCash,         setFreeCash]         = useState<number>(saved.freeCash ?? 0);
   const [activeTab,        setActiveTab]        = useState<Tab>('overview');
-  const [importError,      setImportError]      = useState<string | null>(null);
+  const [loadError,        setLoadError]        = useState<string | null>(null);
   const [isDemoMode,       setIsDemoMode]       = useState<boolean>(_isDemoInit);
   // Non-null when data was loaded from a backup because the primary slot was invalid.
   const [restoredFromBackup, setRestoredFromBackup] = useState<number | null>(
@@ -62,7 +62,7 @@ export default function App() {
     loadResult !== null ? new Date() : null,
   );
 
-  const importFileRef = useRef<HTMLInputElement>(null);
+  const loadFileRef = useRef<HTMLInputElement>(null);
 
   // Keep a ref to the latest state slices for the backup interval closure.
   const stateRef = useRef({ accounts, positions, strategy, tickerOverrides, decompositions, freeCash });
@@ -114,18 +114,18 @@ export default function App() {
     setPositions(prev => prev.filter(p => p.accountId !== id));
   }
 
-  function handleExport() {
-    exportJson(buildState(accounts, positions, strategy, tickerOverrides, decompositions, freeCash));
+  function handleSave() {
+    saveJson(buildState(accounts, positions, strategy, tickerOverrides, decompositions, freeCash));
   }
 
-  async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleLoadFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = '';  // allow re-selecting same file
-    setImportError(null);
-    const result = await importJson(file);
+    setLoadError(null);
+    const result = await loadJson(file);
     if ('error' in result) {
-      setImportError(result.error);
+      setLoadError(result.error);
       return;
     }
     setAccounts(result.accounts);
@@ -181,18 +181,18 @@ export default function App() {
               {/* File actions */}
               <div className="flex items-center gap-1.5 border-l border-gray-200 pl-3">
                 <button
-                  onClick={handleExport}
-                  title="Export portfolio as JSON"
+                  onClick={handleSave}
+                  title="Save portfolio as JSON"
                   className="text-xs text-gray-500 hover:text-gray-800 border border-gray-200 rounded px-2 py-1 hover:bg-gray-50 transition-colors"
                 >
-                  ↓ Export
+                  ↓ Save
                 </button>
                 <button
-                  onClick={() => importFileRef.current?.click()}
-                  title="Import portfolio from JSON"
+                  onClick={() => loadFileRef.current?.click()}
+                  title="Load portfolio from JSON"
                   className="text-xs text-gray-500 hover:text-gray-800 border border-gray-200 rounded px-2 py-1 hover:bg-gray-50 transition-colors"
                 >
-                  ↑ Import
+                  ↑ Load
                 </button>
                 <button
                   onClick={handleReset}
@@ -202,10 +202,10 @@ export default function App() {
                   ✕ Reset
                 </button>
                 <input
-                  ref={importFileRef}
+                  ref={loadFileRef}
                   type="file"
                   accept=".json"
-                  onChange={handleImportFile}
+                  onChange={handleLoadFile}
                   className="hidden"
                 />
               </div>
@@ -217,7 +217,7 @@ export default function App() {
             <div className="mb-2 bg-indigo-50 border border-indigo-200 rounded px-3 py-2 text-xs text-indigo-800 flex items-center justify-between">
               <span>
                 Demo — showing a synthetic 5-account sample portfolio. Your saved data is untouched.
-                {' '}Use ↑ Import or Reset to switch to your own portfolio.
+                {' '}Use ↑ Load or Reset to switch to your own portfolio.
               </span>
               <button
                 onClick={() => setIsDemoMode(false)}
@@ -236,7 +236,7 @@ export default function App() {
                 {new Date(restoredFromBackup).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
                 {' '}on{' '}
                 {new Date(restoredFromBackup).toLocaleDateString([], { month: 'short', day: 'numeric' })}.
-                {' '}Recent changes may be missing. Export a copy to preserve what's here.
+                {' '}Recent changes may be missing. Save a copy to preserve what's here.
               </span>
               <button
                 onClick={() => setRestoredFromBackup(null)}
@@ -247,11 +247,11 @@ export default function App() {
             </div>
           )}
 
-          {/* Import error */}
-          {importError && (
+          {/* Load error */}
+          {loadError && (
             <div className="mb-2 bg-red-50 border border-red-200 rounded px-3 py-2 text-xs text-red-700 flex items-center justify-between">
-              <span>{importError}</span>
-              <button onClick={() => setImportError(null)} className="ml-3 text-red-400 hover:text-red-600">✕</button>
+              <span>{loadError}</span>
+              <button onClick={() => setLoadError(null)} className="ml-3 text-red-400 hover:text-red-600">✕</button>
             </div>
           )}
 

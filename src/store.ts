@@ -5,7 +5,7 @@
 //   2. localStorage backup slots — 3 rolling snapshots, written every 5 minutes.
 //      If the primary slot fails validation on load (e.g. after a schema change),
 //      the most-recent valid backup is used automatically and the UI shows a banner.
-//   3. JSON file export/import   — portable backup the user controls.
+//   3. JSON file save/load       — portable backup the user controls.
 //
 // The on-disk format is versioned (version: 1) so future schema migrations can
 // detect and upgrade old saves rather than silently failing.
@@ -142,13 +142,13 @@ export function clearState(): void {
   try { localStorage.removeItem(BACKUP_KEY);  } catch { /* ignore */ }
 }
 
-// ─── JSON file export ─────────────────────────────────────────────────────────
+// ─── JSON file save ───────────────────────────────────────────────────────────
 
 /**
  * Serialise state to a JSON file and trigger a browser download.
  * Filename includes today's date for easy archiving.
  */
-export function exportJson(state: AppState): void {
+export function saveJson(state: AppState): void {
   const filename = `portfolio-${new Date().toISOString().slice(0, 10)}.json`;
   const blob     = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
   const url      = URL.createObjectURL(blob);
@@ -159,13 +159,13 @@ export function exportJson(state: AppState): void {
   URL.revokeObjectURL(url);
 }
 
-// ─── JSON file import ─────────────────────────────────────────────────────────
+// ─── JSON file load ───────────────────────────────────────────────────────────
 
 /**
  * Read a File object as text, parse and validate it.
  * Returns the parsed AppState on success, or a human-readable error string.
  */
-export async function importJson(
+export async function loadJson(
   file: File,
 ): Promise<AppState | { error: string }> {
   return new Promise(resolve => {

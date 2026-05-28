@@ -174,7 +174,7 @@ export function OverviewPanel({ onStart }: Props) {
       <div className="border border-gray-200 rounded-lg px-4 py-3 bg-gray-50 text-xs text-gray-500 leading-relaxed">
         <span className="font-medium text-gray-700">Privacy: </span>
         All computation runs in your browser. No data leaves your machine, and no account is required.
-        Your portfolio setup is saved automatically to your browser's localStorage and can be exported as a JSON file for backup.
+        Your portfolio setup is saved automatically to your browser's localStorage and can be saved as a JSON file for backup.
         Never commit real financial data to the repository — keep personal files in <code className="font-mono bg-white px-1 rounded border border-gray-200">/private/</code> or name them <code className="font-mono bg-white px-1 rounded border border-gray-200">*.local.json</code>, both of which are git-ignored.
       </div>
 
