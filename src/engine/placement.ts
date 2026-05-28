@@ -2,9 +2,9 @@ import type { Account, AccountType, AssetClass, PlacementBucket, Strategy, Flag 
 import { ALL_ASSET_CLASSES } from './types';
 import { EPSILON, zeroByClass } from './utils';
 
-// Processing order: most-placement-constrained class first.
-// FIXED_INCOME and ALTERNATIVES have a single preferred bucket; equities are flexible.
-const PLACEMENT_ORDER: AssetClass[] = [
+// Tiebreaker for classes with equal placement constraint counts.
+// Primary sort is strategy.placement[ac].length ascending; this array resolves ties.
+const PLACEMENT_TIEBREAK_ORDER: AssetClass[] = [
   'FIXED_INCOME',
   'ALTERNATIVES',
   'EMERGING_INTL',
@@ -69,7 +69,16 @@ export function greedyPlace(
     targetLocation[acct.id] = zeroByClass();
   }
 
-  for (const ac of PLACEMENT_ORDER) {
+  // Sort most-constrained classes first (fewest placement bucket options).
+  // Equal constraint counts preserve PLACEMENT_TIEBREAK_ORDER for stability.
+  const tiebreakIndex = Object.fromEntries(PLACEMENT_TIEBREAK_ORDER.map((ac, i) => [ac, i]));
+  const sortedClasses = [...PLACEMENT_TIEBREAK_ORDER].sort(
+    (a, b) =>
+      (strategy.placement[a]?.length ?? 2) - (strategy.placement[b]?.length ?? 2) ||
+      (tiebreakIndex[a] ?? 999) - (tiebreakIndex[b] ?? 999),
+  );
+
+  for (const ac of sortedClasses) {
     if (remainingNeed[ac] <= EPSILON) continue;
 
     // Pass 1 — try preferred buckets in order.
