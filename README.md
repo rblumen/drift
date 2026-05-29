@@ -60,13 +60,9 @@ Target weights apply to all accounts **combined**. The engine computes the house
 
 ### Greedy placement fill
 
-Asset classes are processed from most-constrained to least:
+Asset classes are processed most-constrained first: the engine counts how many placement buckets each class is allowed to use (per its placement rule), and places classes with fewer options before classes with more options. This ensures the classes with the least flexibility claim their preferred space before more flexible classes compete for it. Ties in constraint count are broken by a stable fallback order (Fixed Income → Alternatives → International → US equity → Cash), but the primary sort is always driven by the strategy config.
 
-```
-FIXED_INCOME → ALTERNATIVES → EMERGING_INTL → DEVELOPED_INTL → US equity → CASH
-```
-
-For each class, the engine fills the preferred bucket first, spills to the next bucket if the first is exhausted, then spills to any remaining account if preferred buckets are both full.
+For each class, the engine fills the preferred bucket first, spills to the next bucket if the first is exhausted, then spills to any remaining account if all preferred buckets are full.
 
 ### Taxable-sale redirect
 
