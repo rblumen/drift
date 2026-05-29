@@ -11,16 +11,25 @@ import { HelpBox, HelpDef, HelpSection, HelpTip } from './HelpBox';
 const ALL_BUCKETS: PlacementBucket[] = ['TAX_ADVANTAGED', 'TAXABLE', 'EDUCATION'];
 const US_CAP_SUBS: readonly AssetClass[] = ['US_LARGE_CAP', 'US_MID_CAP', 'US_SMALL_CAP'];
 
+type CapSplit = { US_LARGE_CAP: number; US_MID_CAP: number; US_SMALL_CAP: number };
+
 interface Props {
   strategy: Strategy;
   setStrategy: (s: Strategy) => void;
   currentWeights: Record<AssetClass, number>;
 }
 
-/** Apply the Russell cap split to a composite US equity total (in percent). */
-function splitComposite(totalPct: number): Record<'US_LARGE_CAP' | 'US_MID_CAP' | 'US_SMALL_CAP', string> {
-  const lc = totalPct * RUSSELL_CAP_SPLIT.US_LARGE_CAP;
-  const mc = totalPct * RUSSELL_CAP_SPLIT.US_MID_CAP;
+/** Derive normalised proportions from the current cap-sub weights (values in percent). Falls back to Russell if all zero. */
+function deriveCapSplit(lc: number, mc: number, sc: number): CapSplit {
+  const total = lc + mc + sc;
+  if (total < 0.001) return { ...RUSSELL_CAP_SPLIT };
+  return { US_LARGE_CAP: lc / total, US_MID_CAP: mc / total, US_SMALL_CAP: sc / total };
+}
+
+/** Apply a cap split (proportions summing to 1) to a composite US equity total (in percent). */
+function splitComposite(totalPct: number, split: CapSplit): Record<'US_LARGE_CAP' | 'US_MID_CAP' | 'US_SMALL_CAP', string> {
+  const lc = totalPct * split.US_LARGE_CAP;
+  const mc = totalPct * split.US_MID_CAP;
   const sc = Math.max(totalPct - lc - mc, 0);
   return { US_LARGE_CAP: lc.toFixed(1), US_MID_CAP: mc.toFixed(1), US_SMALL_CAP: sc.toFixed(1) };
 }
@@ -29,6 +38,16 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentW
   // Linked by default when US_TOTAL_MARKET has no standalone target (the normal case).
   const [usEquityLinked, setUsEquityLinked] = useState<boolean>(
     (strategy.targets.US_TOTAL_MARKET ?? 0) < 0.001,
+  );
+
+  // Proportions used when scaling the composite total in linked mode.
+  // Persisted across link/unlink cycles so the user's custom split is not lost.
+  const [capSplit, setCapSplit] = useState<CapSplit>(() =>
+    deriveCapSplit(
+      (strategy.targets.US_LARGE_CAP ?? 0) * 100,
+      (strategy.targets.US_MID_CAP   ?? 0) * 100,
+      (strategy.targets.US_SMALL_CAP  ?? 0) * 100,
+    ),
   );
 
   // Atomic targets for all classes (edit strings, committed on blur).
@@ -56,12 +75,12 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentW
     setWeights(Object.fromEntries(
       ALL_ASSET_CLASSES.map(ac => [ac, (strategy.targets[ac] * 100).toFixed(1)]),
     ) as Record<AssetClass, string>);
-    const subTotal = (
-      (strategy.targets.US_LARGE_CAP ?? 0)
-      + (strategy.targets.US_MID_CAP ?? 0)
-      + (strategy.targets.US_SMALL_CAP ?? 0)
-    ) * 100;
+    const lcPct = (strategy.targets.US_LARGE_CAP ?? 0) * 100;
+    const mcPct = (strategy.targets.US_MID_CAP   ?? 0) * 100;
+    const scPct = (strategy.targets.US_SMALL_CAP  ?? 0) * 100;
+    const subTotal = lcPct + mcPct + scPct;
     setCompositeStr((subTotal > 0.001 ? subTotal : strategy.targets.US_TOTAL_MARKET * 100).toFixed(1));
+    setCapSplit(deriveCapSplit(lcPct, mcPct, scPct));
     setTolerance(String((strategy.toleranceAbs * 100).toFixed(1)));
     setMinTrade(String(strategy.minTradeUsd));
   }, [strategy]);
@@ -90,7 +109,7 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentW
 
   function handleCompositeChange(val: string) {
     setCompositeStr(val);
-    setWeights(prev => ({ ...prev, ...splitComposite(parseFloat(val) || 0) }));
+    setWeights(prev => ({ ...prev, ...splitComposite(parseFloat(val) || 0, capSplit) }));
   }
 
   function handleToggleLinked() {
@@ -99,14 +118,24 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentW
       setWeights(prev => ({ ...prev, US_TOTAL_MARKET: '0.0' }));
       setUsEquityLinked(false);
     } else {
-      // Link: sum the current sub-classes, redistribute via Russell split.
-      const subTotal = (parseFloat(weights.US_LARGE_CAP) || 0)
-                     + (parseFloat(weights.US_MID_CAP) || 0)
-                     + (parseFloat(weights.US_SMALL_CAP) || 0);
+      // Link: derive proportions from the user's current sub-class weights (preserve custom split).
+      const lc = parseFloat(weights.US_LARGE_CAP) || 0;
+      const mc = parseFloat(weights.US_MID_CAP) || 0;
+      const sc = parseFloat(weights.US_SMALL_CAP) || 0;
+      const subTotal = lc + mc + sc;
+      const newSplit = deriveCapSplit(lc, mc, sc);
+      setCapSplit(newSplit);
       setCompositeStr(subTotal.toFixed(1));
-      setWeights(prev => ({ ...prev, ...splitComposite(subTotal) }));
+      // Keep current sub-class values unchanged when linking — proportions are locked, not reset.
       setUsEquityLinked(true);
     }
+  }
+
+  function handleResetToRussell() {
+    const newSplit = { ...RUSSELL_CAP_SPLIT };
+    setCapSplit(newSplit);
+    const total = parseFloat(compositeStr) || 0;
+    setWeights(prev => ({ ...prev, ...splitComposite(total, newSplit) }));
   }
 
   function updatePlacement(ac: AssetClass, slot: 0 | 1, bucket: PlacementBucket | '') {
@@ -186,9 +215,10 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentW
 
         <HelpSection title="Target allocation">
           <HelpDef term="US equity (57.5% default)">
-            Set via a single "US Total Market" handle (linked mode) or per cap-class. Linked mode
-            distributes your total using the Russell index weights: Large Cap 67%, Mid Cap 25%, Small Cap 8%.
-            Click "link / linked" on the US Total Market row to toggle between modes.
+            Set via a single "US Total Market" handle (linked mode) or per cap-class. Unlink to set
+            custom Large/Mid/Small proportions; re-linking locks those proportions and scales them
+            together as you adjust the total. A "reset" link restores Russell index weights
+            (Large Cap 67%, Mid Cap 25%, Small Cap 8%) if you want to return to the standard split.
           </HelpDef>
           <HelpDef term="Fixed Income (20% default)">
             Held as NY tax-free muni bonds (e.g. MUNY) in the taxable account by default. This target
@@ -303,12 +333,31 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentW
                   if (!isComposite) return [mainRow];
 
                   // Sub-class rows shown when composite is linked (read-only, indented).
-                  const subRows = US_CAP_SUBS.map(sub => (
+                  const isRussell =
+                    Math.abs(capSplit.US_LARGE_CAP - RUSSELL_CAP_SPLIT.US_LARGE_CAP) < 0.005 &&
+                    Math.abs(capSplit.US_MID_CAP   - RUSSELL_CAP_SPLIT.US_MID_CAP)   < 0.005 &&
+                    Math.abs(capSplit.US_SMALL_CAP - RUSSELL_CAP_SPLIT.US_SMALL_CAP) < 0.005;
+                  const subRows = US_CAP_SUBS.map((sub, i) => (
                     <tr key={sub} className="bg-gray-50/60">
                       <td className="pl-10 pr-4 py-1">
                         <span className="flex items-center gap-2 whitespace-nowrap">
                           <span className="w-1.5 h-1.5 rounded-sm shrink-0" style={{ backgroundColor: AC_COLOR[sub] }} />
                           <span className="text-gray-400 text-xs">{AC_LABEL[sub]}</span>
+                          {i === 0 && (
+                            <span className="text-[10px] text-gray-400">
+                              {isRussell ? '(Russell)' : '(custom)'}
+                              {!isRussell && (
+                                <button
+                                  type="button"
+                                  onClick={handleResetToRussell}
+                                  title="Reset to Russell index weights (Large 67%, Mid 25%, Small 8%)"
+                                  className="ml-1 underline hover:text-indigo-600"
+                                >
+                                  reset
+                                </button>
+                              )}
+                            </span>
+                          )}
                         </span>
                       </td>
                       <td className="px-4 py-1 text-right">
