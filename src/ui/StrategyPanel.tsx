@@ -85,9 +85,9 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentW
     setMinTrade(String(strategy.minTradeUsd));
   }, [strategy]);
 
-  // When linked, US_TOTAL_MARKET is a display handle — exclude it from the sum check.
+  // US_TOTAL_MARKET is always a derived display value — exclude it; sub-classes carry the weight.
   const sum = ALL_ASSET_CLASSES
-    .filter(ac => !(usEquityLinked && ac === 'US_TOTAL_MARKET'))
+    .filter(ac => ac !== 'US_TOTAL_MARKET')
     .reduce((s, ac) => s + (parseFloat(weights[ac]) || 0), 0);
   const sumOk = Math.abs(sum - 100) < 0.11;
 
@@ -196,10 +196,19 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentW
     return               { label: 'Highly Concentrated',       color: 'text-red-500'     };
   })();
 
-  // When linked, sub-classes appear as child rows under the composite — exclude from primary list.
-  const primaryClasses = usEquityLinked
-    ? ALL_ASSET_CLASSES.filter(ac => !US_CAP_SUBS.includes(ac))
-    : ALL_ASSET_CLASSES;
+  // US_TOTAL_MARKET is always shown as a parent row with sub-classes indented beneath it.
+  // Exclude the three sub-classes from the primary iteration — they're injected as children.
+  const primaryClasses = ALL_ASSET_CLASSES.filter(ac => !US_CAP_SUBS.includes(ac));
+
+  // Grayed-out sum displayed on the US Total Market row when in unlinked mode.
+  const usSubTotal = (parseFloat(weights.US_LARGE_CAP) || 0)
+                   + (parseFloat(weights.US_MID_CAP)   || 0)
+                   + (parseFloat(weights.US_SMALL_CAP)  || 0);
+
+  const isRussell =
+    Math.abs(capSplit.US_LARGE_CAP - RUSSELL_CAP_SPLIT.US_LARGE_CAP) < 0.005 &&
+    Math.abs(capSplit.US_MID_CAP   - RUSSELL_CAP_SPLIT.US_MID_CAP)   < 0.005 &&
+    Math.abs(capSplit.US_SMALL_CAP - RUSSELL_CAP_SPLIT.US_SMALL_CAP) < 0.005;
 
   return (
     <div className="space-y-6">
@@ -282,100 +291,137 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentW
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {primaryClasses.flatMap(ac => {
-                  const isComposite = ac === 'US_TOTAL_MARKET' && usEquityLinked;
-                  const displayVal  = isComposite ? compositeStr : weights[ac];
+                  if (ac !== 'US_TOTAL_MARKET') {
+                    return [(
+                      <tr key={ac} className="hover:bg-gray-50">
+                        <td className="px-4 py-1.5">
+                          <div className="flex items-center gap-2 whitespace-nowrap">
+                            <span className="w-2 h-2 rounded-sm shrink-0" style={{ backgroundColor: AC_COLOR[ac] }} />
+                            <span className="text-gray-700">{AC_LABEL[ac]}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-1.5 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <input
+                              type="number"
+                              value={weights[ac]}
+                              step="0.1"
+                              min="0"
+                              max="100"
+                              onChange={e => setWeights({ ...weights, [ac]: e.target.value })}
+                              onBlur={commitWeights}
+                              className="w-16 border rounded px-2 py-1 text-right text-sm"
+                            />
+                            <span className="text-gray-400 text-xs">%</span>
+                          </div>
+                        </td>
+                      </tr>
+                    )];
+                  }
 
-                  const mainRow = (
-                    <tr key={ac} className="hover:bg-gray-50">
+                  // ── US Total Market row — always present, with sub-class children ──
+                  const utmRow = (
+                    <tr key="US_TOTAL_MARKET" className="hover:bg-gray-50">
                       <td className="px-4 py-1.5">
                         <div className="flex items-center gap-2 whitespace-nowrap">
-                          <span className="w-2 h-2 rounded-sm shrink-0" style={{ backgroundColor: AC_COLOR[ac] }} />
-                          <span className="text-gray-700">{AC_LABEL[ac]}</span>
-                          {ac === 'US_TOTAL_MARKET' && (
-                            <button
-                              type="button"
-                              onClick={handleToggleLinked}
-                              title={usEquityLinked
-                                ? 'Release: edit Large/Mid/Small Cap independently'
-                                : 'Link: drive Large/Mid/Small Cap from a single total using the Russell split'}
-                              className={`text-xs px-1.5 py-0.5 rounded border transition-colors ${
-                                usEquityLinked
-                                  ? 'border-indigo-300 text-indigo-600 bg-indigo-50 hover:bg-indigo-100'
-                                  : 'border-gray-200 text-gray-400 hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50'
-                              }`}
-                            >
-                              {usEquityLinked ? 'linked' : 'link'}
-                            </button>
+                          <span className="w-2 h-2 rounded-sm shrink-0" style={{ backgroundColor: AC_COLOR.US_TOTAL_MARKET }} />
+                          <span className="text-gray-700">{AC_LABEL.US_TOTAL_MARKET}</span>
+                          <button
+                            type="button"
+                            onClick={handleToggleLinked}
+                            title={usEquityLinked
+                              ? 'Release: edit Large/Mid/Small Cap independently'
+                              : 'Link: drive Large/Mid/Small Cap from a single total'}
+                            className={`text-xs px-1.5 py-0.5 rounded border transition-colors ${
+                              usEquityLinked
+                                ? 'border-indigo-300 text-indigo-600 bg-indigo-50 hover:bg-indigo-100'
+                                : 'border-gray-200 text-gray-400 hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50'
+                            }`}
+                          >
+                            {usEquityLinked ? 'linked' : 'link'}
+                          </button>
+                          {usEquityLinked && !isRussell && (
+                            <span className="text-[10px] text-gray-400">
+                              custom ·{' '}
+                              <button
+                                type="button"
+                                onClick={handleResetToRussell}
+                                title="Reset to Russell index weights (Large 67%, Mid 25%, Small 8%)"
+                                className="underline hover:text-indigo-600"
+                              >
+                                reset
+                              </button>
+                            </span>
                           )}
                         </div>
                       </td>
                       <td className="px-4 py-1.5 text-right">
                         <div className="flex items-center justify-end gap-1">
-                          <input
-                            type="number"
-                            value={displayVal}
-                            step="0.1"
-                            min="0"
-                            max="100"
-                            onChange={e => isComposite
-                              ? handleCompositeChange(e.target.value)
-                              : setWeights({ ...weights, [ac]: e.target.value })
-                            }
-                            onBlur={commitWeights}
-                            className="w-16 border rounded px-2 py-1 text-right text-sm"
-                          />
+                          {usEquityLinked ? (
+                            <input
+                              type="number"
+                              value={compositeStr}
+                              step="0.1"
+                              min="0"
+                              max="100"
+                              onChange={e => handleCompositeChange(e.target.value)}
+                              onBlur={commitWeights}
+                              className="w-16 border rounded px-2 py-1 text-right text-sm"
+                            />
+                          ) : (
+                            <input
+                              type="number"
+                              value={usSubTotal.toFixed(1)}
+                              readOnly
+                              disabled
+                              title="Sum of Large + Mid + Small Cap targets"
+                              className="w-16 border border-gray-100 rounded px-2 py-1 text-right text-sm text-gray-400 bg-transparent cursor-not-allowed"
+                            />
+                          )}
                           <span className="text-gray-400 text-xs">%</span>
                         </div>
                       </td>
                     </tr>
                   );
 
-                  if (!isComposite) return [mainRow];
-
-                  // Sub-class rows shown when composite is linked (read-only, indented).
-                  const isRussell =
-                    Math.abs(capSplit.US_LARGE_CAP - RUSSELL_CAP_SPLIT.US_LARGE_CAP) < 0.005 &&
-                    Math.abs(capSplit.US_MID_CAP   - RUSSELL_CAP_SPLIT.US_MID_CAP)   < 0.005 &&
-                    Math.abs(capSplit.US_SMALL_CAP - RUSSELL_CAP_SPLIT.US_SMALL_CAP) < 0.005;
-                  const subRows = US_CAP_SUBS.map((sub, i) => (
+                  // ── Sub-class rows — always indented, editable only when unlinked ──
+                  const subRows = US_CAP_SUBS.map(sub => (
                     <tr key={sub} className="bg-gray-50/60">
                       <td className="pl-10 pr-4 py-1">
                         <span className="flex items-center gap-2 whitespace-nowrap">
                           <span className="w-1.5 h-1.5 rounded-sm shrink-0" style={{ backgroundColor: AC_COLOR[sub] }} />
-                          <span className="text-gray-400 text-xs">{AC_LABEL[sub]}</span>
-                          {i === 0 && (
-                            <span className="text-[10px] text-gray-400">
-                              {isRussell ? '(Russell)' : '(custom)'}
-                              {!isRussell && (
-                                <button
-                                  type="button"
-                                  onClick={handleResetToRussell}
-                                  title="Reset to Russell index weights (Large 67%, Mid 25%, Small 8%)"
-                                  className="ml-1 underline hover:text-indigo-600"
-                                >
-                                  reset
-                                </button>
-                              )}
-                            </span>
-                          )}
+                          <span className={`text-xs ${usEquityLinked ? 'text-gray-400' : 'text-gray-600'}`}>{AC_LABEL[sub]}</span>
                         </span>
                       </td>
                       <td className="px-4 py-1 text-right">
                         <div className="flex items-center justify-end gap-1">
-                          <input
-                            type="number"
-                            value={weights[sub]}
-                            readOnly
-                            disabled
-                            className="w-16 border border-gray-100 rounded px-2 py-0.5 text-right text-xs text-gray-400 bg-transparent cursor-not-allowed"
-                          />
-                          <span className="text-gray-300 text-xs">%</span>
+                          {usEquityLinked ? (
+                            <input
+                              type="number"
+                              value={weights[sub]}
+                              readOnly
+                              disabled
+                              className="w-16 border border-gray-100 rounded px-2 py-0.5 text-right text-xs text-gray-400 bg-transparent cursor-not-allowed"
+                            />
+                          ) : (
+                            <input
+                              type="number"
+                              value={weights[sub]}
+                              step="0.1"
+                              min="0"
+                              max="100"
+                              onChange={e => setWeights({ ...weights, [sub]: e.target.value })}
+                              onBlur={commitWeights}
+                              className="w-16 border rounded px-2 py-0.5 text-right text-xs"
+                            />
+                          )}
+                          <span className={`text-xs ${usEquityLinked ? 'text-gray-300' : 'text-gray-400'}`}>%</span>
                         </div>
                       </td>
                     </tr>
                   ));
 
-                  return [mainRow, ...subRows];
+                  return [utmRow, ...subRows];
                 })}
               </tbody>
               <tfoot>
