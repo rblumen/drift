@@ -390,6 +390,48 @@ describe('locked positions', () => {
     expect(near(accountSum(r.trades, 'ira'),    0, 2)).toBe(true);
     expect(near(accountSum(r.trades, 'k401'),   0, 2)).toBe(true);
   });
+
+  it('projectedWeights reach targets despite locked positions (immovable correction)', () => {
+    // Regression: without the immovable subtraction in step 5, locked FSKAX ($259k)
+    // caused cap sub-classes to be over-bought. projectedWeights would exceed targets
+    // by the locked fraction (~25.9% of $1M total), pushing e.g. US_LARGE_CAP
+    // to ~56% instead of the 38.5% target.
+    const r = rebalance(LOCKED_POS_ACCOUNTS, BASE_LOCKED_POSITIONS, ZERO_TOL_STRATEGY);
+    const tol = 0.02; // allow 2% rounding slack
+    expect(Math.abs(r.projectedWeights.US_LARGE_CAP - ZERO_TOL_STRATEGY.targets.US_LARGE_CAP)).toBeLessThan(tol);
+    expect(Math.abs(r.projectedWeights.US_MID_CAP   - ZERO_TOL_STRATEGY.targets.US_MID_CAP  )).toBeLessThan(tol);
+    expect(Math.abs(r.projectedWeights.US_SMALL_CAP - ZERO_TOL_STRATEGY.targets.US_SMALL_CAP)).toBeLessThan(tol);
+    expect(Math.abs(r.projectedWeights.FIXED_INCOME  - ZERO_TOL_STRATEGY.targets.FIXED_INCOME )).toBeLessThan(tol);
+  });
+
+  it('locked account holdings are also treated as immovable', () => {
+    // A fully-locked account's INTL position must not cause the unlocked accounts
+    // to over-buy INTL. projectedWeights[DEVELOPED_INTL] should equal the target.
+    const accts: Account[] = [
+      { id: 'schwab', name: 'Schwab', institution: 'Schwab',   type: 'TAXABLE',         newCash: 200_000 },
+      { id: 'ira',    name: 'IRA',    institution: 'Fidelity', type: 'TRADITIONAL_IRA', locked: true },
+      { id: 'k401',   name: '401k',   institution: 'Empower',  type: 'FOUR_OH_ONE_K',   newCash: 500_000 },
+    ];
+    // IRA holds $100k of INTL (locked account — immovable). Household = $800k.
+    // DEVELOPED_INTL target = 17% → $136k total; $100k already locked in IRA.
+    // Trades should only buy $36k of INTL, not $136k.
+    const positions: Position[] = [
+      { accountId: 'ira', ticker: 'FZILX', marketValue: 100_000 },
+    ];
+    const strategy = {
+      ...ZERO_TOL_STRATEGY,
+      targets: {
+        US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.5, US_MID_CAP: 0, US_SMALL_CAP: 0,
+        DEVELOPED_INTL: 0.17, EMERGING_INTL: 0, FIXED_INCOME: 0.25, ALTERNATIVES: 0.08, CASH: 0,
+      },
+    };
+    const r = rebalance(accts, positions, strategy);
+    // Without the fix: projected DEVELOPED_INTL ≈ 17% + 100k/800k = 29.5%.
+    // With the fix: projected DEVELOPED_INTL ≈ 17%.
+    expect(Math.abs(r.projectedWeights.DEVELOPED_INTL - 0.17)).toBeLessThan(0.02);
+    expect(near(accountSum(r.trades, 'schwab'), 200_000, 5)).toBe(true);
+    expect(near(accountSum(r.trades, 'k401'),   500_000, 5)).toBe(true);
+  });
 });
 
 // ─── concentrateClasses — fill designated account first ──────────────────────

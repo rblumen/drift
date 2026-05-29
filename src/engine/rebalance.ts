@@ -229,17 +229,33 @@ export function rebalance(
   // current values from their targets, and locked accounts remove capacity). Scaling
   // preserves relative proportions while ensuring the placed total equals the available
   // capacity, so net trade deltas balance to 0 per account.
+  //
+  // Immovable correction: positions in locked accounts and individually-locked positions
+  // in non-locked accounts cannot be changed by any trade. Only (target − immovable)
+  // needs to be supplied via trades; the rest is already on the books. Without this
+  // subtraction, classes with locked-but-underweight positions are over-bought, causing
+  // projectedWeights to exceed targets by exactly the immovable amount.
+
+  const immovableByClass = zeroByClass();
+  for (const acct of accounts) {
+    for (const ac of ALL_ASSET_CLASSES) {
+      if (withinTolerance.has(ac)) continue;
+      immovableByClass[ac] += acct.locked
+        ? (currentValueByAccount[acct.id]?.[ac] ?? 0)
+        : (lockedValueByAccount[acct.id]?.[ac] ?? 0);
+    }
+  }
 
   const totalFreeCapacity = Object.values(freeCapacity).reduce((a, b) => a + b, 0);
   const totalOOTTarget = ALL_ASSET_CLASSES
     .filter(ac => !withinTolerance.has(ac))
-    .reduce((s, ac) => s + targetValue[ac], 0);
+    .reduce((s, ac) => s + Math.max(0, targetValue[ac] - immovableByClass[ac]), 0);
 
   const scale = totalOOTTarget > 0 ? totalFreeCapacity / totalOOTTarget : 0;
   const adjustedTarget = Object.fromEntries(
     ALL_ASSET_CLASSES.map(ac => [
       ac,
-      withinTolerance.has(ac) ? 0 : targetValue[ac] * scale,
+      withinTolerance.has(ac) ? 0 : Math.max(0, targetValue[ac] - immovableByClass[ac]) * scale,
     ]),
   ) as Record<AssetClass, number>;
 

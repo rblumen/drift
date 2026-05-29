@@ -283,6 +283,7 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash }: Pro
   // Separate flags by priority
   const importantFlags = [
     ...flags.filter(f => f.kind === 'EXCESS_CASH'),
+    ...flags.filter(f => f.kind === 'NO_ELIGIBLE_ACCOUNT'),
     ...flags.filter(f => f.kind === 'REVISIT_PLACEMENT'),
     ...flags.filter(f => f.kind === 'UNMAPPED_HOLDING'),
     ...flags.filter(f => f.kind === 'TAXABLE_SALE'),
@@ -367,7 +368,7 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash }: Pro
           <HelpDef term="Current">Your actual allocation today, based on loaded positions.</HelpDef>
           <HelpDef term="Target">The target weight from your strategy.</HelpDef>
           <HelpDef term="Drift">Current minus Target. Amber = over target; Blue = under target; Green = within tolerance.</HelpDef>
-          <HelpDef term="After trades">Projected allocation once the recommended trades are executed. Should closely match the target.</HelpDef>
+          <HelpDef term="After trades">Projected allocation once the recommended trades are executed. Should closely match the target. Deviations larger than the tolerance band indicate a hard constraint — check the flags above (e.g. "No eligible account" means no account can hold that class; locked positions that exceed the target for a class cannot be reduced).</HelpDef>
           <HelpDef term="Classes within tolerance">Shown in the table but generate no trades. The tolerance band (±5% by default) suppresses small drift to avoid over-trading.</HelpDef>
         </HelpSection>
 
