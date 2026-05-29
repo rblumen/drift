@@ -169,7 +169,8 @@ function buildHtml(result: RebalanceResult, accounts: Account[], resolvedTrades:
     year: 'numeric', month: 'long', day: 'numeric',
   });
   const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-  const reportId = `rebalance-${now.toISOString().slice(0, 10)}-${Math.round(householdValue)}`;
+  const localDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const reportId = `rebalance-${localDate}-${Math.round(householdValue)}`;
 
   // ── Flags section ───────────────────────────────────────────────────────────
   const acctName = (id: string) => accounts.find(a => a.id === id)?.name ?? id;
@@ -356,7 +357,8 @@ export function downloadReport(result: RebalanceResult, accounts: Account[], res
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
   a.href     = url;
-  a.download = `rebalance-report-${now.toISOString().slice(0, 10)}.html`;
+  const localDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  a.download = `rebalance-report-${localDate}.html`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

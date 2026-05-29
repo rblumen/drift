@@ -149,7 +149,9 @@ export function clearState(): void {
  * Filename includes today's date for easy archiving.
  */
 export function saveJson(state: AppState): void {
-  const filename = `portfolio-${new Date().toISOString().slice(0, 10)}.json`;
+  const d        = new Date();
+  const dateStr  = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const filename = `portfolio-${dateStr}.json`;
   const blob     = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
   const url      = URL.createObjectURL(blob);
   const anchor   = document.createElement('a');
