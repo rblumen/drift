@@ -214,6 +214,15 @@ Add a simple 2d plot to the Household Allocation card of the "Results" pane show
 
 ---
 
+### 19. Broaden import parser support for more institutions, add auto-detect
+
+**What:** Add support for ingesting holdings reports from more common investment institutions. Add auto-detection to streamline.
+
+**Scope ideas:**
+- Identify large/widely used institutions to prioritize
+- Auto-detection (based on format or search for institution name in file/name?)
+
+---
 ## Already Covered by the Implementation Plan
 
 The following commonly-discussed Bogleheads considerations are already handled in `IMPLEMENTATION_PLAN.md` and need no additional work:

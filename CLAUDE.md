@@ -5,9 +5,8 @@ Project memory for this repo. Keep it short; every line should change how you ac
 ## What this is
 A local, browser-only tool that rebalances investment holdings across multiple accounts (Empower, Schwab, Fidelity). Household-level target allocation with account-level tax-placement rules. Full build spec: `IMPLEMENTATION_PLAN.md` — follow it milestone by milestone.
 
-## How to work
-- Build in milestone order (M0→M4). One branch per milestone; pause for review before merging the next.
-- Get `src/engine/` correct and green (tests pass) before building any UI.
+## Governing principles
+- PRINCIPLES.md defines the logical objectives/constraints that the tool should respect, in priority order. Implemented logic must adhere to this statement of intent.
 
 ## Architecture rules
 - `src/engine/` is **pure TypeScript, no React imports** — pure functions, fully unit-tested.

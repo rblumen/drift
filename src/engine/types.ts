@@ -115,4 +115,8 @@ export type Flag =
   | { kind: 'PLACEMENT_SPILLOVER'; assetClass: AssetClass; bucket: PlacementBucket; amountUsd: number }
   | { kind: 'REVISIT_PLACEMENT'; taxableShare: number; fixedIncomeTarget: number }
   | { kind: 'NO_ELIGIBLE_ACCOUNT'; assetClass: AssetClass; amountUsd: number }
-  | { kind: 'EXCESS_CASH'; amountUsd: number };
+  | { kind: 'EXCESS_CASH'; amountUsd: number }
+  /** Emitted when an OOT class's post-trade projected weight still exceeds toleranceAbs
+   *  from its target. Indicates a hard constraint (locked positions above target,
+   *  no eligible account, or minTradeUsd too large) that the engine could not overcome. */
+  | { kind: 'PROJECTED_OFF_TARGET'; assetClass: AssetClass; projectedWeight: number; targetWeight: number };

@@ -71,6 +71,23 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
     );
   }
 
+  if (flag.kind === 'PROJECTED_OFF_TARGET') {
+    const gap = flag.projectedWeight - flag.targetWeight;
+    const over = gap > 0;
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
+        <strong>Target not reachable — {AC_LABEL[flag.assetClass]}:</strong>{' '}
+        projects to <strong>{fmtPct(flag.projectedWeight)}</strong> after trades
+        (target {fmtPct(flag.targetWeight)}, still{' '}
+        <strong>{over ? '+' : ''}{fmtPct(gap)}</strong> off).{' '}
+        {over
+          ? 'A locked position likely exceeds the target and cannot be reduced.'
+          : 'No eligible account or a minimum-trade filter is preventing full rebalancing.'}
+        {' '}Check the flags above for the specific constraint.
+      </div>
+    );
+  }
+
   if (flag.kind === 'EXCESS_CASH') {
     return (
       <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
@@ -284,6 +301,7 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash }: Pro
   const importantFlags = [
     ...flags.filter(f => f.kind === 'EXCESS_CASH'),
     ...flags.filter(f => f.kind === 'NO_ELIGIBLE_ACCOUNT'),
+    ...flags.filter(f => f.kind === 'PROJECTED_OFF_TARGET'),
     ...flags.filter(f => f.kind === 'REVISIT_PLACEMENT'),
     ...flags.filter(f => f.kind === 'UNMAPPED_HOLDING'),
     ...flags.filter(f => f.kind === 'TAXABLE_SALE'),
@@ -402,6 +420,11 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash }: Pro
           </HelpDef>
           <HelpDef term="NO_ELIGIBLE_ACCOUNT (red)">
             No account has capacity for a given asset class. Check account restrictions in the Accounts tab.
+          </HelpDef>
+          <HelpDef term="PROJECTED_OFF_TARGET (red)">
+            After all trades, a class's projected allocation still misses its target by more than the
+            tolerance band. This means a hard constraint prevented full rebalancing — locked positions
+            above target, no eligible account, or a minimum trade size that suppresses the needed adjustment.
           </HelpDef>
           <HelpDef term="EXCESS_CASH (amber)">
             Household free cash could not be distributed because all accounts have deposits closed or are

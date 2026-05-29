@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Account, Position, AssetClass } from './types';
+import { ALL_ASSET_CLASSES } from './types';
 import { DEFAULT_STRATEGY } from './strategy';
 import { rebalance } from './rebalance';
 
@@ -1156,5 +1157,296 @@ describe('trade-count minimization — drop marginal trades (backlog #16)', () =
     // All account nets equal newCash (no dropped-trade imbalance).
     expect(near(accountSum(r.trades, 'ira'),  800_000, 10)).toBe(true);
     expect(near(accountSum(r.trades, 'tiny'),  10_000, 10)).toBe(true);
+  });
+});
+
+// ─── post-trade accuracy — stress scenarios ───────────────────────────────────
+//
+// These tests verify the end-to-end invariant: projectedWeights for every
+// out-of-tolerance class must land within toleranceAbs of the target after trades,
+// and the PROJECTED_OFF_TARGET flag must fire whenever a hard constraint prevents
+// that.  They complement the unit tests above by exercising full pipelines
+// (placement → trades → minimization → Step 11 validation) under varied stress.
+
+// Shared helper: assert every OOT class projects within strategy.toleranceAbs,
+// and that no PROJECTED_OFF_TARGET flags were emitted.
+function assertAllOnTarget(
+  r: ReturnType<typeof rebalance>,
+  strategy: { targets: Record<AssetClass, number>; toleranceAbs: number },
+) {
+  const tol = strategy.toleranceAbs + 0.001; // tiny rounding buffer
+  for (const ac of ALL_ASSET_CLASSES) {
+    // Only check OOT classes — within-tolerance classes intentionally stay at current.
+    const isWithinTolNow =
+      Math.abs(r.currentWeights[ac] - strategy.targets[ac]) <= strategy.toleranceAbs;
+    if (isWithinTolNow) continue;
+    expect(
+      Math.abs(r.projectedWeights[ac] - strategy.targets[ac]),
+      `${ac}: projected ${(r.projectedWeights[ac] * 100).toFixed(2)}% should be within ` +
+      `${(strategy.toleranceAbs * 100).toFixed(1)}% of target ${(strategy.targets[ac] * 100).toFixed(2)}%`,
+    ).toBeLessThanOrEqual(tol);
+  }
+  expect(
+    r.flags.filter(f => f.kind === 'PROJECTED_OFF_TARGET'),
+    'expected no PROJECTED_OFF_TARGET flags',
+  ).toHaveLength(0);
+}
+
+describe('post-trade accuracy — stress scenarios', () => {
+  // ── S1: large single-class imbalance, 3 unconstrained accounts ───────────────
+  // Portfolio holds only SPY (US Large Cap). Every other class needs to be bought
+  // from scratch. Verifies the full household rebalance reaches every target.
+  it('S1: large single-class imbalance — all OOT classes reach target', () => {
+    const accts: Account[] = [
+      { id: 'schwab', name: 'Schwab', institution: 'Schwab',   type: 'TAXABLE'         },
+      { id: 'ira',    name: 'IRA',    institution: 'Fidelity', type: 'TRADITIONAL_IRA' },
+      { id: 'k401',   name: '401k',   institution: 'Empower',  type: 'FOUR_OH_ONE_K'   },
+    ];
+    const positions: Position[] = [
+      { accountId: 'schwab', ticker: 'FXAIX', marketValue: 200_000 },
+      { accountId: 'ira',    ticker: 'FXAIX', marketValue: 400_000 },
+      { accountId: 'k401',   ticker: 'FXAIX', marketValue: 400_000 },
+    ];
+    const strategy = { ...ZERO_TOL_STRATEGY, toleranceAbs: 0.01 };
+    assertAllOnTarget(rebalance(accts, positions, strategy), strategy);
+  });
+
+  // ── S2: multi-class drift across 5 accounts ───────────────────────────────────
+  // Each account holds exactly one asset class that is not its preferred home.
+  // Full rebalance must correctly swap assets across account boundaries.
+  it('S2: multi-class drift across 5 accounts — all OOT classes within 1% after trades', () => {
+    const accts: Account[] = [
+      { id: 't1', name: 'Taxable 1', institution: 'Schwab',   type: 'TAXABLE'         },
+      { id: 't2', name: 'Taxable 2', institution: 'Fidelity', type: 'TAXABLE'         },
+      { id: 'ir', name: 'Trad IRA',  institution: 'Fidelity', type: 'TRADITIONAL_IRA' },
+      { id: 'ro', name: 'Roth IRA',  institution: 'Fidelity', type: 'ROTH_IRA'        },
+      { id: 'k4', name: '401k',      institution: 'Empower',  type: 'FOUR_OH_ONE_K'   },
+    ];
+    const positions: Position[] = [
+      // Taxable: heavy equity (wrong bucket) and no fixed income
+      { accountId: 't1', ticker: 'FXAIX', marketValue: 120_000 },  // LC
+      { accountId: 't2', ticker: 'FXAIX', marketValue:  80_000 },  // LC
+      // TA accounts: all US Large Cap, need redistribution to intl + alts + FI
+      { accountId: 'ir', ticker: 'FXAIX', marketValue: 280_000 },
+      { accountId: 'ro', ticker: 'FXAIX', marketValue: 120_000 },
+      { accountId: 'k4', ticker: 'FXAIX', marketValue: 400_000 },
+    ];
+    const strategy = { ...ZERO_TOL_STRATEGY, toleranceAbs: 0.01 };
+    assertAllOnTarget(rebalance(accts, positions, strategy), strategy);
+  });
+
+  // ── S3: greenfield with spillover — targets still met despite non-preferred placement
+  it('S3: placement spillover (taxable > FI target) — no PROJECTED_OFF_TARGET', () => {
+    // Taxable = 30% of household, FI target = 20% → REVISIT_PLACEMENT fires and
+    // equities spill into taxable, but all class targets are still reachable.
+    const accts: Account[] = [
+      { id: 'schwab', name: 'Schwab', institution: 'Schwab',   type: 'TAXABLE',         newCash: 300_000 },
+      { id: 'ira',    name: 'IRA',    institution: 'Fidelity', type: 'TRADITIONAL_IRA', newCash: 300_000 },
+      { id: 'k401',   name: '401k',   institution: 'Empower',  type: 'FOUR_OH_ONE_K',   newCash: 400_000 },
+    ];
+    const strategy = { ...ZERO_TOL_STRATEGY, toleranceAbs: 0.01 };
+    const r = rebalance(accts, NO_POSITIONS, strategy);
+    expect(r.flags.some(f => f.kind === 'REVISIT_PLACEMENT')).toBe(true);
+    assertAllOnTarget(r, strategy);
+  });
+
+  // ── S4: NO_ELIGIBLE_ACCOUNT → PROJECTED_OFF_TARGET fires for constrained class
+  it('S4: NO_ELIGIBLE_ACCOUNT — PROJECTED_OFF_TARGET fires for the blocked class', () => {
+    // Single IRA that explicitly excludes ALTERNATIVES.
+    // ALTERNATIVES (target 8%) cannot be placed anywhere → NO_ELIGIBLE_ACCOUNT.
+    // Step 7.5 gap-fill then redistributes the unplaceable $80k back to the
+    // account's existing OOT holdings (LC, DEVINTL, FI) proportionally to keep
+    // the account balanced. Those classes end up above their own targets too, so
+    // PROJECTED_OFF_TARGET fires for all affected classes — not just ALTS.
+    const accts: Account[] = [{
+      id: 'ira', name: 'IRA', institution: 'Fidelity', type: 'TRADITIONAL_IRA',
+      allowedAssetClasses: ['US_LARGE_CAP', 'DEVELOPED_INTL', 'FIXED_INCOME'] as AssetClass[],
+    }];
+    const positions: Position[] = [
+      { accountId: 'ira', ticker: 'FXAIX', marketValue: 600_000 },  // LC
+      { accountId: 'ira', ticker: 'FZILX', marketValue: 200_000 },  // DEVINTL
+      { accountId: 'ira', ticker: 'MUNY',  marketValue: 200_000 },  // FI
+    ];
+    const strategy = {
+      ...ZERO_TOL_STRATEGY,
+      targets: {
+        US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.55, US_MID_CAP: 0, US_SMALL_CAP: 0,
+        DEVELOPED_INTL: 0.25, EMERGING_INTL: 0, FIXED_INCOME: 0.12, ALTERNATIVES: 0.08, CASH: 0,
+      },
+    };
+    const r = rebalance(accts, positions, strategy);
+
+    // ALTS is the primary constrained class.
+    expect(r.flags.some(f => f.kind === 'NO_ELIGIBLE_ACCOUNT' && f.assetClass === 'ALTERNATIVES')).toBe(true);
+    expect(r.flags.some(f => f.kind === 'PROJECTED_OFF_TARGET' && f.assetClass === 'ALTERNATIVES')).toBe(true);
+
+    // Every PROJECTED_OFF_TARGET flag must be accurate: the stated projectedWeight
+    // must match what the engine actually computed, and the deviation must genuinely
+    // exceed toleranceAbs (no false positives).
+    for (const flag of r.flags.filter(f => f.kind === 'PROJECTED_OFF_TARGET')) {
+      if (flag.kind !== 'PROJECTED_OFF_TARGET') continue;
+      expect(flag.projectedWeight).toBeCloseTo(r.projectedWeights[flag.assetClass], 6);
+      expect(Math.abs(flag.projectedWeight - flag.targetWeight)).toBeGreaterThan(strategy.toleranceAbs);
+    }
+
+    // Classes with no PROJECTED_OFF_TARGET flag must be within tolerance.
+    for (const ac of ALL_ASSET_CLASSES) {
+      const hasPOT = r.flags.some(f => f.kind === 'PROJECTED_OFF_TARGET' && f.assetClass === ac);
+      const withinNow = Math.abs(r.currentWeights[ac] - strategy.targets[ac]) <= strategy.toleranceAbs;
+      if (!hasPOT && !withinNow) {
+        expect(Math.abs(r.projectedWeights[ac] - strategy.targets[ac])).toBeLessThanOrEqual(strategy.toleranceAbs + 0.001);
+      }
+    }
+  });
+
+  // ── S5: locked position below target — must reach target (regression for fix) ─
+  it('S5: locked position below target — projected reaches target, no PROJECTED_OFF_TARGET', () => {
+    // IRA holds $60k of DEVINTL locked + $540k of LC. Taxable has $200k FI.
+    // DEVINTL target 20% of $800k = $160k. $60k is locked; engine must buy $100k more.
+    // Old bug: engine would over-buy DEVINTL by the locked amount ($60k), giving 27.5% not 20%.
+    const accts: Account[] = [
+      { id: 'schwab', name: 'Schwab', institution: 'Schwab',   type: 'TAXABLE'         },
+      { id: 'ira',    name: 'IRA',    institution: 'Fidelity', type: 'TRADITIONAL_IRA' },
+    ];
+    const positions: Position[] = [
+      { accountId: 'schwab', ticker: 'MUNY',  marketValue: 200_000 },
+      { accountId: 'ira',    ticker: 'FZILX', marketValue:  60_000, locked: true },
+      { accountId: 'ira',    ticker: 'FXAIX', marketValue: 540_000 },
+    ];
+    const strategy = {
+      ...ZERO_TOL_STRATEGY,
+      targets: {
+        US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.55, US_MID_CAP: 0, US_SMALL_CAP: 0,
+        DEVELOPED_INTL: 0.20, EMERGING_INTL: 0, FIXED_INCOME: 0.20, ALTERNATIVES: 0.05, CASH: 0,
+      },
+    };
+    assertAllOnTarget(rebalance(accts, positions, strategy), strategy);
+  });
+
+  // ── S6: locked position exceeds target → PROJECTED_OFF_TARGET fires ──────────
+  it('S6: locked position above target — PROJECTED_OFF_TARGET fires for that class', () => {
+    // IRA has $250k DEVINTL locked (25% of $1M). Target is 10%. Cannot reduce.
+    // After trades: DEVINTL projected ≥ 25% >> 10% target.
+    const accts: Account[] = [
+      { id: 'schwab', name: 'Schwab', institution: 'Schwab',   type: 'TAXABLE'         },
+      { id: 'ira',    name: 'IRA',    institution: 'Fidelity', type: 'TRADITIONAL_IRA' },
+      { id: 'k401',   name: '401k',   institution: 'Empower',  type: 'FOUR_OH_ONE_K'   },
+    ];
+    const positions: Position[] = [
+      { accountId: 'schwab', ticker: 'MUNY',  marketValue: 200_000 },
+      { accountId: 'ira',    ticker: 'FZILX', marketValue: 250_000, locked: true },  // DEVINTL, locked
+      { accountId: 'ira',    ticker: 'FXAIX', marketValue: 250_000 },
+      { accountId: 'k401',   ticker: 'FXAIX', marketValue: 300_000 },
+    ];
+    const strategy = {
+      ...ZERO_TOL_STRATEGY,
+      targets: {
+        US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.50, US_MID_CAP: 0, US_SMALL_CAP: 0,
+        DEVELOPED_INTL: 0.10, EMERGING_INTL: 0, FIXED_INCOME: 0.25, ALTERNATIVES: 0.15, CASH: 0,
+      },
+    };
+    const r = rebalance(accts, positions, strategy);
+
+    const devFlag = r.flags.find(
+      f => f.kind === 'PROJECTED_OFF_TARGET' && f.assetClass === 'DEVELOPED_INTL',
+    );
+    expect(devFlag).toBeDefined();
+    // Projected must be above target (locked enforces a floor above target).
+    expect(r.projectedWeights.DEVELOPED_INTL).toBeGreaterThan(0.10);
+    // The flag captures the actual projected and target values.
+    if (devFlag?.kind === 'PROJECTED_OFF_TARGET') {
+      expect(devFlag.projectedWeight).toBeCloseTo(r.projectedWeights.DEVELOPED_INTL, 4);
+      expect(devFlag.targetWeight).toBe(0.10);
+    }
+  });
+
+  // ── S7: minTradeUsd suppresses needed trade → PROJECTED_OFF_TARGET ────────────
+  it('S7: minTradeUsd too large — PROJECTED_OFF_TARGET fires when adjustment is suppressed', () => {
+    // $10k portfolio; LC needs $500 sell, FI needs $500 buy.
+    // minTradeUsd = $1000 → both trades filtered. Portfolio stays at current.
+    // |50% - 55%| = 5% > toleranceAbs (0%) → PROJECTED_OFF_TARGET for both.
+    const accts: Account[] = [
+      { id: 'ira', name: 'IRA', institution: 'Fidelity', type: 'TRADITIONAL_IRA' },
+    ];
+    const positions: Position[] = [
+      { accountId: 'ira', ticker: 'FXAIX', marketValue: 5_500 },  // LC — 55%, target 50%
+      { accountId: 'ira', ticker: 'MUNY',  marketValue: 4_500 },  // FI — 45%, target 50%
+    ];
+    const strategy = {
+      ...ZERO_TOL_STRATEGY,
+      targets: {
+        US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.5, US_MID_CAP: 0, US_SMALL_CAP: 0,
+        DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0.5, ALTERNATIVES: 0, CASH: 0,
+      },
+      toleranceAbs: 0,
+      minTradeUsd: 1_000,  // $500 trades are filtered out
+    };
+    const r = rebalance(accts, positions, strategy);
+    expect(r.trades).toHaveLength(0);  // both trades suppressed
+    expect(r.flags.some(f => f.kind === 'PROJECTED_OFF_TARGET' && f.assetClass === 'US_LARGE_CAP')).toBe(true);
+    expect(r.flags.some(f => f.kind === 'PROJECTED_OFF_TARGET' && f.assetClass === 'FIXED_INCOME')).toBe(true);
+  });
+
+  // ── S8: locked account — unlocked accounts reach target, locked stays put ─────
+  it('S8: locked account — unlocked accounts trade to target; locked account untouched', () => {
+    // IRA is locked (whole account). 401k and taxable handle all trades.
+    // IRA's holdings still count in household weights but create no trades.
+    const accts: Account[] = [
+      { id: 'schwab', name: 'Schwab', institution: 'Schwab',   type: 'TAXABLE',         newCash: 200_000 },
+      { id: 'ira',    name: 'IRA',    institution: 'Fidelity', type: 'TRADITIONAL_IRA', locked: true },
+      { id: 'k401',   name: '401k',   institution: 'Empower',  type: 'FOUR_OH_ONE_K',   newCash: 500_000 },
+    ];
+    const positions: Position[] = [
+      // Locked IRA holds a fixed-income slug that skews the household baseline.
+      { accountId: 'ira', ticker: 'MUNY', marketValue: 150_000 },
+    ];
+    const strategy = { ...ZERO_TOL_STRATEGY, toleranceAbs: 0.01 };
+    const r = rebalance(accts, positions, strategy);
+
+    // No trades for the locked account.
+    expect(r.trades.filter(t => t.accountId === 'ira')).toHaveLength(0);
+    // Projected weights must account for the locked IRA FI position being immovable.
+    // Given it's locked below its target portion, the unlocked accounts compensate.
+    // All unconstrained OOT classes should be within 1% after trades.
+    for (const ac of ALL_ASSET_CLASSES) {
+      const withinNow = Math.abs(r.currentWeights[ac] - strategy.targets[ac]) <= strategy.toleranceAbs;
+      if (withinNow) continue;
+      expect(
+        Math.abs(r.projectedWeights[ac] - strategy.targets[ac]),
+        `${ac} projected off target`,
+      ).toBeLessThanOrEqual(strategy.toleranceAbs + 0.001);
+    }
+    expect(r.flags.filter(f => f.kind === 'PROJECTED_OFF_TARGET')).toHaveLength(0);
+  });
+
+  // ── S9: PROJECTED_OFF_TARGET values are accurate ─────────────────────────────
+  it('S9: PROJECTED_OFF_TARGET carries correct projectedWeight and targetWeight', () => {
+    // Reproduce S4 minimal case; verify flag fields round-trip correctly.
+    const accts: Account[] = [{
+      id: 'ira', name: 'IRA', institution: 'Fidelity', type: 'TRADITIONAL_IRA',
+      allowedAssetClasses: ['US_LARGE_CAP', 'FIXED_INCOME'] as AssetClass[],
+    }];
+    const positions: Position[] = [
+      { accountId: 'ira', ticker: 'FXAIX', marketValue: 800_000 },
+      { accountId: 'ira', ticker: 'MUNY',  marketValue: 200_000 },
+    ];
+    const strategy = {
+      ...ZERO_TOL_STRATEGY,
+      targets: {
+        US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.7, US_MID_CAP: 0, US_SMALL_CAP: 0,
+        DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0.2, ALTERNATIVES: 0.1, CASH: 0,
+      },
+    };
+    const r = rebalance(accts, positions, strategy);
+    const flag = r.flags.find(
+      f => f.kind === 'PROJECTED_OFF_TARGET' && f.assetClass === 'ALTERNATIVES',
+    );
+    expect(flag).toBeDefined();
+    if (flag?.kind === 'PROJECTED_OFF_TARGET') {
+      expect(flag.projectedWeight).toBeCloseTo(r.projectedWeights.ALTERNATIVES, 6);
+      expect(flag.targetWeight).toBe(0.1);
+      // Projected must be below target (can't buy ALTS — below target, not above).
+      expect(flag.projectedWeight).toBeLessThan(flag.targetWeight);
+    }
   });
 });

@@ -489,6 +489,29 @@ export function rebalance(
     ALL_ASSET_CLASSES.map(ac => [ac, projectedValue[ac] / householdValue]),
   ) as Record<AssetClass, number>;
 
+  // Step 11 — Post-trade accuracy validation.
+  //
+  // For every class that was out-of-tolerance before trades, check that the
+  // projected weight now falls within toleranceAbs of the target. If it doesn't,
+  // a hard constraint prevented the engine from reaching the target:
+  //   • NO_ELIGIBLE_ACCOUNT — no account can hold this class
+  //   • Locked positions exceed the class target — cannot reduce below the lock
+  //   • minTradeUsd suppressed the needed trade — threshold is too large
+  //
+  // Emits PROJECTED_OFF_TARGET so the UI can surface this visibly rather than
+  // leaving the user to notice the "After trades" column is still off.
+  for (const ac of ALL_ASSET_CLASSES) {
+    if (withinTolerance.has(ac)) continue;
+    if (Math.abs(projectedWeights[ac] - strategy.targets[ac]) > strategy.toleranceAbs) {
+      flags.push({
+        kind: 'PROJECTED_OFF_TARGET',
+        assetClass: ac,
+        projectedWeight: projectedWeights[ac],
+        targetWeight: strategy.targets[ac],
+      });
+    }
+  }
+
   return {
     householdValue, currentWeights, targetWeights: strategy.targets,
     projectedWeights, currentValueByAccount, trades, flags,
