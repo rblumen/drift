@@ -517,7 +517,27 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash }: Pro
         <h3 className="text-sm font-medium text-gray-700">Household allocation</h3>
         <div className="overflow-hidden border border-gray-200 rounded-lg">
           <div className="p-4 border-b border-gray-100">
-            <ConcentricDonutChart currentWeights={currentWeights} targetWeights={targetWeights} />
+            {(() => {
+              const currentByClass = Object.fromEntries(
+                ALL_ASSET_CLASSES.map(ac => [ac, (currentWeights[ac] ?? 0) * householdValue])
+              ) as Record<AssetClass, number>;
+              const projectedByClass = Object.fromEntries(
+                ALL_ASSET_CLASSES.map(ac => [ac, (projectedWeights[ac] ?? 0) * householdValue])
+              ) as Record<AssetClass, number>;
+              const beforeSlices = buildPieSlices(currentByClass);
+              const afterSlices  = buildPieSlices(projectedByClass);
+              const hasBoth = beforeSlices.length > 0 && afterSlices.length > 0;
+              return (
+                <div className={hasBoth ? 'grid grid-cols-2 gap-6' : ''}>
+                  {beforeSlices.length > 0 && (
+                    <PieChart title="Before" slices={beforeSlices} size={88} />
+                  )}
+                  {afterSlices.length > 0 && (
+                    <PieChart title="After trades" slices={afterSlices} size={88} />
+                  )}
+                </div>
+              );
+            })()}
           </div>
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
