@@ -128,13 +128,27 @@ td{padding:7px 12px;border-top:1px solid #f3f4f6;vertical-align:middle}
 }
 `;
 
-// ── Embedded script (checkbox persistence + strikethrough + progress) ─────────
+// ── Embedded script (checkbox persistence + collapse + progress) ──────────────
 
 function script(reportId: string): string {
   return `
 <script>
 (function(){
   var ID="${reportId}";
+
+  // Collapsible account cards
+  document.querySelectorAll('.card-toggle').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      var body=document.getElementById(btn.dataset.target);
+      if(!body)return;
+      var open=body.style.display!=='none';
+      body.style.display=open?'none':'block';
+      var chevron=btn.querySelector('.chevron');
+      if(chevron)chevron.textContent=open?'▸':'▾';
+    });
+  });
+
+  // Checkbox persistence + progress
   var boxes=document.querySelectorAll('.trade-check');
   var total=boxes.length;
   function updateProgress(){
@@ -171,6 +185,7 @@ function buildHtml(result: RebalanceResult, accounts: Account[], resolvedTrades:
   const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   const localDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   const reportId = `rebalance-${localDate}-${Math.round(householdValue)}`;
+  const versionTag = `v${__APP_VERSION__} · ${__COMMIT_SHA__}`;
 
   // ── Flags section ───────────────────────────────────────────────────────────
   const acctName = (id: string) => accounts.find(a => a.id === id)?.name ?? id;
@@ -284,19 +299,48 @@ function buildHtml(result: RebalanceResult, accounts: Account[], resolvedTrades:
     const noTradesNote = acctTrades.length === 0
       ? `<p style="padding:12px 16px;font-size:12px;color:#9ca3af;font-style:italic">Within tolerance — no trades required.</p>` : '';
 
+    // Holdings table: asset class → current value → % of account
+    const acctTotal = before.reduce((s, sl) => s + sl.value, 0);
+    const holdingsRows = before.map(sl => {
+      const pct = acctTotal > 0 ? ((sl.value / acctTotal) * 100).toFixed(1) : '0.0';
+      return `<tr>
+        <td style="display:flex;align-items:center;gap:6px">
+          <span style="width:8px;height:8px;border-radius:2px;background:${sl.color};flex-shrink:0"></span>
+          ${esc(sl.label)}
+        </td>
+        <td class="num">${esc(fmtUsd(sl.value))}</td>
+        <td class="num" style="color:#6b7280">${pct}%</td>
+      </tr>`;
+    }).join('');
+    const holdingsHtml = before.length > 0 ? `
+      <table style="margin-bottom:0">
+        <thead><tr>
+          <th>Holding</th>
+          <th class="num">Balance</th>
+          <th class="num">% of account</th>
+        </tr></thead>
+        <tbody>${holdingsRows}</tbody>
+      </table>` : '';
+
+    const cardBodyId = `body-${acct.id.replace(/[^a-zA-Z0-9]/g, '-')}`;
+
     return `
     <div class="card">
-      <div class="card-header">
+      <div class="card-header card-toggle" data-target="${cardBodyId}">
         <div style="flex:1">
           <span style="font-weight:600;color:#111827">${esc(acct.name)}</span>
           <span style="font-size:12px;color:#9ca3af;margin-left:8px">${esc(acct.institution)} · ${esc(ACCT_TYPE_LABEL[acct.type])}</span>
           ${lockBadge}
         </div>
         ${netStr}
+        <span class="chevron" style="font-size:11px;color:#9ca3af;margin-left:8px">▾</span>
       </div>
-      ${piesHtml}
-      ${tradeRows}
-      ${noTradesNote}
+      <div id="${cardBodyId}">
+        ${holdingsHtml ? `<div style="border-bottom:1px solid #f3f4f6">${holdingsHtml}</div>` : ''}
+        ${piesHtml}
+        ${tradeRows}
+        ${noTradesNote}
+      </div>
     </div>`;
   }).join('');
 
@@ -320,7 +364,7 @@ function buildHtml(result: RebalanceResult, accounts: Account[], resolvedTrades:
         Generated ${esc(dateStr)} at ${esc(timeStr)} &nbsp;·&nbsp;
         Household value: <strong style="color:#111827">${esc(fmtUsd(householdValue))}</strong>
       </p>
-      <p style="font-size:11px;color:#9ca3af;margin-top:2px">Not investment advice. All data is local to your browser.</p>
+      <p style="font-size:11px;color:#9ca3af;margin-top:2px">${esc(versionTag)}</p>
     </div>
     <div style="display:flex;align-items:center;gap:8px" class="no-print">
       <span class="progress"></span>
