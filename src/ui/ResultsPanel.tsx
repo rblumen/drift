@@ -348,7 +348,7 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash }: Pro
           </span>
         </div>
         <button
-          onClick={() => downloadReport(result, accounts, resolvedTrades)}
+          onClick={() => downloadReport(result, accounts, resolvedTrades, freeCash)}
           title="Download interactive HTML report with trade checklist"
           className="text-xs text-gray-500 hover:text-gray-800 border border-gray-200 rounded px-2 py-1 hover:bg-gray-50 transition-colors shrink-0"
         >

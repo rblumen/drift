@@ -90,6 +90,76 @@ function buildSlices(byClass: Record<AssetClass, number>): Slice[] {
     .map(ac => ({ label: AC_LABEL[ac], value: byClass[ac], color: AC_COLOR[ac] }));
 }
 
+// ── Concentric donut (outer = target, inner = current) ────────────────────────
+
+function concentricDonutSvg(
+  currentWeights: Record<AssetClass, number>,
+  targetWeights: Record<AssetClass, number>,
+  size = 140,
+): string {
+  const cx = size / 2, cy = size / 2;
+  const outerR   = size / 2 - 4;
+  const outerInR = Math.round(outerR * 0.68);
+  const innerOutR = Math.round(outerR * 0.62);
+  const innerInR  = Math.round(outerR * 0.30);
+
+  function pt(deg: number, r: number) {
+    const rad = (deg - 90) * (Math.PI / 180);
+    return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+  }
+  function annular(oR: number, iR: number, s: number, e: number): string {
+    if (e - s >= 359.999) {
+      const oT = pt(0, oR), oB = pt(180, oR), iT = pt(0, iR), iB = pt(180, iR);
+      return `M${oT.x} ${oT.y} A${oR} ${oR} 0 1 1 ${oB.x} ${oB.y} A${oR} ${oR} 0 1 1 ${oT.x} ${oT.y} M${iT.x} ${iT.y} A${iR} ${iR} 0 1 0 ${iB.x} ${iB.y} A${iR} ${iR} 0 1 0 ${iT.x} ${iT.y} Z`;
+    }
+    const oS = pt(s, oR), oE = pt(e, oR), iS = pt(s, iR), iE = pt(e, iR);
+    const lg = e - s > 180 ? 1 : 0;
+    return `M${oS.x.toFixed(2)} ${oS.y.toFixed(2)} A${oR} ${oR} 0 ${lg} 1 ${oE.x.toFixed(2)} ${oE.y.toFixed(2)} L${iE.x.toFixed(2)} ${iE.y.toFixed(2)} A${iR} ${iR} 0 ${lg} 0 ${iS.x.toFixed(2)} ${iS.y.toFixed(2)} Z`;
+  }
+  function toSegs(weights: Record<AssetClass, number>) {
+    const total = ALL_ASSET_CLASSES.reduce((s, ac) => s + (weights[ac] ?? 0), 0);
+    if (total === 0) return [];
+    let cur = 0;
+    return ALL_ASSET_CLASSES
+      .filter(ac => (weights[ac] ?? 0) > 0.001)
+      .map(ac => { const start = cur; cur += (weights[ac] / total) * 360; return { ac, start, end: cur }; });
+  }
+  const outerSegs = toSegs(targetWeights);
+  const innerSegs = toSegs(currentWeights);
+  const paths = [
+    ...outerSegs.map(({ ac, start, end }) =>
+      `<path d="${annular(outerR, outerInR, start, end)}" fill="${AC_COLOR[ac]}" stroke="white" stroke-width="1.5"><title>${esc(AC_LABEL[ac])}: target ${fmtPct(targetWeights[ac])}</title></path>`),
+    ...innerSegs.map(({ ac, start, end }) =>
+      `<path d="${annular(innerOutR, innerInR, start, end)}" fill="${AC_COLOR[ac]}" stroke="white" stroke-width="1.5"><title>${esc(AC_LABEL[ac])}: current ${fmtPct(currentWeights[ac])}</title></path>`),
+  ].join('');
+
+  const legendClasses = ALL_ASSET_CLASSES.filter(
+    ac => (currentWeights[ac] ?? 0) > 0.001 || (targetWeights[ac] ?? 0) > 0.001,
+  );
+  const legend = legendClasses.map(ac => `
+    <div style="display:flex;align-items:center;gap:6px;font-size:11px;margin-bottom:3px">
+      <span style="width:8px;height:8px;border-radius:2px;background:${AC_COLOR[ac]};flex-shrink:0"></span>
+      <span style="color:#4b5563;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(AC_LABEL[ac])}</span>
+      <span style="width:44px;text-align:right;color:#6b7280;font-variant-numeric:tabular-nums">${(currentWeights[ac] ?? 0) > 0.001 ? fmtPct(currentWeights[ac]) : '—'}</span>
+      <span style="width:44px;text-align:right;color:#6b7280;font-variant-numeric:tabular-nums">${(targetWeights[ac] ?? 0) > 0.001 ? fmtPct(targetWeights[ac]) : '—'}</span>
+    </div>`).join('');
+
+  return `
+  <div style="display:flex;align-items:flex-start;gap:16px;padding:16px">
+    <svg width="${size}" height="${size}" style="flex-shrink:0">${paths}</svg>
+    <div style="flex:1;min-width:0">
+      <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:#9ca3af;margin-bottom:6px">
+        <span style="width:8px;height:8px"></span>
+        <span style="flex:1"></span>
+        <span style="width:44px;text-align:right">Current</span>
+        <span style="width:44px;text-align:right">Target</span>
+      </div>
+      ${legend}
+      <div style="margin-top:8px;font-size:10px;color:#9ca3af">outer = target &nbsp;·&nbsp; inner = current</div>
+    </div>
+  </div>`;
+}
+
 // ── CSS ───────────────────────────────────────────────────────────────────────
 
 const CSS = `
@@ -173,7 +243,7 @@ function script(reportId: string): string {
 
 // ── Main builder ──────────────────────────────────────────────────────────────
 
-function buildHtml(result: RebalanceResult, accounts: Account[], resolvedTrades: ResolvedTrade[], now: Date): string {
+function buildHtml(result: RebalanceResult, accounts: Account[], resolvedTrades: ResolvedTrade[], freeCash: number, now: Date): string {
   const {
     householdValue, currentWeights, targetWeights, projectedWeights,
     currentValueByAccount, trades, flags,
@@ -187,26 +257,68 @@ function buildHtml(result: RebalanceResult, accounts: Account[], resolvedTrades:
   const reportId = `rebalance-${localDate}-${Math.round(householdValue)}`;
   const versionTag = `v${__APP_VERSION__} · ${__COMMIT_SHA__}`;
 
-  // ── Flags section ───────────────────────────────────────────────────────────
+  // ── Flags section (order matches Results tab) ─────────────────────────────
   const acctName = (id: string) => accounts.find(a => a.id === id)?.name ?? id;
 
-  const flagsHtml = flags.filter(f =>
-    f.kind === 'REVISIT_PLACEMENT' || f.kind === 'TAXABLE_SALE' ||
-    f.kind === 'UNMAPPED_HOLDING'  || f.kind === 'PLACEMENT_SPILLOVER' ||
-    f.kind === 'NO_ELIGIBLE_ACCOUNT'
-  ).map(f => {
+  const orderedFlags = [
+    ...flags.filter(f => f.kind === 'EXCESS_CASH'),
+    ...flags.filter(f => f.kind === 'REVISIT_PLACEMENT'),
+    ...flags.filter(f => f.kind === 'UNMAPPED_HOLDING'),
+    ...flags.filter(f => f.kind === 'TAXABLE_SALE'),
+    ...flags.filter(f => f.kind === 'PLACEMENT_SPILLOVER'),
+    ...flags.filter(f => f.kind === 'NO_ELIGIBLE_ACCOUNT'),
+  ];
+
+  const flagsHtml = orderedFlags.map(f => {
+    if (f.kind === 'EXCESS_CASH')
+      return `<div class="flag flag-warn"><strong>Free cash undeployed:</strong> ${fmtUsd(f.amountUsd)} of household free cash could not be distributed — all accounts have deposits closed or are locked.</div>`;
     if (f.kind === 'REVISIT_PLACEMENT')
       return `<div class="flag flag-orange"><strong>Revisit placement strategy.</strong> Taxable accounts hold ${fmtPct(f.taxableShare)} of household value, exceeding the ${fmtPct(f.fixedIncomeTarget)} fixed-income target. Equities must land in taxable accounts.</div>`;
-    if (f.kind === 'TAXABLE_SALE')
-      return `<div class="flag flag-warn"><strong>Taxable sale:</strong> Selling ${fmtUsd(f.amountUsd)} of ${esc(AC_LABEL[f.assetClass])} in <em>${esc(acctName(f.accountId))}</em> may trigger a capital gain. Review before executing.</div>`;
     if (f.kind === 'UNMAPPED_HOLDING')
       return `<div class="flag flag-warn"><strong>Unmapped holding:</strong> Ticker <code>${esc(f.ticker)}</code> has no asset class — excluded from rebalance. Assign it in the Classify tab.</div>`;
+    if (f.kind === 'TAXABLE_SALE')
+      return `<div class="flag flag-warn"><strong>Taxable sale:</strong> Selling ${fmtUsd(f.amountUsd)} of ${esc(AC_LABEL[f.assetClass])} in <em>${esc(acctName(f.accountId))}</em> may trigger a capital gain. Review before executing.</div>`;
     if (f.kind === 'PLACEMENT_SPILLOVER')
       return `<div class="flag flag-blue"><strong>Placement spillover:</strong> ${fmtUsd(f.amountUsd)} of ${esc(AC_LABEL[f.assetClass])} placed in a ${esc(f.bucket.toLowerCase().replace('_', '-'))} account (preferred bucket full).</div>`;
     if (f.kind === 'NO_ELIGIBLE_ACCOUNT')
       return `<div class="flag flag-red"><strong>No eligible account:</strong> ${fmtUsd(f.amountUsd)} of ${esc(AC_LABEL[f.assetClass])} could not be placed — no account has capacity for this asset class.</div>`;
     return '';
   }).join('');
+
+  // ── Cash deployment summary ────────────────────────────────────────────────
+  const showCashSummary = freeCash > 0 || accounts.some(a => a.newCash);
+  const cashRows = accounts.filter(a => !a.locked).map(a => {
+    const ownCash   = a.newCash ?? 0;
+    const netDeploy = trades.filter(t => t.accountId === a.id).reduce((s, t) => s + t.deltaUsd, 0);
+    const depositsOpen = a.acceptsDeposits !== false;
+    const freeCashShare = freeCash > 0 && depositsOpen ? netDeploy - ownCash : 0;
+    if (ownCash === 0 && freeCash === 0) return '';
+    return `<tr>
+      <td style="font-weight:600;color:#111827">${esc(a.name)}</td>
+      <td class="num" style="color:#374151">${ownCash > 0 ? esc(fmtUsd(ownCash)) : '—'}</td>
+      ${freeCash > 0 ? `<td class="num" style="color:${depositsOpen && freeCashShare > 0.5 ? '#16a34a' : '#9ca3af'}">${depositsOpen && freeCashShare > 0.5 ? esc(fmtUsd(freeCashShare)) : '—'}</td>` : ''}
+      <td class="num" style="color:${netDeploy > 0.5 ? '#16a34a' : '#9ca3af'}">${netDeploy > 0.5 ? '+' + esc(fmtUsd(netDeploy)) : '—'}</td>
+      <td class="num"><span class="badge ${depositsOpen ? 'buy' : 'sell'}">${depositsOpen ? 'Open' : 'Closed'}</span></td>
+    </tr>`;
+  }).join('');
+
+  const cashSection = showCashSummary ? `
+  <div style="border:1px solid #bbf7d0;border-radius:8px;overflow:hidden;margin-bottom:16px">
+    <div style="background:#f0fdf4;padding:8px 16px;font-size:12px;font-weight:600;color:#166534;display:flex;justify-content:space-between;align-items:center">
+      <span>Cash deployment</span>
+      ${freeCash > 0 ? `<span style="color:#16a34a">${esc(fmtUsd(freeCash))} household free cash distributed to deposit-eligible accounts</span>` : ''}
+    </div>
+    <table>
+      <thead><tr>
+        <th>Account</th>
+        <th class="num">In-account cash</th>
+        ${freeCash > 0 ? '<th class="num">Free cash share</th>' : ''}
+        <th class="num">Net deployed</th>
+        <th class="num">Deposits</th>
+      </tr></thead>
+      <tbody>${cashRows}</tbody>
+    </table>
+  </div>` : '';
 
   // ── Household allocation table ──────────────────────────────────────────────
   const allocRows = ALL_ASSET_CLASSES.map(ac => {
@@ -226,20 +338,24 @@ function buildHtml(result: RebalanceResult, accounts: Account[], resolvedTrades:
 
   const allocSection = `
   <div class="card">
-    <div class="card-header" style="cursor:default">
-      <h2 style="margin:0">Household Allocation</h2>
+    <div class="card-header card-toggle" data-target="body-household">
+      <h2 style="margin:0;flex:1">Household Allocation</h2>
+      <span class="chevron" style="font-size:11px;color:#9ca3af">▾</span>
     </div>
-    <div class="card-body" style="padding:0">
-      <table>
-        <thead><tr>
-          <th>Asset Class</th>
-          <th class="num">Current</th>
-          <th class="num">Target</th>
-          <th class="num">Drift</th>
-          <th class="num">After Trades</th>
-        </tr></thead>
-        <tbody>${allocRows}</tbody>
-      </table>
+    <div id="body-household">
+      ${concentricDonutSvg(currentWeights, targetWeights)}
+      <div style="border-top:1px solid #f3f4f6">
+        <table>
+          <thead><tr>
+            <th>Asset Class</th>
+            <th class="num">Current</th>
+            <th class="num">Target</th>
+            <th class="num">Drift</th>
+            <th class="num">After Trades</th>
+          </tr></thead>
+          <tbody>${allocRows}</tbody>
+        </table>
+      </div>
     </div>
   </div>`;
 
@@ -375,6 +491,9 @@ function buildHtml(result: RebalanceResult, accounts: Account[], resolvedTrades:
   <!-- Flags -->
   ${flagsHtml}
 
+  <!-- Cash deployment -->
+  ${cashSection}
+
   <!-- Allocation table -->
   ${allocSection}
 
@@ -394,9 +513,9 @@ ${script(reportId)}
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-export function downloadReport(result: RebalanceResult, accounts: Account[], resolvedTrades: ResolvedTrade[]): void {
+export function downloadReport(result: RebalanceResult, accounts: Account[], resolvedTrades: ResolvedTrade[], freeCash: number): void {
   const now  = new Date();
-  const html = buildHtml(result, accounts, resolvedTrades, now);
+  const html = buildHtml(result, accounts, resolvedTrades, freeCash, now);
   const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
