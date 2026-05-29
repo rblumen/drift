@@ -171,6 +171,49 @@ Add a simple 2d plot to the Household Allocation card of the "Results" pane show
 
 ---
 
+### 16. Expense Ratio (Fee Load) Review and Flagging
+
+**What:** Scan held funds for high expense ratios and surface a warning when a holding's fee exceeds a threshold.
+
+**Open questions (TBD):**
+- **Threshold approach:** fixed cutoff (e.g., > 0.50%), relative (above the median/average of held funds), or user-configured per strategy.
+- **Data source:** expense ratio entered manually per ticker in config, or a bundled reference file keyed by ticker.
+- **Flag level:** position-level, account-level, or both.
+- **Severity:** hard advisory that annotates a recommended trade ("consider switching to a lower-cost equivalent"), or a standalone audit view separate from the rebalance results.
+- **Engine flag:** a dedicated `HIGH_EXPENSE_RATIO` flag emitted per position, or a UI-layer concern only.
+
+**Why it matters:** A well-allocated portfolio can be silently eroded by fund fees. This is especially relevant for funds held in legacy 401k plans (Empower) where cheap index options may not exist and the user needs explicit visibility.
+
+---
+
+### 17. UI Design Spruce-Up (Visual Polish + Logo/Icon)
+
+**What:** A visual refresh pass once core functionality is stable — consistent spacing, typography, color palette, and a purpose-built logo/icon for the app.
+
+**Scope ideas:**
+- App logo/favicon (wordmark or icon — something that reads at 16px and 512px).
+- Cohesive color system: brand accent, semantic colors for overweight/underweight/warning states.
+- Typography scale cleanup (headings, table values, labels all feeling intentional).
+- Card and panel layout tightening — reduce visual noise in the Results pane.
+- Dark mode polish if not already consistent.
+
+**When:** After M4 (persistence + full feature set). Polish last, not first.
+
+---
+
+### 18. Next-Rebalance Reminder Scheduler
+
+**What:** Let the user set a reminder for when to run the next rebalance, displayed on the app's home screen and optionally exported to their calendar.
+
+**Scope ideas:**
+- User picks a date or interval (e.g., "remind me in 6 months", "next January 1st").
+- Reminder stored in localStorage alongside the saved portfolio snapshot.
+- On app load, show a banner if the reminder date has passed or is within N days: "Your last rebalance was X days ago — time to check drift."
+- Optional: generate an `.ics` file the user can import into any calendar app (no external API calls, purely client-side).
+- Pairs naturally with backlog #14 (multi-snapshot drift history).
+
+---
+
 ## Already Covered by the Implementation Plan
 
 The following commonly-discussed Bogleheads considerations are already handled in `IMPLEMENTATION_PLAN.md` and need no additional work:
