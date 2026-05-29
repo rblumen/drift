@@ -110,6 +110,19 @@ export default function App() {
   const fmtSavedTime = useCallback((d: Date) =>
     d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }), []);
 
+  function handleLoadSample() {
+    const parsed = appStateSchema.safeParse(SAMPLE_PORTFOLIO);
+    if (!parsed.success) return;
+    const s = parsed.data;
+    setAccounts(s.accounts);
+    setPositions(s.positions);
+    setStrategy(s.strategy);
+    setTickerOverrides(s.tickerOverrides);
+    setDecompositions(s.decompositions ?? {});
+    setFreeCash(s.freeCash ?? 0);
+    setIsDemoMode(true);
+  }
+
   function handleDeleteAccount(id: string) {
     setPositions(prev => prev.filter(p => p.accountId !== id));
   }
@@ -212,6 +225,20 @@ export default function App() {
             </div>
           </div>
 
+          {/* Beta banner */}
+          <div className="mb-2 bg-amber-50 border-b border-amber-200 -mx-4 px-4 py-1.5 text-xs text-amber-800 flex items-center justify-center gap-1.5">
+            <span>Drift is in early beta.</span>
+            <a
+              href={`https://docs.google.com/forms/d/e/1FAIpQLSdG-V4Zq4X-fwal9ThhM4PQSFSwinrFo8fyWpZLCWu7mGXHlA/viewform?usp=pp_url&entry.715582229=${import.meta.env.VITE_GIT_SHA ?? 'dev'}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium underline underline-offset-2 hover:text-amber-900"
+            >
+              Share your feedback
+            </a>
+            <span>— it helps a lot.</span>
+          </div>
+
           {/* Demo mode banner */}
           {isDemoMode && (
             <div className="mb-2 bg-indigo-50 border border-indigo-200 rounded px-3 py-2 text-xs text-indigo-800 flex items-center justify-between">
@@ -296,6 +323,7 @@ export default function App() {
             onDeleteAccount={handleDeleteAccount}
             freeCash={freeCash}
             setFreeCash={setFreeCash}
+            onLoadSample={handleLoadSample}
           />
         )}
         {activeTab === 'import' && (
@@ -336,7 +364,17 @@ export default function App() {
       {/* Footer */}
       <footer className="max-w-5xl mx-auto px-4 py-6 mt-8 border-t border-gray-100 text-xs text-gray-400 flex items-center justify-between">
         <span>All computation is local — no data leaves your browser.</span>
-        <span>Not investment advice.</span>
+        <span className="flex items-center gap-4">
+          <a
+            href={`https://docs.google.com/forms/d/e/1FAIpQLSdG-V4Zq4X-fwal9ThhM4PQSFSwinrFo8fyWpZLCWu7mGXHlA/viewform?usp=pp_url&entry.715582229=${import.meta.env.VITE_GIT_SHA ?? 'dev'}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-gray-600 underline underline-offset-2"
+          >
+            Share feedback
+          </a>
+          <span>Not investment advice.</span>
+        </span>
       </footer>
     </div>
   );

@@ -10,6 +10,7 @@ interface Props {
   onDeleteAccount: (id: string) => void;
   freeCash: number;
   setFreeCash: (v: number) => void;
+  onLoadSample: () => void;
 }
 
 const ACCOUNT_TYPES: AccountType[] = [
@@ -72,7 +73,7 @@ function toAllowedAssetClasses(form: FormState): AssetClass[] | undefined {
   return form.allowedClasses.length > 0 ? form.allowedClasses : undefined;
 }
 
-export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash, setFreeCash }: Props) {
+export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash, setFreeCash, onLoadSample }: Props) {
   const [freeCashInput, setFreeCashInput] = useState(freeCash > 0 ? String(freeCash) : '');
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm]       = useState(blankForm);
@@ -299,9 +300,15 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
       </HelpBox>
 
       {accounts.length === 0 && !showAdd && (
-        <p className="text-sm text-gray-500 py-8 text-center border border-dashed rounded-lg">
-          No accounts yet. Add one to get started.
-        </p>
+        <div className="py-8 text-center border border-dashed rounded-lg flex flex-col items-center gap-3">
+          <p className="text-sm text-gray-500">No accounts yet. Add one to get started.</p>
+          <button
+            onClick={onLoadSample}
+            className="text-xs text-indigo-600 hover:text-indigo-800 border border-indigo-200 rounded px-3 py-1.5 hover:bg-indigo-50 transition-colors"
+          >
+            Load sample portfolio
+          </button>
+        </div>
       )}
 
       {accounts.length > 0 && (
