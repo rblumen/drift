@@ -70,6 +70,8 @@ export interface Position {
   /** When true, this holding counts in totals but is excluded from trades —
    *  only the unlocked portion of each (account, class) slot is rebalanced. */
   locked?: boolean;
+  /** Set when a field on this position was hand-edited after import. Display-only. */
+  edited?: boolean;
 }
 
 export interface Strategy {

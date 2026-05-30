@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, type ReactNode } from 'react';
 import type { Account, AssetClass, Position } from '../engine/types';
 import { ALL_ASSET_CLASSES } from '../engine/types';
 import { parseSchwabCsv } from '../ingest/adapters/schwab';
@@ -59,6 +59,70 @@ function readFile(file: File): Promise<string> {
 
 function mergePositions(existing: Position[], incoming: Position[], accountId: string): Position[] {
   return [...existing.filter(p => p.accountId !== accountId), ...incoming];
+}
+
+// ── EditableCell ──────────────────────────────────────────────────────────────
+
+interface EditableCellProps {
+  value: string;
+  onCommit: (newValue: string) => void;
+  type?: 'text' | 'number';
+  align?: 'left' | 'right';
+  uppercase?: boolean;
+  /** Formats `value` for display mode. */
+  display?: (raw: string) => ReactNode;
+  placeholder?: string;
+  /** Extra classes for the display container. */
+  className?: string;
+}
+
+function EditableCell({
+  value, onCommit, type = 'text', align = 'left', uppercase, display, placeholder, className,
+}: EditableCellProps) {
+  const [editing, setEditing] = useState(false);
+  const [draft,   setDraft]   = useState(value);
+
+  useEffect(() => { if (!editing) setDraft(value); }, [value, editing]);
+
+  function commit() {
+    setEditing(false);
+    if (draft !== value) onCommit(draft);
+  }
+  function cancel() {
+    setEditing(false);
+    setDraft(value);
+  }
+
+  const alignCls = align === 'right' ? 'text-right' : 'text-left';
+
+  if (editing) {
+    return (
+      <input
+        type={type}
+        autoFocus
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onFocus={e => e.target.select()}
+        onBlur={commit}
+        onKeyDown={e => {
+          if (e.key === 'Enter') { e.preventDefault(); commit(); }
+          else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+        }}
+        placeholder={placeholder}
+        className={`w-full bg-white border border-indigo-300 rounded px-1 py-0.5 text-sm outline-none focus:ring-1 focus:ring-indigo-400 ${uppercase ? 'uppercase' : ''} ${alignCls}`}
+      />
+    );
+  }
+  const rendered = display ? display(value) : (value || <span className="text-gray-300">{placeholder ?? '—'}</span>);
+  return (
+    <div
+      onClick={() => setEditing(true)}
+      title="Click to edit"
+      className={`cursor-text hover:bg-indigo-50 rounded px-1 -mx-1 ${alignCls} ${className ?? ''}`}
+    >
+      {rendered}
+    </div>
+  );
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -196,11 +260,24 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
     setEmpowerTotals({});
   }
 
-  // Enrich groups with per-account totals and colour assignments.
+  // Update one position by its index in the master `positions` array.
+  // `markEdited` is true for content edits (so the row gets a manual-edit indicator),
+  // false for non-content toggles like lock/unlock.
+  function updatePositionByIdx(idx: number, patch: Partial<Position>, markEdited: boolean) {
+    setPositions(positions.map((p, i) =>
+      i === idx ? { ...p, ...patch, ...(markEdited ? { edited: true } : {}) } : p
+    ));
+  }
+
+  // Enrich groups with per-account totals and colour assignments. Carry the
+  // original `positions` index so inline edits can identify the source row even
+  // after its ticker has been renamed.
   const allGrouped = accounts
     .map((account, idx) => {
-      const rows  = positions.filter(p => p.accountId === account.id);
-      const total = rows.reduce((s, p) => s + p.marketValue, 0);
+      const rows = positions
+        .map((pos, posIdx) => ({ pos, posIdx }))
+        .filter(({ pos }) => pos.accountId === account.id);
+      const total = rows.reduce((s, { pos }) => s + pos.marketValue, 0);
       return { account, rows, total, color: ACCOUNT_COLORS[idx % ACCOUNT_COLORS.length] };
     })
     .filter(g => g.rows.length > 0);
@@ -557,27 +634,88 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
                 {isOpen && (
                   <table className="w-full text-sm">
                     <tbody className="divide-y divide-gray-100">
-                      {rows.map((p, i) => (
-                        <tr key={i} className={`hover:bg-gray-50 ${p.locked ? 'opacity-60' : ''}`}>
-                          <td className="px-4 py-2 font-mono font-medium w-24">{p.ticker}</td>
-                          <td className="px-4 py-2 text-gray-500 truncate max-w-xs">{p.description ?? ''}</td>
-                          <td className="px-4 py-2 text-right tabular-nums">{fmtUsd(p.marketValue)}</td>
-                          <td className="px-4 py-2 text-center w-8">
+                      {rows.map(({ pos: p, posIdx }) => (
+                        <tr key={posIdx} className={`hover:bg-gray-50 ${p.locked ? 'opacity-60' : ''}`}>
+                          {/* Edited indicator */}
+                          <td className="pl-3 pr-0 py-2 w-4 text-amber-500 text-xs">
+                            {p.edited && <span title="Manually edited">✎</span>}
+                          </td>
+                          {/* Ticker */}
+                          <td className="px-2 py-2 font-mono font-medium w-28">
+                            <EditableCell
+                              value={p.ticker}
+                              uppercase
+                              onCommit={v => {
+                                const next = v.trim().toUpperCase();
+                                if (!next) return;
+                                updatePositionByIdx(posIdx, { ticker: next }, true);
+                              }}
+                            />
+                          </td>
+                          {/* Description */}
+                          <td className="px-2 py-2 text-gray-500 max-w-xs">
+                            <EditableCell
+                              value={p.description ?? ''}
+                              onCommit={v => {
+                                const next = v.trim();
+                                updatePositionByIdx(posIdx, { description: next || undefined }, true);
+                              }}
+                            />
+                          </td>
+                          {/* Market value */}
+                          <td className="px-2 py-2 text-right tabular-nums">
+                            <EditableCell
+                              value={String(p.marketValue)}
+                              type="number"
+                              align="right"
+                              display={v => {
+                                const n = parseFloat(v);
+                                return isNaN(n) ? '—' : fmtUsd(n);
+                              }}
+                              onCommit={v => {
+                                const n = parseFloat(v);
+                                if (isNaN(n) || n < 0) return;
+                                updatePositionByIdx(posIdx, { marketValue: n }, true);
+                              }}
+                            />
+                          </td>
+                          {/* Price (optional) */}
+                          <td className="px-2 py-2 text-right tabular-nums text-gray-500 w-24">
+                            <EditableCell
+                              value={p.price != null ? String(p.price) : ''}
+                              type="number"
+                              align="right"
+                              display={v => {
+                                if (!v) return <span className="text-gray-300">—</span>;
+                                const n = parseFloat(v);
+                                return isNaN(n) ? '—' : `$${n.toFixed(2)}`;
+                              }}
+                              onCommit={v => {
+                                const trimmed = v.trim();
+                                if (!trimmed) {
+                                  updatePositionByIdx(posIdx, { price: undefined }, true);
+                                  return;
+                                }
+                                const n = parseFloat(trimmed);
+                                if (isNaN(n) || n <= 0) return;
+                                updatePositionByIdx(posIdx, { price: n }, true);
+                              }}
+                            />
+                          </td>
+                          {/* Lock toggle */}
+                          <td className="px-2 py-2 text-center w-8">
                             <button
-                              onClick={() => setPositions(positions.map(x =>
-                                x.accountId === p.accountId && x.ticker === p.ticker
-                                  ? { ...x, locked: !x.locked }
-                                  : x
-                              ))}
+                              onClick={() => updatePositionByIdx(posIdx, { locked: !p.locked }, false)}
                               title={p.locked ? 'Unlock position (allow trades)' : 'Lock position (exclude from trades)'}
                               className={`text-sm transition-colors ${p.locked ? 'text-amber-500 hover:text-gray-400' : 'text-gray-300 hover:text-amber-500'}`}
                             >
                               {p.locked ? '🔒' : '🔓'}
                             </button>
                           </td>
-                          <td className="px-4 py-2 text-right w-8">
+                          {/* Remove */}
+                          <td className="px-3 py-2 text-right w-8">
                             <button
-                              onClick={() => setPositions(positions.filter(x => !(x.accountId === p.accountId && x.ticker === p.ticker)))}
+                              onClick={() => setPositions(positions.filter((_, idx) => idx !== posIdx))}
                               className="text-gray-300 hover:text-red-400 text-xs"
                               title="Remove"
                             >✕</button>
