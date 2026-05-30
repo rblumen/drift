@@ -214,6 +214,34 @@ Add a simple 2d plot to the Household Allocation card of the "Results" pane show
 
 ---
 
+### 21. Inline Editing of Holdings in the Import Tab
+
+**What:** Holdings displayed in the Import tab should be directly editable in place. Currently, correcting a value (e.g., a stale price or misread quantity) requires deleting the position and re-adding it. Instead, clicking a cell (ticker, shares, value, etc.) should let the user type a new value and confirm it.
+
+**Why it matters:** Manual data entry from brokerage CSVs is error-prone. A quick inline fix is far less disruptive than delete-and-re-add, especially when a user just wants to adjust one field after import.
+
+**Suggested implementation:**
+- Render holding rows with editable cells (e.g., click-to-edit or always-on `<input>` fields for numeric columns).
+- On blur/enter, validate and update the position in local state; re-run any downstream normalization (asset class mapping, totals).
+- Mark manually-edited rows with a subtle visual indicator (e.g., a pencil icon or italic text) so the user knows which values were hand-adjusted vs. imported.
+- No engine changes needed — this is purely a UI/ingest-layer concern.
+
+---
+
+### 20. "No Preference" Placement Option for Asset Classes
+
+**What:** In the asset class placement rules UI, each asset class currently maps to a required account type preference (taxable, tax-advantaged, etc.). Add a blank/null/uniform "No preference" option to the dropdown so the user can explicitly indicate that a given asset class has no required placement — letting the engine assign it freely to wherever capacity exists.
+
+**Why it matters:** Some asset classes (e.g., broad total-market index funds) are relatively tax-efficient and genuinely work well in any account type. Forcing a placement preference for them can unnecessarily constrain the greedy fill and generate suboptimal results. A "no preference" option lets the user opt out of placement guidance for specific classes without removing the rule entirely.
+
+**Suggested implementation:**
+- Add a `null` / `'ANY'` option to the placement preference enum (or make the field optional in `PlacementRule`).
+- Engine: treat a `null` preference as eligible for all account tiers — the greedy fill can place it wherever remaining capacity is largest.
+- UI: render "No preference" as the first/default option in the dropdown (distinct from an unset rule).
+- No new engine flags needed; this relaxes a constraint rather than adding one.
+
+---
+
 ### 19. Broaden import parser support for more institutions, add auto-detect
 
 **What:** Add support for ingesting holdings reports from more common investment institutions. Add auto-detection to streamline.
