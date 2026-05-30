@@ -13,6 +13,41 @@ const US_CAP_SUBS: readonly AssetClass[] = ['US_LARGE_CAP', 'US_MID_CAP', 'US_SM
 
 type CapSplit = { US_LARGE_CAP: number; US_MID_CAP: number; US_SMALL_CAP: number };
 
+/**
+ * A section with a collapsible body. The heading row toggles open/closed;
+ * the title (and optional subtitle) stay visible while collapsed.
+ */
+function CollapsibleSection({
+  title,
+  subtitle,
+  defaultOpen = true,
+  children,
+}: {
+  title: string;
+  subtitle?: React.ReactNode;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="space-y-3">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
+        className="flex w-full items-start gap-2 text-left"
+      >
+        <span className="text-gray-400 text-xs leading-5 select-none">{open ? '▾' : '▸'}</span>
+        <span>
+          <span className="block text-sm font-medium text-gray-700">{title}</span>
+          {subtitle && <span className="block text-xs text-gray-400 mt-0.5">{subtitle}</span>}
+        </span>
+      </button>
+      {open && children}
+    </div>
+  );
+}
+
 interface Props {
   strategy: Strategy;
   setStrategy: (s: Strategy) => void;
@@ -299,8 +334,7 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentW
       </HelpBox>
 
       {/* ── Target allocation ────────────────────────────────────────────────── */}
-      <div className="space-y-3">
-        <h3 className="text-sm font-medium text-gray-700">Target allocation</h3>
+      <CollapsibleSection title="Target allocation">
 
         {/* Single card: table on the left, pie on the right */}
         <div className="overflow-hidden border border-gray-200 rounded-lg flex items-stretch">
@@ -525,17 +559,13 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentW
             Weights must sum to 100% (±0.1%). Adjust the values above, then click outside to apply.
           </p>
         )}
-      </div>
+      </CollapsibleSection>
 
       {/* ── Placement rules (editable) ───────────────────────────────────────── */}
-      <div className="space-y-3">
-        <div>
-          <h3 className="text-sm font-medium text-gray-700">Placement rules</h3>
-          <p className="text-xs text-gray-400 mt-0.5">
-            Preferred account type for each asset class. The engine fills the 1st-choice bucket
-            first, then spills into 2nd.
-          </p>
-        </div>
+      <CollapsibleSection
+        title="Placement rules"
+        subtitle="Preferred account type for each asset class. The engine fills the 1st-choice bucket first, then spills into 2nd."
+      >
         <div className="overflow-hidden border border-gray-200 rounded-lg">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
@@ -604,7 +634,7 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentW
             </tbody>
           </table>
         </div>
-      </div>
+      </CollapsibleSection>
 
       {/* ── Rebalance parameters ─────────────────────────────────────────────── */}
       <div className="space-y-3">
