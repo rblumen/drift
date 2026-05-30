@@ -3,7 +3,7 @@
 Project memory for this repo. Keep it short; every line should change how you act.
 
 ## What this is
-A local, browser-only tool that rebalances investment holdings across multiple accounts (Empower, Schwab, Fidelity). Household-level target allocation with account-level tax-placement rules. Full build spec: `IMPLEMENTATION_PLAN.md` — follow it milestone by milestone.
+A local, browser-only tool that rebalances investment holdings across multiple accounts (Empower, Schwab, Fidelity). Household-level target allocation with account-level tax-placement rules. Design reference: `IMPLEMENTATION_PLAN.md`.
 
 ## Governing principles
 - PRINCIPLES.md defines the logical objectives/constraints that the tool should respect, in priority order. Implemented logic must adhere to this statement of intent.
@@ -26,6 +26,17 @@ A local, browser-only tool that rebalances investment holdings across multiple a
 - All client-side. No backend, no network calls, no telemetry in v1.
 - No credential automation, no scraping, no undocumented/reverse-engineered APIs. CSV export + manual entry only.
 - Do not create remotes or push on the user's behalf — the user owns hosting.
+
+## Branch and PR hygiene
+- All feature and bug fix work happens on a dedicated branch, never directly on `dev`.
+- **Naming:** `feat/ISSUE-NUMBER-short-description` for features, `fix/ISSUE-NUMBER-short-description` for bugs (e.g. `feat/2-relative-tolerance-bands`, `fix/37-taxable-spillover`). Linking to the issue number keeps branches traceable.
+- Branches merge to `dev` via PR — not direct push — unless the user explicitly grants override permission for a specific change.
+- **Squash on merge** into `dev`: collapses branch commits into one clean commit on `dev`. Individual commits on the branch are preserved until the branch is deleted.
+- **Exception:** the `dev → main` release PR uses a regular merge commit (not squash), so `main`'s history shows a clear merge bubble per release.
+- Include `Closes #N` in the PR body to auto-close the linked GitHub Issue on merge.
+- Delete the branch after merge. Keep the remote tidy.
+- Use a **draft PR** for in-progress work that needs remote backup but isn't ready for merge.
+- Never push directly to `main`. Only the `/release` skill does that, via the release PR.
 
 ## Changelog hygiene
 - Keep the `[Unreleased]` section of `CHANGELOG.md` current. After any substantive change (new feature, bug fix, behavior change, notable refactor), add a brief entry under the appropriate subsection (`Added`, `Changed`, `Fixed`, `Removed`). Do this as part of the same commit as the code change — not as a separate step later.
