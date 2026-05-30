@@ -26,7 +26,7 @@ Target weights apply to all accounts combined, not per-account. This is the core
 Classes within their *effective* tolerance band are left alone entirely — no trades are generated for them in any account. The effective band is the tighter of two thresholds: an absolute band (`±toleranceAbs`) and a relative band (`±toleranceRel × target`). For large sleeves the absolute band wins; for small sleeves the relative band fires first.
 
 **6. Place asset classes in their tax-preferred buckets.**
-Most-constrained classes (fewest eligible bucket options) are placed first. If a preferred bucket is full, a class spills into the next preferred bucket, then into any eligible account. Spillover is flagged.
+Most-constrained classes (fewest eligible bucket options) are placed first. If a preferred bucket is full, a class spills into the next preferred bucket, then into any eligible account. Spillover is flagged. A class configured with an empty bucket list ("no preference") is the least constrained — it is placed last, freely across whichever accounts have the most capacity, and its placement is never flagged as spillover.
 
 ---
 

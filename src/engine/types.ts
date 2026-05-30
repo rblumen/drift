@@ -74,7 +74,11 @@ export interface Position {
 
 export interface Strategy {
   targets: Record<AssetClass, number>;           // weights summing to 1.0
-  placement: Record<AssetClass, PlacementBucket[]>; // preferred buckets, in order
+  // Preferred buckets, in order. An empty array means "no preference" — the class
+  // has no required placement and the greedy fill assigns it wherever capacity is
+  // largest, without emitting a PLACEMENT_SPILLOVER flag. A missing entry falls
+  // back to the default two-bucket preference.
+  placement: Record<AssetClass, PlacementBucket[]>;
   toleranceAbs: number;  // e.g. 0.05 → ignore drift within ±5 percentage points
   /** Relative band: a class drifts by this fraction of its own target weight
    *  (e.g. 0.25 ⇒ 25% of target). Effective per-class tolerance is

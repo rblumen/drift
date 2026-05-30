@@ -64,6 +64,8 @@ Asset classes are processed most-constrained first: the engine counts how many p
 
 For each class, the engine fills the preferred bucket first, spills to the next bucket if the first is exhausted, then spills to any remaining account if all preferred buckets are full.
 
+A class can also be set to **No preference** (an empty placement rule). Such a class is the least constrained, so it is placed last — after every class with a required home has claimed its preferred space — and is filled freely into whichever accounts have the most capacity, regardless of account type. Because it has no preferred home to overflow from, its placement is never flagged as spillover. This suits tax-efficient, broadly-held classes (e.g. a total-market index fund) that work well in any account.
+
 ### Taxable-sale redirect
 
 Before finalising the trade list, the engine attempts to move equity *sells* out of taxable accounts. It does this via a 4-way swap: if a taxable account would sell equities and a tax-advantaged account has room to absorb that delta (by selling less of those equities and buying more of something else), the engine redirects the sell. This is best-effort and operates within the household-net-zero constraint.

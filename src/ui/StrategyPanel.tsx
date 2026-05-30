@@ -143,7 +143,15 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentW
     setWeights(prev => ({ ...prev, ...splitComposite(total, newSplit) }));
   }
 
-  function updatePlacement(ac: AssetClass, slot: 0 | 1, bucket: PlacementBucket | '') {
+  // Sentinel for the 1st-choice dropdown's "No preference" option.
+  const NO_PREF = 'ANY';
+
+  function updatePlacement(ac: AssetClass, slot: 0 | 1, bucket: PlacementBucket | '' | typeof NO_PREF) {
+    // "No preference" → empty bucket list; the engine places the class freely.
+    if (slot === 0 && bucket === NO_PREF) {
+      setStrategy({ ...strategy, placement: { ...strategy.placement, [ac]: [] } });
+      return;
+    }
     const current = [...(strategy.placement[ac] ?? DEFAULT_STRATEGY.placement[ac])] as PlacementBucket[];
     if (slot === 0) {
       current[0] = bucket as PlacementBucket;
@@ -251,6 +259,13 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentW
             exists), it spills to the <strong>2nd-choice bucket</strong>, and if that too is exhausted,
             to any remaining account.
           </p>
+          <HelpDef term="No preference">
+            Choosing <strong>No preference</strong> as the 1st choice removes placement guidance for
+            that class entirely. The engine places it wherever capacity is largest, across any account
+            type, and treats those placements as intentional — no PLACEMENT_SPILLOVER flag is emitted.
+            Useful for tax-efficient, broadly-held classes (e.g. a total-market index fund) that work
+            well in any account.
+          </HelpDef>
           <HelpDef term="Why bonds in taxable (the default)?">
             Municipal bond interest is exempt from federal and NY state taxes, so holding munis in a
             taxable account is nearly as tax-efficient as holding them in an IRA — and it frees the
@@ -538,7 +553,8 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentW
                   <HelpTip>
                     Used only when the 1st-choice bucket is full or has no eligible account.
                     Selecting "none" means any remaining capacity anywhere will be used as a
-                    last resort — a PLACEMENT_SPILLOVER flag will be emitted.
+                    last resort — a PLACEMENT_SPILLOVER flag will be emitted. Disabled when the
+                    1st choice is "No preference" (the class already has no required home).
                   </HelpTip>
                 </th>
               </tr>
@@ -546,35 +562,41 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentW
             <tbody className="divide-y divide-gray-100">
               {ALL_ASSET_CLASSES.map(ac => {
                 const buckets = strategy.placement[ac] ?? DEFAULT_STRATEGY.placement[ac];
+                const noPreference = buckets.length === 0;
                 return (
                   <tr key={ac} className="hover:bg-gray-50">
                     <td className="px-4 py-2 text-gray-700">{AC_LABEL[ac]}</td>
 
-                    {/* 1st choice — required, no empty option */}
+                    {/* 1st choice — required; "No preference" relaxes placement entirely */}
                     <td className="px-4 py-2">
                       <select
-                        value={buckets[0] ?? 'TAX_ADVANTAGED'}
-                        onChange={e => updatePlacement(ac, 0, e.target.value as PlacementBucket)}
+                        value={noPreference ? NO_PREF : (buckets[0] ?? 'TAX_ADVANTAGED')}
+                        onChange={e => updatePlacement(ac, 0, e.target.value as PlacementBucket | typeof NO_PREF)}
                         className="border border-gray-200 rounded px-2 py-1 text-sm bg-white hover:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400"
                       >
+                        <option value={NO_PREF}>No preference</option>
                         {ALL_BUCKETS.map(b => (
                           <option key={b} value={b}>{BUCKET_LABEL[b]}</option>
                         ))}
                       </select>
                     </td>
 
-                    {/* 2nd choice — optional, empty = spill anywhere */}
+                    {/* 2nd choice — optional, empty = spill anywhere. Disabled when no preference. */}
                     <td className="px-4 py-2">
-                      <select
-                        value={buckets[1] ?? ''}
-                        onChange={e => updatePlacement(ac, 1, e.target.value as PlacementBucket | '')}
-                        className="border border-gray-200 rounded px-2 py-1 text-sm bg-white hover:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400 text-gray-500"
-                      >
-                        <option value="">— none —</option>
-                        {ALL_BUCKETS.map(b => (
-                          <option key={b} value={b}>{BUCKET_LABEL[b]}</option>
-                        ))}
-                      </select>
+                      {noPreference ? (
+                        <span className="text-xs text-gray-400 italic">placed wherever capacity exists</span>
+                      ) : (
+                        <select
+                          value={buckets[1] ?? ''}
+                          onChange={e => updatePlacement(ac, 1, e.target.value as PlacementBucket | '')}
+                          className="border border-gray-200 rounded px-2 py-1 text-sm bg-white hover:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400 text-gray-500"
+                        >
+                          <option value="">— none —</option>
+                          {ALL_BUCKETS.map(b => (
+                            <option key={b} value={b}>{BUCKET_LABEL[b]}</option>
+                          ))}
+                        </select>
+                      )}
                     </td>
                   </tr>
                 );
