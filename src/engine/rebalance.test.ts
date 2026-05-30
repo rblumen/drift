@@ -204,6 +204,104 @@ describe('tolerance — portfolio exactly at target', () => {
   });
 });
 
+// ─── 5/25 rule — relative tolerance band (issue #2) ──────────────────────────
+//
+// Bogleheads / Swedroe rule: a class is out of tolerance when its drift exceeds
+// either of two bands — the *tighter* wins:
+//   • absolute: ±toleranceAbs  (e.g. ±5pp)
+//   • relative: ±toleranceRel × target  (e.g. 25% of target)
+//
+// For small sleeves the relative band fires first; for large sleeves the absolute
+// band fires first.
+
+describe('5/25 rule — relative tolerance band', () => {
+  // Two accounts, $1M household, simple two-class strategy.
+  const TWO_ACCT: Account[] = [
+    { id: 'ira',  name: 'IRA',  institution: 'Fidelity', type: 'TRADITIONAL_IRA' },
+    { id: 'tax', name: 'Taxable', institution: 'Schwab',   type: 'TAXABLE'        },
+  ];
+
+  // Target 90% LC / 10% FI. With toleranceAbs=0.05 and toleranceRel=0.25:
+  //   LC eff tol = min(0.05, 0.25×0.90) = 0.05  (absolute wins)
+  //   FI eff tol = min(0.05, 0.25×0.10) = 0.025 (relative wins — tighter)
+  const LC90_FI10 = {
+    ...DEFAULT_STRATEGY,
+    targets: {
+      US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.90, US_MID_CAP: 0, US_SMALL_CAP: 0,
+      DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0.10, ALTERNATIVES: 0, CASH: 0,
+    },
+    toleranceAbs: 0.05,
+    toleranceRel: 0.25,
+    minTradeUsd: 0,
+  };
+
+  it('relative band fires first for a small-target class (3pp drift on a 10% target)', () => {
+    // FI = 7% (drift 3pp). Absolute (5pp) passes; relative (2.5pp) fails → OOT.
+    const positions: Position[] = [
+      { accountId: 'ira', ticker: 'FXAIX', marketValue: 930_000 },  // LC = 93%
+      { accountId: 'tax', ticker: 'MUNY',  marketValue:  70_000 },  // FI = 7%
+    ];
+    const r = rebalance(TWO_ACCT, positions, LC90_FI10);
+    const fiTolFlag = r.flags.find(f => f.kind === 'WITHIN_TOLERANCE' && f.assetClass === 'FIXED_INCOME');
+    expect(fiTolFlag).toBeUndefined();
+    // The engine should generate trades to bring FI back to target.
+    expect(r.trades.some(t => t.assetClass === 'FIXED_INCOME')).toBe(true);
+  });
+
+  it('relative band passes when drift stays within 25% of target', () => {
+    // FI = 8% (drift 2pp). Relative band = 2.5pp → still within.
+    const positions: Position[] = [
+      { accountId: 'ira', ticker: 'FXAIX', marketValue: 920_000 },
+      { accountId: 'tax', ticker: 'MUNY',  marketValue:  80_000 },
+    ];
+    const r = rebalance(TWO_ACCT, positions, LC90_FI10);
+    const fiTolFlag = r.flags.find(f => f.kind === 'WITHIN_TOLERANCE' && f.assetClass === 'FIXED_INCOME');
+    expect(fiTolFlag).toBeDefined();
+  });
+
+  it('absolute band dominates for a large-target class (4pp drift on a 90% target)', () => {
+    // LC = 86% (drift 4pp). Absolute (5pp) passes; relative (22.5pp) would not
+    // fire either — but it's the absolute band that determines suppression here.
+    const positions: Position[] = [
+      { accountId: 'ira', ticker: 'FXAIX', marketValue: 860_000 },
+      { accountId: 'tax', ticker: 'MUNY',  marketValue: 140_000 },  // FI = 14% (drift 4pp)
+    ];
+    const r = rebalance(TWO_ACCT, positions, LC90_FI10);
+    // Both classes are out of tolerance — LC by absolute band, FI by relative band.
+    // The point of this test: LC is the larger sleeve and is within absolute band.
+    // But because they're paired in a single portfolio, FI's 4pp drift (>2.5pp relative)
+    // makes it OOT. LC's 4pp drift (<5pp absolute) is the absolute-dominant case.
+    const lcTolFlag = r.flags.find(f => f.kind === 'WITHIN_TOLERANCE' && f.assetClass === 'US_LARGE_CAP');
+    expect(lcTolFlag).toBeDefined();
+  });
+
+  it('disabling relative band (toleranceRel=1) reverts to absolute-only behaviour', () => {
+    // FI = 7% (drift 3pp). With toleranceRel=1, eff = min(0.05, 0.10) = 0.05.
+    // Drift (3pp) < 5pp → within tolerance, no trades for FI.
+    const positions: Position[] = [
+      { accountId: 'ira', ticker: 'FXAIX', marketValue: 930_000 },
+      { accountId: 'tax', ticker: 'MUNY',  marketValue:  70_000 },
+    ];
+    const r = rebalance(TWO_ACCT, positions, { ...LC90_FI10, toleranceRel: 1.0 });
+    const fiTolFlag = r.flags.find(f => f.kind === 'WITHIN_TOLERANCE' && f.assetClass === 'FIXED_INCOME');
+    expect(fiTolFlag).toBeDefined();
+  });
+
+  it('legacy strategy without toleranceRel defaults to 0.25', () => {
+    // Same drift as the first test (FI = 7% on a 10% target → 3pp drift). With the
+    // default toleranceRel of 0.25 implicit, the relative band (2.5pp) fires.
+    const legacyStrategy = { ...LC90_FI10 };
+    delete (legacyStrategy as { toleranceRel?: number }).toleranceRel;
+    const positions: Position[] = [
+      { accountId: 'ira', ticker: 'FXAIX', marketValue: 930_000 },
+      { accountId: 'tax', ticker: 'MUNY',  marketValue:  70_000 },
+    ];
+    const r = rebalance(TWO_ACCT, positions, legacyStrategy);
+    const fiTolFlag = r.flags.find(f => f.kind === 'WITHIN_TOLERANCE' && f.assetClass === 'FIXED_INCOME');
+    expect(fiTolFlag).toBeUndefined();
+  });
+});
+
 // ─── UNMAPPED_HOLDING ────────────────────────────────────────────────────────
 
 describe('UNMAPPED_HOLDING flag', () => {

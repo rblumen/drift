@@ -108,6 +108,7 @@ export const strategySchema = z.preprocess(migrateStrategyTargets, z.object({
     z.array(z.enum(PLACEMENT_BUCKETS)).min(1),
   ),
   toleranceAbs: z.number().min(0).max(1),
+  toleranceRel: z.number().min(0).max(1).optional(),
   minTradeUsd:  z.number().nonnegative(),
 }));
 

@@ -117,7 +117,7 @@ This is the default placement logic. It holds while taxable assets < fixed incom
 2. Respect per-account asset class restrictions (hard constraint)
 3. Keep each account's trades balance-preserving (hard constraint)
 4. Hit the household-level target allocation
-5. Suppress classes within ±toleranceAbs (default ±5pp)
+5. Suppress classes within the effective tolerance band — `min(toleranceAbs, toleranceRel × target)` per class (Bogleheads 5/25 rule; defaults ±5pp absolute, ±25% relative)
 6. Place classes in tax-preferred buckets (most-constrained first)
 7. Minimize taxable sells (`redirectTaxableSells` in `rebalance.ts`)
 8. Distribute proportionally by remaining capacity

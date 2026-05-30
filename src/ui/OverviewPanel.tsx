@@ -87,7 +87,7 @@ const PRINCIPLES: {
       {
         num: 5,
         heading: 'Suppress trivial drift',
-        body: 'Classes within ±toleranceAbs of their target weight are left alone entirely — no trades are generated for them in any account.',
+        body: 'Classes within the effective tolerance band — the tighter of the absolute (toleranceAbs) and relative (toleranceRel × target) bands, per the Bogleheads 5/25 rule — are left alone entirely.',
       },
       {
         num: 6,
@@ -124,7 +124,7 @@ const PRINCIPLES: {
       {
         num: 10,
         heading: 'Minimize the number of trades',
-        body: 'Dust trades below minTradeUsd are always suppressed. A post-placement pass also drops marginal trades whose removal keeps every projected weight within toleranceAbs.',
+        body: 'Dust trades below minTradeUsd are always suppressed. A post-placement pass also drops marginal trades whose removal keeps every projected weight within its effective tolerance band (5/25 rule).',
       },
       {
         num: 11,

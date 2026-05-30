@@ -80,9 +80,14 @@ Holdings classified as `US_TOTAL_MARKET` (e.g. VTI, FZROX, FSKAX) are automatica
 
 The Strategy tab lets you set a single "US Total Market" percentage that splits automatically, or unlock the sub-classes and set them individually.
 
-### Tolerance band
+### Tolerance band (Bogleheads 5/25 rule)
 
-Any asset class within `±toleranceAbs` of target generates no trades. Default: ±5 percentage points. If every class is within tolerance, no trades are produced.
+Each asset class has an *effective* tolerance band — the tighter of two thresholds:
+
+- **Absolute** (`toleranceAbs`, default ±5pp) — dominates for large sleeves.
+- **Relative** (`toleranceRel`, default ±25% of the class's own target) — dominates for small sleeves.
+
+For example, a 20% target tolerates 15–25% under the relative band (tighter than the absolute ±5pp); a 60% target tolerates 55–65% under the absolute band (tighter than the relative ±15pp). A class is left alone — no trades generated — as long as it sits inside its own effective band. Set `toleranceRel` to 100% to disable the relative band.
 
 ### Locked positions and accounts
 
