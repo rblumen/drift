@@ -88,6 +88,10 @@ export interface Strategy {
    *  bands wins. Optional; defaults to 0.25 (the Bogleheads / Swedroe 5/25 rule). */
   toleranceRel?: number;
   minTradeUsd: number;   // suppress dust trades below this dollar amount
+  /** When true (default), exhaust rebalancing inside tax-advantaged accounts before
+   *  recommending any taxable-account sale. Set false to disable the redirect and
+   *  surface TAXABLE_REBALANCE_AVOIDABLE flags showing the gains that could be saved. */
+  preferTaxAdvantagedRebalance?: boolean;
 }
 
 export interface Trade {
@@ -117,6 +121,16 @@ export interface RebalanceResult {
   currentValueByAccount: Record<string, Record<AssetClass, number>>;
   trades: Trade[];
   flags: Flag[];
+  /** Contribution-first funding breakdown of the recommended trades.
+   *  buysUsd = newCashDeployed + sellsUsd (sale proceeds are reinvested as buys). */
+  contributionSummary: {
+    /** New contributions deployed to underweight classes (buys not funded by sells). */
+    newCashDeployed: number;
+    /** Total dollars bought across all accounts. */
+    buysUsd: number;
+    /** Total dollars sold across all accounts. */
+    sellsUsd: number;
+  };
 }
 
 export type Flag =
@@ -127,6 +141,9 @@ export type Flag =
   | { kind: 'REVISIT_PLACEMENT'; taxableShare: number; fixedIncomeTarget: number }
   | { kind: 'NO_ELIGIBLE_ACCOUNT'; assetClass: AssetClass; amountUsd: number }
   | { kind: 'EXCESS_CASH'; amountUsd: number }
+  /** Emitted when tax-advantaged-first rebalancing is disabled and a taxable sale
+   *  could have been reduced/avoided by redirecting it into a tax-advantaged account. */
+  | { kind: 'TAXABLE_REBALANCE_AVOIDABLE'; accountId: string; assetClass: AssetClass; amountUsd: number }
   /** Emitted when an OOT class's post-trade projected weight still exceeds toleranceAbs
    *  from its target. Indicates a hard constraint (locked positions above target,
    *  no eligible account, or minTradeUsd too large) that the engine could not overcome. */

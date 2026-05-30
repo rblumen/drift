@@ -113,6 +113,7 @@ export const strategySchema = z.preprocess(migrateStrategyTargets, z.object({
   toleranceAbs: z.number().min(0).max(1),
   toleranceRel: z.number().min(0).max(1).optional(),
   minTradeUsd:  z.number().nonnegative(),
+  preferTaxAdvantagedRebalance: z.boolean().optional(),
 }));
 
 export const portfolioSchema = z.object({

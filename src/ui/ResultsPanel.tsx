@@ -41,6 +41,18 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
     );
   }
 
+  if (flag.kind === 'TAXABLE_REBALANCE_AVOIDABLE') {
+    return (
+      <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
+        <strong>Avoidable taxable sale:</strong>{' '}
+        About {fmtUsd(flag.amountUsd)} of the {AC_LABEL[flag.assetClass]} sale in{' '}
+        <em>{acctName(flag.accountId)}</em> could be avoided by rebalancing within your
+        tax-advantaged accounts. Re-enable <em>tax-advantaged-first rebalancing</em> in the
+        Strategy tab to shift it out of the taxable account.
+      </div>
+    );
+  }
+
   if (flag.kind === 'PLACEMENT_SPILLOVER') {
     return (
       <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-sm text-blue-700">
@@ -281,11 +293,40 @@ function ConcentricDonutChart({
   );
 }
 
+// ── Contribution-first funding breakdown ──────────────────────────────────────
+
+function ContributionSummary({ summary }: { summary: RebalanceResult['contributionSummary'] }) {
+  const { newCashDeployed, sellsUsd } = summary;
+  // Nothing meaningful to show when there are no trades.
+  if (newCashDeployed <= 0 && sellsUsd <= 0) return null;
+
+  return (
+    <div className="border border-gray-200 rounded-lg p-4 space-y-3">
+      <h3 className="text-sm font-medium text-gray-700">How this rebalance is funded</h3>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+          <div className="text-xs text-green-700">Rebalanced with new money</div>
+          <div className="text-lg font-semibold text-green-800 tabular-nums">{fmtUsd(newCashDeployed)}</div>
+        </div>
+        <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+          <div className="text-xs text-amber-700">Requires sales</div>
+          <div className="text-lg font-semibold text-amber-800 tabular-nums">{fmtUsd(sellsUsd)}</div>
+        </div>
+      </div>
+      <p className="text-xs text-gray-500">
+        New contributions are directed to underweight classes first, avoiding sales where possible.
+        Taking dividends and capital-gain distributions in cash (not auto-reinvested) and directing
+        them to underweight classes is a complementary, no-sell way to rebalance.
+      </p>
+    </div>
+  );
+}
+
 // ── Main panel ────────────────────────────────────────────────────────────────
 
 export function ResultsPanel({ result, accounts, resolvedTrades, freeCash }: Props) {
   const { householdValue, currentWeights, targetWeights, projectedWeights,
-          currentValueByAccount, trades, flags } = result;
+          currentValueByAccount, trades, flags, contributionSummary } = result;
 
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
@@ -304,6 +345,7 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash }: Pro
     ...flags.filter(f => f.kind === 'PROJECTED_OFF_TARGET'),
     ...flags.filter(f => f.kind === 'REVISIT_PLACEMENT'),
     ...flags.filter(f => f.kind === 'UNMAPPED_HOLDING'),
+    ...flags.filter(f => f.kind === 'TAXABLE_REBALANCE_AVOIDABLE'),
     ...flags.filter(f => f.kind === 'TAXABLE_SALE'),
     ...flags.filter(f => f.kind === 'PLACEMENT_SPILLOVER'),
   ];
@@ -511,6 +553,9 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash }: Pro
           </table>
         </div>
       )}
+
+      {/* Contribution-first funding breakdown */}
+      <ContributionSummary summary={contributionSummary} />
 
       {/* Household allocation table */}
       <div className="space-y-2">

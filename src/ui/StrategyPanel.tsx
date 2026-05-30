@@ -689,6 +689,36 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentW
             </p>
           </div>
         </div>
+
+        {/* Tax-advantaged-first toggle */}
+        <div className="flex items-start justify-between gap-4 max-w-2xl border-t border-gray-100 pt-3">
+          <div>
+            <div className="text-sm text-gray-700">Tax-advantaged-first rebalancing</div>
+            <p className="text-xs text-gray-400 mt-0.5 max-w-md">
+              Exhaust rebalancing inside tax-advantaged accounts before recommending any
+              taxable-account sale. Turn off to allow taxable sells — they'll be flagged as
+              avoidable in Results.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={strategy.preferTaxAdvantagedRebalance !== false}
+            onClick={() => setStrategy({
+              ...strategy,
+              preferTaxAdvantagedRebalance: strategy.preferTaxAdvantagedRebalance === false,
+            })}
+            className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+              strategy.preferTaxAdvantagedRebalance !== false ? 'bg-indigo-600' : 'bg-gray-300'
+            }`}
+          >
+            <span
+              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                strategy.preferTaxAdvantagedRebalance !== false ? 'translate-x-6' : 'translate-x-1'
+              }`}
+            />
+          </button>
+        </div>
       </div>
     </div>
   );

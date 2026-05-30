@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { Account, Position, AssetClass } from './types';
+import type { Account, Position, AssetClass, Strategy } from './types';
 import { ALL_ASSET_CLASSES } from './types';
 import { DEFAULT_STRATEGY } from './strategy';
 import { rebalance } from './rebalance';
@@ -1634,5 +1634,87 @@ describe('no-preference placement — empty bucket list', () => {
     const flag = r.flags.find(f => f.kind === 'NO_ELIGIBLE_ACCOUNT' && f.assetClass === 'US_LARGE_CAP');
     expect(flag).toBeDefined();
     expect(flag?.kind === 'NO_ELIGIBLE_ACCOUNT' && flag.amountUsd).toBeCloseTo(100_000, 0);
+  });
+});
+
+// ─── Contribution-first funding summary (issue #3) ───────────────────────────
+
+describe('contributionSummary', () => {
+  it('is all zeros for an empty portfolio', () => {
+    const r = rebalance([], [], DEFAULT_STRATEGY);
+    expect(r.contributionSummary).toEqual({ newCashDeployed: 0, buysUsd: 0, sellsUsd: 0 });
+  });
+
+  it('counts new contributions as rebalanced-with-new-money', () => {
+    const accounts: Account[] = [
+      { id: 'a1', name: 'Taxable', institution: 'X', type: 'TAXABLE', newCash: 5_000 },
+    ];
+    const positions: Position[] = [{ accountId: 'a1', ticker: 'VOO', marketValue: 10_000 }];
+    const cs = rebalance(accounts, positions, DEFAULT_STRATEGY).contributionSummary;
+    expect(cs.newCashDeployed).toBeGreaterThan(0);
+    // buys = sells + newCashDeployed (per-account net flow equals new cash).
+    expect(cs.buysUsd).toBeCloseTo(cs.sellsUsd + cs.newCashDeployed, 2);
+  });
+
+  it('attributes a no-new-cash rebalance entirely to sales', () => {
+    const accounts: Account[] = [
+      { id: 'taxable', name: 'Taxable', institution: 'X', type: 'TAXABLE' },
+      { id: 'ira',     name: 'IRA',     institution: 'X', type: 'TRADITIONAL_IRA' },
+    ];
+    const positions: Position[] = [
+      { accountId: 'taxable', ticker: 'VOO', marketValue: 60_000 },
+      { accountId: 'ira',     ticker: 'BND', marketValue: 40_000 },
+    ];
+    const cs = rebalance(accounts, positions, DEFAULT_STRATEGY).contributionSummary;
+    expect(cs.sellsUsd).toBeGreaterThan(0);
+    // With no new cash, buys are fully funded by sells.
+    expect(cs.newCashDeployed).toBeLessThan(1);
+    expect(cs.buysUsd).toBeCloseTo(cs.sellsUsd, 2);
+  });
+});
+
+// ─── Tax-advantaged-first rebalancing toggle (issue #4) ──────────────────────
+
+describe('tax-advantaged-first rebalancing', () => {
+  // Reuses the step 7.7 fully-redirectable scenario: taxable $60k large-cap +
+  // Roth $80k large-cap + $60k fixed income, with a 50/50 LC/FI target.
+  const ACCOUNTS: Account[] = [
+    { id: 'taxable', name: 'Schwab',   institution: 'Schwab',   type: 'TAXABLE'  },
+    { id: 'roth',    name: 'Roth IRA', institution: 'Fidelity', type: 'ROTH_IRA' },
+  ];
+  const POSITIONS: Position[] = [
+    { accountId: 'taxable', ticker: 'FXAIX', marketValue: 60_000 },
+    { accountId: 'roth',    ticker: 'FXAIX', marketValue: 80_000 },
+    { accountId: 'roth',    ticker: 'MUNY',  marketValue: 60_000 },
+  ];
+  const STRAT: Strategy = {
+    ...DEFAULT_STRATEGY,
+    targets: {
+      US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.5, US_MID_CAP: 0, US_SMALL_CAP: 0,
+      DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0.5, ALTERNATIVES: 0, CASH: 0,
+    },
+    toleranceAbs: 0,
+    minTradeUsd: 0,
+  };
+
+  const taxableSold = (flags: ReturnType<typeof rebalance>['flags']) =>
+    flags.reduce((s, f) => s + (f.kind === 'TAXABLE_SALE' ? f.amountUsd : 0), 0);
+
+  it('default (preference on) redirects the equity sell — no taxable sale, no avoidable flag', () => {
+    const r = rebalance(ACCOUNTS, POSITIONS, STRAT);
+    expect(taxableSold(r.flags)).toBe(0);
+    expect(r.flags.some(f => f.kind === 'TAXABLE_REBALANCE_AVOIDABLE')).toBe(false);
+  });
+
+  it('disabling the preference produces a taxable sale and flags it as avoidable', () => {
+    const r = rebalance(ACCOUNTS, POSITIONS, { ...STRAT, preferTaxAdvantagedRebalance: false });
+    expect(taxableSold(r.flags)).toBeGreaterThan(0);
+    expect(r.flags.some(f => f.kind === 'TAXABLE_REBALANCE_AVOIDABLE')).toBe(true);
+  });
+
+  it('never sells more in taxable with the preference on than off', () => {
+    const on  = rebalance(ACCOUNTS, POSITIONS, { ...STRAT, preferTaxAdvantagedRebalance: true });
+    const off = rebalance(ACCOUNTS, POSITIONS, { ...STRAT, preferTaxAdvantagedRebalance: false });
+    expect(taxableSold(on.flags)).toBeLessThanOrEqual(taxableSold(off.flags) + 1e-6);
   });
 });

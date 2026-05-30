@@ -50,4 +50,6 @@ export const DEFAULT_STRATEGY: Strategy = {
   toleranceAbs: 0.05,
   toleranceRel: 0.25,
   minTradeUsd:  250,
+  // Exhaust tax-advantaged rebalancing before selling in taxable accounts.
+  preferTaxAdvantagedRebalance: true,
 };
