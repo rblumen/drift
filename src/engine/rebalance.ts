@@ -1,9 +1,26 @@
-import type { Account, Position, Strategy, RebalanceResult, AssetClass, Flag, FundDecomposition } from './types';
+import type { Account, Position, Strategy, RebalanceResult, AssetClass, Flag, FundDecomposition, Trade } from './types';
 import { ALL_ASSET_CLASSES } from './types';
 import { makeClassifier } from './classify';
 import { rollup } from './rollup';
 import { accountBucket, greedyPlace } from './placement';
 import { EPSILON, effectiveTolerance, zeroByClass } from './utils';
+
+/**
+ * Contribution-first funding breakdown (backlog #2 / issue #3).
+ *
+ * Decomposes the recommended trades into the share funded by new contributions
+ * versus the share that requires selling existing holdings. Because per-account
+ * net flow equals new cash, household-wide buysUsd = sellsUsd + newCashDeployed.
+ */
+function summarizeContributions(trades: Trade[]): RebalanceResult['contributionSummary'] {
+  let buysUsd = 0;
+  let sellsUsd = 0;
+  for (const t of trades) {
+    if (t.deltaUsd > 0) buysUsd += t.deltaUsd;
+    else sellsUsd += -t.deltaUsd;
+  }
+  return { newCashDeployed: Math.max(0, buysUsd - sellsUsd), buysUsd, sellsUsd };
+}
 
 /**
  * Step 7.7 — Tax-aware sell shaping.
@@ -146,6 +163,7 @@ export function rebalance(
       currentValueByAccount,
       trades: [],
       flags,
+      contributionSummary: summarizeContributions([]),
     };
   }
 
@@ -175,6 +193,7 @@ export function rebalance(
       currentValueByAccount,
       trades: [],
       flags,
+      contributionSummary: summarizeContributions([]),
     };
   }
 
@@ -321,10 +340,42 @@ export function rebalance(
     }
   }
 
-  // Step 7.7 — Redirect taxable equity sells to tax-advantaged accounts.
-  redirectTaxableSells(
-    nonLockedAccounts, unlockedCurrent, targetLocation, effectiveAllowed, strategy,
-  );
+  // Step 7.7 — Tax-advantaged-first rebalancing (backlog #3 / issue #4).
+  //
+  // By default, exhaust rebalancing inside tax-advantaged accounts before any
+  // taxable sale — redirectTaxableSells moves taxable equity sells into TA
+  // accounts via balance-preserving swaps. Set strategy.preferTaxAdvantagedRebalance
+  // = false to opt out.
+  //
+  // When the preference is OFF we run the redirect on a throwaway clone purely to
+  // measure how much taxable selling it *would* have eliminated, then surface that
+  // per (account, class) as TAXABLE_REBALANCE_AVOIDABLE — telling the user the
+  // capital gains are avoidable if they re-enable the preference.
+  const preferTA = strategy.preferTaxAdvantagedRebalance !== false;
+  const avoidableSells: { accountId: string; assetClass: AssetClass; amountUsd: number }[] = [];
+
+  if (preferTA) {
+    redirectTaxableSells(
+      nonLockedAccounts, unlockedCurrent, targetLocation, effectiveAllowed, strategy,
+    );
+  } else {
+    const clone: Record<string, Record<AssetClass, number>> = {};
+    for (const id of Object.keys(targetLocation)) clone[id] = { ...targetLocation[id] };
+    redirectTaxableSells(
+      nonLockedAccounts, unlockedCurrent, clone, effectiveAllowed, strategy,
+    );
+    for (const acct of nonLockedAccounts) {
+      if (accountBucket(acct.type) !== 'TAXABLE') continue;
+      for (const ac of ALL_ASSET_CLASSES) {
+        const sellNow   = unlockedCurrent[acct.id][ac] - targetLocation[acct.id][ac];
+        const sellAfter = unlockedCurrent[acct.id][ac] - clone[acct.id][ac];
+        const reduction = sellNow - sellAfter;
+        if (reduction > strategy.minTradeUsd) {
+          avoidableSells.push({ accountId: acct.id, assetClass: ac, amountUsd: reduction });
+        }
+      }
+    }
+  }
 
   // Step 8 — Compute raw trades (before minTradeUsd filtering is balanced out).
   //   delta = targetLocation[acct][ac] − unlockedCurrent[acct][ac]
@@ -475,6 +526,12 @@ export function rebalance(
     }
   }
 
+  // Surface avoidable taxable sells (only populated when preferTaxAdvantagedRebalance
+  // is disabled and the redirect would have reduced taxable selling).
+  for (const a of avoidableSells) {
+    flags.push({ kind: 'TAXABLE_REBALANCE_AVOIDABLE', accountId: a.accountId, assetClass: a.assetClass, amountUsd: a.amountUsd });
+  }
+
   // Step 9 — REVISIT_PLACEMENT check (uses all accounts, including locked).
   const taxableValue = accounts
     .filter(a => accountBucket(a.type) === 'TAXABLE')
@@ -520,5 +577,6 @@ export function rebalance(
   return {
     householdValue, currentWeights, targetWeights: strategy.targets,
     projectedWeights, currentValueByAccount, trades, flags,
+    contributionSummary: summarizeContributions(trades),
   };
 }
