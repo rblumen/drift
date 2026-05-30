@@ -25,7 +25,7 @@
 - `EXCESS_CASH` and `NO_ELIGIBLE_ACCOUNT` flag types
 - `appStateSchema` v1 with forward-migration logic for schema changes
 
-**Next focus:** see `FEATURE_BACKLOG.md` for P0–P2 enhancements sourced from Bogleheads research.
+**Next focus:** see [GitHub Issues](https://github.com/rblumen/drift/issues) for P0–P2 enhancements (labels: P0, P1, P2).
 
 ---
 
@@ -370,7 +370,7 @@ Five panels, all driven off engine output, everything editable (recompute on cha
 - ✅ **M2 — Ingest:** manual + generic CSV + Schwab/Fidelity + Empower-totals adapters, normalized schema, fixtures.
 - ✅ **M3 — UI:** all five panels wired to the engine.
 - ✅ **M4 — Persistence & polish:** save/load setup via localStorage and JSON file export/import; surface flags; "sums to 100%" guard; alts-split extension point.
-- **Future:** Plaid adapter; optional cost-basis + realized-gain estimates; crypto/metals sub-targets. See `FEATURE_BACKLOG.md` for full prioritized list.
+- **Future:** Plaid adapter; optional cost-basis + realized-gain estimates; crypto/metals sub-targets. See [GitHub Issues](https://github.com/rblumen/drift/issues) for full prioritized list.
 
 ---
 

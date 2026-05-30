@@ -16,14 +16,14 @@ Currently a personal tool tuned to one household. Designed to be sharable — bu
 
 ## Status (as of 2026-05-28)
 
-All milestones (M0–M4) are complete. The project is at MVP. Active development continues from `FEATURE_BACKLOG.md` — P0 items are the next targets:
+All milestones (M0–M4) are complete. The project is at MVP. Active development is tracked in [GitHub Issues](https://github.com/rblumen/drift/issues) — P0 items are the next targets:
 
-- **5/25 relative tolerance bands** (backlog #1)
-- **Contribution-first output in Results** (backlog #2)
-- **Wash-sale cross-account warning** (backlog #4)
-- **529 biannual change limit warning** (backlog #5)
+- **5/25 relative tolerance bands** (#2)
+- **Contribution-first output in Results** (#3)
+- **Wash-sale cross-account warning** (#5)
+- **529 biannual change limit warning** (#6)
 
-`BUGLIST.md` is currently empty (no open bugs).
+Bugs are tracked as GitHub Issues (label: `bug`).
 
 ---
 
@@ -150,6 +150,5 @@ Windows: double-click `launch.bat` — installs deps on first run, opens browser
 |---|---|
 | `CLAUDE.md` | Short working instructions for Claude |
 | `IMPLEMENTATION_PLAN.md` | Full build spec; milestone history; design decisions |
-| `FEATURE_BACKLOG.md` | P0–P2 enhancements sourced from Bogleheads research |
 | `PRINCIPLES.md` | Engine priority order, fully annotated |
-| `BUGLIST.md` | Open bugs (currently empty) |
+| [GitHub Issues](https://github.com/rblumen/drift/issues) | P0–P2 enhancements and bugs (labels: P0/P1/P2, bug) |
