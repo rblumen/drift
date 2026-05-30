@@ -1548,3 +1548,91 @@ describe('post-trade accuracy — stress scenarios', () => {
     }
   });
 });
+
+// ─── "No preference" placement (issue #21) ───────────────────────────────────
+//
+// An empty bucket list for a class means it has no required home. The greedy fill
+// places it wherever capacity is largest, across any account type, and treats those
+// placements as intentional — no PLACEMENT_SPILLOVER is emitted. A no-preference
+// class is the least constrained, so it is placed *after* classes with a required
+// home.
+
+describe('no-preference placement — empty bucket list', () => {
+  it('places a no-preference class by capacity, largest account first, with no spillover flag', () => {
+    // LC has no preference; taxable ($700k) is larger than the IRA ($300k).
+    // Under a normal TAX_ADVANTAGED-first rule, LC would fill the IRA first and the
+    // $700k taxable portion would be flagged as spillover. With no preference, the
+    // largest account is simply filled first and nothing is flagged.
+    const accts: Account[] = [
+      { id: 'taxable', name: 'Schwab', institution: 'Schwab',   type: 'TAXABLE',         newCash: 700_000 },
+      { id: 'ira',     name: 'IRA',    institution: 'Fidelity', type: 'TRADITIONAL_IRA', newCash: 300_000 },
+    ];
+    const strategy = {
+      ...DEFAULT_STRATEGY,
+      targets: {
+        US_TOTAL_MARKET: 0, US_LARGE_CAP: 1.0, US_MID_CAP: 0, US_SMALL_CAP: 0,
+        DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0, ALTERNATIVES: 0, CASH: 0,
+      },
+      placement: { ...DEFAULT_STRATEGY.placement, US_LARGE_CAP: [] },
+      toleranceAbs: 0,
+      minTradeUsd: 0,
+    };
+    const r = rebalance(accts, NO_POSITIONS, strategy);
+
+    expect(tradeFor(r.trades, 'taxable', 'US_LARGE_CAP')?.deltaUsd).toBeCloseTo(700_000, 0);
+    expect(tradeFor(r.trades, 'ira',     'US_LARGE_CAP')?.deltaUsd).toBeCloseTo(300_000, 0);
+    expect(r.flags.filter(f => f.kind === 'PLACEMENT_SPILLOVER')).toHaveLength(0);
+  });
+
+  it('a no-preference class is placed after classes with a required home', () => {
+    // FI is restricted to TAXABLE; LC has no preference. Both target 50% of $1M.
+    // Correct order places FI first (it claims the only taxable account), leaving the
+    // IRA for LC. If LC (no preference, largest-first) were placed first it would grab
+    // the taxable account and strand FI with no eligible home.
+    const accts: Account[] = [
+      { id: 'taxable', name: 'Schwab', institution: 'Schwab',   type: 'TAXABLE',         newCash: 500_000 },
+      { id: 'ira',     name: 'IRA',    institution: 'Fidelity', type: 'TRADITIONAL_IRA', newCash: 500_000 },
+    ];
+    const strategy = {
+      ...DEFAULT_STRATEGY,
+      targets: {
+        US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.5, US_MID_CAP: 0, US_SMALL_CAP: 0,
+        DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0.5, ALTERNATIVES: 0, CASH: 0,
+      },
+      placement: { ...DEFAULT_STRATEGY.placement, FIXED_INCOME: ['TAXABLE'], US_LARGE_CAP: [] },
+      toleranceAbs: 0,
+      minTradeUsd: 0,
+    };
+    const r = rebalance(accts, NO_POSITIONS, strategy);
+
+    expect(tradeFor(r.trades, 'taxable', 'FIXED_INCOME')?.deltaUsd).toBeCloseTo(500_000, 0);
+    expect(tradeFor(r.trades, 'ira',     'US_LARGE_CAP')?.deltaUsd).toBeCloseTo(500_000, 0);
+    expect(r.flags.filter(f => f.kind === 'NO_ELIGIBLE_ACCOUNT')).toHaveLength(0);
+    expect(r.flags.filter(f => f.kind === 'PLACEMENT_SPILLOVER')).toHaveLength(0);
+  });
+
+  it('still emits NO_ELIGIBLE_ACCOUNT when a no-preference class cannot be placed anywhere', () => {
+    // The only account restricts itself to FIXED_INCOME, so a no-preference LC target
+    // has nowhere to land. Relaxing the placement preference does not relax the hard
+    // per-account eligibility constraint.
+    const accts: Account[] = [{
+      id: 'ira', name: 'IRA', institution: 'Fidelity', type: 'TRADITIONAL_IRA',
+      newCash: 100_000, allowedAssetClasses: ['FIXED_INCOME'] as AssetClass[],
+    }];
+    const strategy = {
+      ...DEFAULT_STRATEGY,
+      targets: {
+        US_TOTAL_MARKET: 0, US_LARGE_CAP: 1.0, US_MID_CAP: 0, US_SMALL_CAP: 0,
+        DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0, ALTERNATIVES: 0, CASH: 0,
+      },
+      placement: { ...DEFAULT_STRATEGY.placement, US_LARGE_CAP: [] },
+      toleranceAbs: 0,
+      minTradeUsd: 0,
+    };
+    const r = rebalance(accts, NO_POSITIONS, strategy);
+
+    const flag = r.flags.find(f => f.kind === 'NO_ELIGIBLE_ACCOUNT' && f.assetClass === 'US_LARGE_CAP');
+    expect(flag).toBeDefined();
+    expect(flag?.kind === 'NO_ELIGIBLE_ACCOUNT' && flag.amountUsd).toBeCloseTo(100_000, 0);
+  });
+});

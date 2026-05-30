@@ -103,9 +103,11 @@ const migrateStrategyTargets = (raw: unknown): unknown => {
 
 export const strategySchema = z.preprocess(migrateStrategyTargets, z.object({
   targets: targetsSchema,
+  // An empty bucket array means "no preference" — the engine places the class
+  // wherever capacity is largest. A missing entry is backfilled by the migration.
   placement: z.record(
     z.string(),
-    z.array(z.enum(PLACEMENT_BUCKETS)).min(1),
+    z.array(z.enum(PLACEMENT_BUCKETS)),
   ),
   toleranceAbs: z.number().min(0).max(1),
   toleranceRel: z.number().min(0).max(1).optional(),
