@@ -27,6 +27,10 @@ A local, browser-only tool that rebalances investment holdings across multiple a
 - No credential automation, no scraping, no undocumented/reverse-engineered APIs. CSV export + manual entry only.
 - Do not create remotes or push on the user's behalf — the user owns hosting.
 
+## Changelog hygiene
+- Keep the `[Unreleased]` section of `CHANGELOG.md` current. After any substantive change (new feature, bug fix, behavior change, notable refactor), add a brief entry under the appropriate subsection (`Added`, `Changed`, `Fixed`, `Removed`). Do this as part of the same commit as the code change — not as a separate step later.
+- Follow [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/) format. Entries should describe user-visible impact, not implementation detail (e.g. "Add wash-sale warning flag to Results panel" not "added WASH_SALE_RISK to engine flags map").
+
 ## Commands
 - `npm run dev` — local dev server
 - `npm test` — Vitest
