@@ -1,6 +1,6 @@
 # CONTEXT.md — Drift Portfolio Rebalancer
 
-**Last Updated:** 2026-05-28
+**Last Updated:** 2026-05-29
 
 ---
 
@@ -14,9 +14,9 @@ Currently a personal tool tuned to one household. Designed to be sharable — bu
 
 ---
 
-## Status (as of 2026-05-28)
+## Status (as of 2026-05-29)
 
-All milestones (M0–M4) are complete. The project is at MVP. Active development is tracked in [GitHub Issues](https://github.com/rblumen/drift/issues) — P0 items are the next targets:
+All milestones (M0–M4) are complete. The project is at MVP with 164 passing tests. Active development is tracked in [GitHub Issues](https://github.com/rblumen/drift/issues) — P0 items are the next targets:
 
 - **5/25 relative tolerance bands** (#2)
 - **Contribution-first output in Results** (#3)
@@ -24,6 +24,8 @@ All milestones (M0–M4) are complete. The project is at MVP. Active development
 - **529 biannual change limit warning** (#6)
 
 Bugs are tracked as GitHub Issues (label: `bug`).
+
+Current version: **0.1.0** (see `CHANGELOG.md`).
 
 ---
 
@@ -46,23 +48,44 @@ No backend. No network calls. No telemetry. Everything runs in the browser.
 
 ```
 src/
-├── engine/        # Pure TypeScript — no React imports. Pure functions, fully unit-tested.
-│   ├── types.ts   # All domain types (Account, Position, Strategy, Trade, Flag, AssetClass…)
-│   ├── strategy.ts  # DEFAULT_STRATEGY (household-specific defaults)
-│   ├── classify.ts  # ticker → AssetClass lookup
-│   ├── rollup.ts    # positions → current allocation; redistributes US_TOTAL_MARKET holdings
-│   ├── placement.ts # greedyPlace() — most-constrained-first placement fill
-│   ├── resolve.ts   # matches engine trades to specific fund tickers
-│   └── rebalance.ts # orchestrator → RebalanceResult
+├── engine/              # Pure TypeScript — no React imports. Pure functions, fully unit-tested.
+│   ├── types.ts         # All domain types (Account, Position, Strategy, Trade, Flag, AssetClass…)
+│   ├── strategy.ts      # DEFAULT_STRATEGY (household-specific defaults)
+│   ├── classify.ts      # ticker → AssetClass lookup
+│   ├── rollup.ts        # positions → current allocation; redistributes US_TOTAL_MARKET holdings
+│   ├── placement.ts     # greedyPlace() — most-constrained-first placement fill
+│   ├── resolve.ts       # matches engine trades to specific fund tickers
+│   ├── rebalance.ts     # orchestrator → RebalanceResult
+│   ├── utils.ts         # shared engine utilities
+│   ├── rebalance.test.ts
+│   └── resolve.test.ts
 ├── ingest/
-│   ├── schema.ts    # zod AppState schema + migration; validates all external data
-│   └── adapters/    # schwab.ts, fidelity.ts, empower.ts, plaid.ts (stub)
-├── ui/              # React components; depends on engine, never the reverse
-│   └── fmt.ts       # All display formatting (rounding happens ONLY here)
-├── store.ts         # localStorage save/load, rolling backups, JSON export/import
+│   ├── schema.ts        # zod AppState schema + migration; validates all external data
+│   ├── csv.ts           # generic CSV parser with column mapping
+│   ├── ingest.test.ts
+│   └── adapters/        # schwab.ts, fidelity.ts, empower.ts, plaid.ts (stub)
+├── ui/                  # React components; depends on engine, never the reverse
+│   ├── AccountsPanel.tsx
+│   ├── ClassifyPanel.tsx
+│   ├── ImportPanel.tsx
+│   ├── StrategyPanel.tsx
+│   ├── ResultsPanel.tsx
+│   ├── OverviewPanel.tsx
+│   ├── DonutChart.tsx   # concentric donut (before/after by account type)
+│   ├── PieChart.tsx     # shared pie chart primitive
+│   ├── WeightPie.tsx    # asset-class allocation pie
+│   ├── StackedBars.tsx  # asset class × account type stacked bars
+│   ├── HelpBox.tsx      # contextual help tooltips
+│   ├── exportReport.ts  # generates downloadable HTML report
+│   └── fmt.ts           # ALL display formatting — rounding happens ONLY here
+├── store.ts             # localStorage save/load, rolling backups, JSON export/import
+├── store.test.ts
+├── App.tsx
 └── data/
-    ├── assetclass-map.json   # seed ticker → AssetClass (committed; no real data)
-    └── sample-portfolio.json # synthetic fixture for demo mode (?demo URL param)
+    ├── assetclass-map.json      # seed ticker → AssetClass (committed; no real data)
+    ├── targetDateFunds.ts       # TDF decomposition map; auto-splits TDF holdings by asset class
+    ├── sample-portfolio.json    # synthetic fixture for demo mode (?demo URL param)
+    └── fixtures/                # synthetic CSV exports (schwab, fidelity, empower samples)
 ```
 
 **Dependency rule:** `engine/` ← `ingest/` ← `ui/`. Engine never imports from UI or ingest. Never violate this.
@@ -96,7 +119,7 @@ This is the default placement logic. It holds while taxable assets < fixed incom
 4. Hit the household-level target allocation
 5. Suppress classes within ±toleranceAbs (default ±5pp)
 6. Place classes in tax-preferred buckets (most-constrained first)
-7. Minimize taxable sells (redirectTaxableSells in rebalance.ts)
+7. Minimize taxable sells (`redirectTaxableSells` in `rebalance.ts`)
 8. Distribute proportionally by remaining capacity
 9. Minimize trades and accounts touched (consolidation pass + concentrate-then-spill)
 
@@ -125,11 +148,20 @@ Full spec: `PRINCIPLES.md`.
 
 ```bash
 npm run dev     # dev server → http://localhost:5173
-npm test        # Vitest (engine + ingest unit tests)
+npm test        # Vitest (164 tests across 4 files)
 npm run build   # production build → dist/
 ```
 
 Windows: double-click `launch.bat` — installs deps on first run, opens browser.
+
+---
+
+## Branching and release workflow
+
+- **`dev`** is the active development branch. All work lands here first.
+- **`main`** is the stable release branch. Only updated via PR from `dev` at release time.
+- To cut a release, use the `/release` skill (`.claude/skills/release/SKILL.md`). It handles: preflight checks, semver reasoning, CHANGELOG update, `package.json` bump, PR creation, merge, git tag, and GitHub Release.
+- Keep the `[Unreleased]` section of `CHANGELOG.md` current with each substantive change (same commit as the code).
 
 ---
 
@@ -148,7 +180,9 @@ Windows: double-click `launch.bat` — installs deps on first run, opens browser
 
 | File | Purpose |
 |---|---|
-| `CLAUDE.md` | Short working instructions for Claude |
-| `IMPLEMENTATION_PLAN.md` | Full build spec; milestone history; design decisions |
+| `CLAUDE.md` | Short working instructions for Claude (read first) |
+| `IMPLEMENTATION_PLAN.md` | Design reference: principles, architecture rationale, domain model, guardrails |
 | `PRINCIPLES.md` | Engine priority order, fully annotated |
+| `CHANGELOG.md` | Version history; `[Unreleased]` section is kept current |
+| `.claude/skills/release/` | `/release` skill — step-by-step release automation |
 | [GitHub Issues](https://github.com/rblumen/drift/issues) | P0–P2 enhancements and bugs (labels: P0/P1/P2, bug) |
