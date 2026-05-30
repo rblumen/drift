@@ -21,6 +21,7 @@ export const positionSchema = z.object({
   marketValue: z.number().nonnegative(),
   price: z.number().positive().optional(),
   locked: z.boolean().optional(),
+  edited: z.boolean().optional(),
 });
 
 export const accountSchema = z.object({
