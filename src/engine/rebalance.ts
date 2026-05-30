@@ -3,7 +3,7 @@ import { ALL_ASSET_CLASSES } from './types';
 import { makeClassifier } from './classify';
 import { rollup } from './rollup';
 import { accountBucket, greedyPlace } from './placement';
-import { EPSILON, zeroByClass } from './utils';
+import { EPSILON, effectiveTolerance, zeroByClass } from './utils';
 
 /**
  * Step 7.7 — Tax-aware sell shaping.
@@ -154,10 +154,13 @@ export function rebalance(
     ALL_ASSET_CLASSES.map(ac => [ac, currentValue[ac] / householdValue]),
   ) as Record<AssetClass, number>;
 
-  // Step 2 — Tolerance check.
+  // Step 2 — Tolerance check (Bogleheads 5/25 rule).
+  // A class is within tolerance when drift is within the *tighter* of the two bands:
+  //   absolute (toleranceAbs) or relative (toleranceRel × target).
+  // For small targets the relative band fires first; for large targets the absolute band wins.
   const withinTolerance = new Set<AssetClass>();
   for (const ac of ALL_ASSET_CLASSES) {
-    if (Math.abs(currentWeights[ac] - strategy.targets[ac]) <= strategy.toleranceAbs) {
+    if (Math.abs(currentWeights[ac] - strategy.targets[ac]) <= effectiveTolerance(ac, strategy)) {
       withinTolerance.add(ac);
       flags.push({ kind: 'WITHIN_TOLERANCE', assetClass: ac });
     }
@@ -398,7 +401,8 @@ export function rebalance(
   // each successful iteration).
   //
   // Only runs when toleranceAbs > 0 — with zero tolerance every trade is needed
-  // to hit the exact target weights.
+  // to hit the exact target weights. (Effective per-class tolerance can still be 0
+  // when toleranceRel × target evaluates to 0, but that's handled per-class below.)
   if (strategy.toleranceAbs > 0 && trades.length > 0) {
     // Build projected-value map: currentValue + sum of all kept trade deltas.
     const projVal: Record<AssetClass, number> = {} as Record<AssetClass, number>;
@@ -414,11 +418,11 @@ export function rebalance(
       for (let i = 0; i < trades.length; i++) {
         const t = trades[i];
 
-        // Would dropping t push t's class out of tolerance?
+        // Would dropping t push t's class out of tolerance (5/25 rule, per-class)?
         const newProjAC = projVal[t.assetClass] - t.deltaUsd;
         if (
           Math.abs(newProjAC / householdValue - strategy.targets[t.assetClass]) >
-          strategy.toleranceAbs
+          effectiveTolerance(t.assetClass, strategy)
         ) continue;
 
         // Find the largest opposite-sign trade in the same account to absorb the
@@ -440,12 +444,12 @@ export function rebalance(
           Math.abs(compNewDelta) < strategy.minTradeUsd
         ) continue;
 
-        // Would adjusting comp push its class out of tolerance?
+        // Would adjusting comp push its class out of tolerance (5/25 rule, per-class)?
         // Adjusting comp by t.deltaUsd shifts projected[comp.assetClass] by t.deltaUsd.
         const newProjComp = projVal[comp.assetClass] + t.deltaUsd;
         if (
           Math.abs(newProjComp / householdValue - strategy.targets[comp.assetClass]) >
-          strategy.toleranceAbs
+          effectiveTolerance(comp.assetClass, strategy)
         ) continue;
 
         // Commit the drop.
@@ -489,11 +493,12 @@ export function rebalance(
     ALL_ASSET_CLASSES.map(ac => [ac, projectedValue[ac] / householdValue]),
   ) as Record<AssetClass, number>;
 
-  // Step 11 — Post-trade accuracy validation.
+  // Step 11 — Post-trade accuracy validation (5/25 rule, per-class).
   //
   // For every class that was out-of-tolerance before trades, check that the
-  // projected weight now falls within toleranceAbs of the target. If it doesn't,
-  // a hard constraint prevented the engine from reaching the target:
+  // projected weight now falls within the effective per-class tolerance of the
+  // target. If it doesn't, a hard constraint prevented the engine from reaching
+  // the target:
   //   • NO_ELIGIBLE_ACCOUNT — no account can hold this class
   //   • Locked positions exceed the class target — cannot reduce below the lock
   //   • minTradeUsd suppressed the needed trade — threshold is too large
@@ -502,7 +507,7 @@ export function rebalance(
   // leaving the user to notice the "After trades" column is still off.
   for (const ac of ALL_ASSET_CLASSES) {
     if (withinTolerance.has(ac)) continue;
-    if (Math.abs(projectedWeights[ac] - strategy.targets[ac]) > strategy.toleranceAbs) {
+    if (Math.abs(projectedWeights[ac] - strategy.targets[ac]) > effectiveTolerance(ac, strategy)) {
       flags.push({
         kind: 'PROJECTED_OFF_TARGET',
         assetClass: ac,

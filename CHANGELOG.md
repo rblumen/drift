@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **5/25 relative tolerance band** ([#2](https://github.com/rblumen/drift/issues/2)) — `Strategy.toleranceRel` (default 25%) sets a second tolerance band as a fraction of each class's target. The engine now uses whichever band is tighter per class (Bogleheads / Swedroe rule): the absolute band dominates for large sleeves, the relative band dominates for small sleeves. Existing strategies without `toleranceRel` default to 25%.
+- **Strategy panel** — new "Relative tolerance" input alongside absolute tolerance, with help-box explanation of the 5/25 rule.
+
 ## [0.1.0] - 2026-05-29
 
 ### Added

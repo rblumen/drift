@@ -126,7 +126,7 @@ type Flag =
 | Equities | `TAX_ADVANTAGED`, then `TAXABLE` |
 | CASH | `TAXABLE`, then `TAX_ADVANTAGED` |
 
-**Other defaults:** `toleranceAbs = 0.05`, `minTradeUsd = 250`.
+**Other defaults:** `toleranceAbs = 0.05`, `toleranceRel = 0.25` (Bogleheads 5/25 rule — the engine uses whichever band is tighter per class), `minTradeUsd = 250`.
 
 ### The placement compromise and REVISIT_PLACEMENT trigger
 
