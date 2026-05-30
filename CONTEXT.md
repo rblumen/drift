@@ -158,9 +158,8 @@ Windows: double-click `launch.bat` — installs deps on first run, opens browser
 
 ## Branching and release workflow
 
-- **`dev`** is the active development branch. All work lands here first.
-- **`main`** is the stable release branch. Only updated via PR from `dev` at release time.
-- To cut a release, use the `/release` skill (`.claude/skills/release/SKILL.md`). It handles: preflight checks, semver reasoning, CHANGELOG update, `package.json` bump, PR creation, merge, git tag, and GitHub Release.
+- **`main`** is the single trunk. Feature and bug-fix work happens on a dedicated branch off `main` and merges back via PR (squash). PRs targeting `main` (the default branch) get GitHub's native linked-issue + auto-close behavior from `Closes #N`, and CI runs on each PR.
+- To cut a release, use the `/release` skill (`.claude/skills/release/SKILL.md`). It handles: preflight checks, semver reasoning, CHANGELOG update, `package.json` bump, release-branch PR, merge, git tag, and GitHub Release.
 - Keep the `[Unreleased]` section of `CHANGELOG.md` current with each substantive change (same commit as the code).
 
 ---

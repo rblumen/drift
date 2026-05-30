@@ -5,7 +5,7 @@ description: Cut a versioned release of the drift portfolio rebalancer. Use this
 
 # Release Skill — drift
 
-This skill walks through a complete, safe release process: preflight checks → version decision → changelog + package.json update → build & test verification → commit to `dev` → PR to `main` → merge → tag → GitHub Release.
+This skill walks through a complete, safe release process: preflight checks → version decision → changelog + package.json update → build & test verification → commit to a release branch → PR to `main` → merge → tag → GitHub Release.
 
 There's a **mandatory human confirmation checkpoint** before the merge and tag. Everything before it is reversible; everything after it is permanent.
 
@@ -17,7 +17,7 @@ Before touching any files, verify the environment is clean and the toolchain is 
 
 1. **Clean working tree** — run `git status --short`. If there are any uncommitted or untracked files, stop and tell the user. A dirty tree means unintended changes could end up in the release.
 
-2. **On the right branch** — confirm you're on `dev`. If not, ask the user before switching.
+2. **On the right branch** — confirm you're on `main` and up to date (`git pull`). If not, ask the user before switching. The release will be cut on a dedicated `release/vX.Y.Z` branch created off `main`.
 
 3. **Tests pass** — run `npm test`. If any tests fail, stop. Do not proceed with a failing test suite.
 
@@ -69,9 +69,10 @@ Before doing anything irreversible, present a summary to the user:
 
 ```
 Ready to release vX.Y.Z. Here's what will happen:
-  • Commit CHANGELOG.md + package.json to dev
-  • Open PR: dev → main
-  • Merge PR
+  • Create branch release/vX.Y.Z off main
+  • Commit CHANGELOG.md + package.json to it
+  • Open PR: release/vX.Y.Z → main
+  • Merge PR (squash) and delete the branch
   • Push tag vX.Y.Z
   • Create GitHub Release
 
@@ -82,26 +83,27 @@ Do not continue until the user explicitly confirms.
 
 ---
 
-## Phase 6: Commit to dev
+## Phase 6: Commit to the release branch
 
-Stage only `CHANGELOG.md` and `package.json`:
+Create the release branch off `main` and stage only `CHANGELOG.md` and `package.json`:
 
 ```
+git checkout -b release/vX.Y.Z
 git add CHANGELOG.md package.json
 git commit -m "chore(release): vX.Y.Z"
-git push origin dev
+git push -u origin release/vX.Y.Z
 ```
 
 ---
 
-## Phase 7: PR dev → main, then merge
+## Phase 7: PR release/vX.Y.Z → main, then merge
 
 Create the PR using `gh`:
 
 ```
 gh pr create \
   --base main \
-  --head dev \
+  --head release/vX.Y.Z \
   --title "Release vX.Y.Z" \
   --body "<paste the vX.Y.Z changelog section here as the PR body>"
 ```
@@ -109,10 +111,8 @@ gh pr create \
 Then merge it:
 
 ```
-gh pr merge --merge --delete-branch=false
+gh pr merge --squash --delete-branch
 ```
-
-Use `--merge` (not squash or rebase) to preserve the full commit history. Do not delete the `dev` branch.
 
 ---
 
@@ -142,10 +142,11 @@ gh release create vX.Y.Z \
 
 ---
 
-## Phase 10: Return to dev
+## Phase 10: Return to main
 
 ```
-git checkout dev
+git checkout main
+git pull origin main
 ```
 
 Report the release URL (from `gh release create` output) and a brief summary of what shipped.
