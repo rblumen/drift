@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Strategy panel** — new "Relative tolerance" input alongside absolute tolerance, with help-box explanation of the 5/25 rule.
 - **"No preference" placement option** ([#21](https://github.com/rblumen/drift/issues/21)) — an asset class can now be set to "No preference" in the placement rules, letting the engine place it wherever account capacity is largest without flagging the result as a spillover. Useful for tax-efficient, broadly-held classes that work in any account type.
 
+### Changed
+
+- **Strategy panel** — the Target allocation and Placement rules cards are now collapsible; click the section heading to show or hide the card.
+
 ## [0.1.0] - 2026-05-29
 
 ### Added
