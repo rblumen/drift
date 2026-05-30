@@ -22,8 +22,8 @@ Buys and sells within an account must net to that account's `newCash` (zero if n
 **4. Hit the household-level target allocation.**
 Target weights apply to all accounts combined, not per-account. This is the core design principle of the tool.
 
-**5. Suppress trivial drift.**
-Classes within `±toleranceAbs` of target are left alone entirely — no trades are generated for them in any account.
+**5. Suppress trivial drift (Bogleheads 5/25 rule).**
+Classes within their *effective* tolerance band are left alone entirely — no trades are generated for them in any account. The effective band is the tighter of two thresholds: an absolute band (`±toleranceAbs`) and a relative band (`±toleranceRel × target`). For large sleeves the absolute band wins; for small sleeves the relative band fires first.
 
 **6. Place asset classes in their tax-preferred buckets.**
 Most-constrained classes (fewest eligible bucket options) are placed first. If a preferred bucket is full, a class spills into the next preferred bucket, then into any eligible account. Spillover is flagged.
@@ -46,7 +46,7 @@ Within the same placement bucket, accounts designated to concentrate a class are
 ## Low-Priority / Simplicity Objectives
 
 **10. Minimize the number of trades.**
-Prefer solutions that achieve the target allocation with fewer individual buy/sell orders. Dust trades below `minTradeUsd` are always suppressed. After balance correction, a consolidation pass greedily drops marginal trades whose removal keeps every projected weight within `toleranceAbs` (step 8.6, `rebalance.ts`).
+Prefer solutions that achieve the target allocation with fewer individual buy/sell orders. Dust trades below `minTradeUsd` are always suppressed. After balance correction, a consolidation pass greedily drops marginal trades whose removal keeps every projected weight within its effective tolerance band — `min(toleranceAbs, toleranceRel × target)` per class (step 8.6, `rebalance.ts`).
 
 **11. Minimize the number of accounts touched.**
 Prefer concentrating trades in fewer accounts when the allocation outcome is otherwise equivalent. `greedyPlace` fills the largest-capacity eligible account first and spills to additional accounts only when that one is exhausted (concentrate-then-spill, `placement.ts`).

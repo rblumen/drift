@@ -76,6 +76,11 @@ export interface Strategy {
   targets: Record<AssetClass, number>;           // weights summing to 1.0
   placement: Record<AssetClass, PlacementBucket[]>; // preferred buckets, in order
   toleranceAbs: number;  // e.g. 0.05 → ignore drift within ±5 percentage points
+  /** Relative band: a class drifts by this fraction of its own target weight
+   *  (e.g. 0.25 ⇒ 25% of target). Effective per-class tolerance is
+   *  min(toleranceAbs, toleranceRel × target[ac]) — the tighter of the two
+   *  bands wins. Optional; defaults to 0.25 (the Bogleheads / Swedroe 5/25 rule). */
+  toleranceRel?: number;
   minTradeUsd: number;   // suppress dust trades below this dollar amount
 }
 

@@ -68,6 +68,9 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentW
   });
 
   const [tolerance, setTolerance] = useState(String((strategy.toleranceAbs * 100).toFixed(1)));
+  const [toleranceRel, setToleranceRel] = useState(
+    String((((strategy.toleranceRel ?? 0.25)) * 100).toFixed(1)),
+  );
   const [minTrade,  setMinTrade]  = useState(String(strategy.minTradeUsd));
 
   // Sync local state if strategy prop changes externally (e.g. JSON import).
@@ -82,6 +85,7 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentW
     setCompositeStr((subTotal > 0.001 ? subTotal : strategy.targets.US_TOTAL_MARKET * 100).toFixed(1));
     setCapSplit(deriveCapSplit(lcPct, mcPct, scPct));
     setTolerance(String((strategy.toleranceAbs * 100).toFixed(1)));
+    setToleranceRel(String((((strategy.toleranceRel ?? 0.25)) * 100).toFixed(1)));
     setMinTrade(String(strategy.minTradeUsd));
   }, [strategy]);
 
@@ -103,6 +107,7 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentW
         ]),
       ) as Record<AssetClass, number>,
       toleranceAbs: (parseFloat(tolerance) || 5) / 100,
+      toleranceRel: (parseFloat(toleranceRel) || 25) / 100,
       minTradeUsd:  parseFloat(minTrade) || 250,
     });
   }
@@ -261,10 +266,15 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentW
         </HelpSection>
 
         <HelpSection title="Rebalance parameters">
-          <HelpDef term="Drift tolerance (±5% default)">
-            Any asset class within this many percentage points of its target is left alone — no trades
-            are generated for it. Wider tolerance = fewer, larger trades. Narrower = more precise but
-            more trading activity.
+          <HelpDef term="Absolute tolerance (±5pp default)">
+            An asset class is in tolerance when its drift is within this many percentage points of
+            target. Dominates for large sleeves (e.g. a 50% target with a 5pp band tolerates 45–55%).
+          </HelpDef>
+          <HelpDef term="Relative tolerance (±25% of target default)">
+            A second band, expressed as a fraction of the class's own target. A 20% target with a 25%
+            relative band tolerates 15–25%; a 2.5% target tolerates 1.875–3.125%. The engine uses
+            whichever band is tighter — the canonical Bogleheads / Swedroe "5/25" rule. Set to 100%
+            to disable (absolute band only).
           </HelpDef>
           <HelpDef term="Min trade size ($250 default)">
             Trade recommendations smaller than this dollar amount are dropped. Prevents dust-level orders
@@ -577,15 +587,14 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentW
       {/* ── Rebalance parameters ─────────────────────────────────────────────── */}
       <div className="space-y-3">
         <h3 className="text-sm font-medium text-gray-700">Rebalance parameters</h3>
-        <div className="grid grid-cols-2 gap-4 max-w-sm">
+        <div className="grid grid-cols-3 gap-4 max-w-2xl">
           <div>
             <label className="block text-xs text-gray-500 mb-1">
-              Drift tolerance
-              <span className="ml-1 text-gray-400">(±%)</span>
+              Absolute tolerance
+              <span className="ml-1 text-gray-400">(±pp)</span>
               <HelpTip>
-                Any asset class within this many percentage points of its target is left alone —
-                no trades generated. Default ±5 pp. Wider = fewer, larger trades per rebalance.
-                Narrower = more frequent small trades.
+                A class is in tolerance when its drift is within this many percentage points of
+                target. Dominates for large sleeves. Default ±5 pp.
               </HelpTip>
             </label>
             <div className="flex items-center gap-1">
@@ -599,10 +608,37 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentW
                 onBlur={commitWeights}
                 className="w-20 border rounded px-2 py-1.5 text-sm text-right"
               />
+              <span className="text-gray-400 text-xs">pp</span>
+            </div>
+            <p className="text-xs text-gray-400 mt-1">
+              Percentage-point band around each target.
+            </p>
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">
+              Relative tolerance
+              <span className="ml-1 text-gray-400">(±% of target)</span>
+              <HelpTip>
+                A second band expressed as a fraction of each class's own target. The engine uses
+                whichever band is tighter — the Bogleheads / Swedroe "5/25" rule. Default ±25% of
+                target. Set to 100% to disable (absolute band only).
+              </HelpTip>
+            </label>
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                value={toleranceRel}
+                step="5"
+                min="0"
+                max="100"
+                onChange={e => setToleranceRel(e.target.value)}
+                onBlur={commitWeights}
+                className="w-20 border rounded px-2 py-1.5 text-sm text-right"
+              />
               <span className="text-gray-400 text-xs">%</span>
             </div>
             <p className="text-xs text-gray-400 mt-1">
-              Suppress trades when drift is within this band.
+              Tighter band on small targets.
             </p>
           </div>
           <div>

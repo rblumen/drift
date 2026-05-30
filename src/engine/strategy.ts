@@ -48,5 +48,6 @@ export const DEFAULT_STRATEGY: Strategy = {
     CASH:            ['TAXABLE', 'TAX_ADVANTAGED'],
   },
   toleranceAbs: 0.05,
+  toleranceRel: 0.25,
   minTradeUsd:  250,
 };
