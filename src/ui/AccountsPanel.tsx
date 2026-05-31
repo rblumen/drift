@@ -1,33 +1,54 @@
 import { useState } from 'react';
 import type { Account, AccountType, AssetClass } from '../engine/types';
+import { defaultWithdrawalPriority, withdrawalPriorityOf } from '../engine/rebalance';
 import { ACCT_TYPE_LABEL, AC_LABEL } from './fmt';
 import { HelpBox, HelpDef, HelpSection, HelpTip } from './HelpBox';
+import { EligibilityCell, EligibilityControl } from './EligibilityControl';
+import type { EligibilityPolicy, EligibilityLabels } from './EligibilityControl';
 
-// Three-state deposit eligibility (issue #30). Maps to Account fields:
-//   open    → acceptsDeposits: undefined, depositLimitUsd: undefined
-//   limited → acceptsDeposits: undefined, depositLimitUsd: <cap>
-//   closed  → acceptsDeposits: false,     depositLimitUsd: undefined
-type DepositPolicy = 'open' | 'limited' | 'closed';
+// Deposit eligibility (issue #30) expressed on the shared three-state control.
+//   full ("Open")    → acceptsDeposits: undefined, depositLimitUsd: undefined
+//   limited          → acceptsDeposits: undefined, depositLimitUsd: <cap>
+//   none ("Closed")  → acceptsDeposits: false,     depositLimitUsd: undefined
+const DEPOSIT_LABELS: EligibilityLabels = {
+  full: 'Open', limited: 'Limited', none: 'Closed', capLabel: 'free-cash cap',
+};
+// Withdrawal eligibility (issue #14). Default-by-type lives in accountWithdrawalPolicy.
+//   full ("Eligible")     → acceptsWithdrawals: true,  withdrawalLimitUsd: undefined
+//   limited               → acceptsWithdrawals: true,  withdrawalLimitUsd: <cap>
+//   none ("Restricted")   → acceptsWithdrawals: false, withdrawalLimitUsd: undefined
+const WITHDRAWAL_LABELS: EligibilityLabels = {
+  full: 'Eligible', limited: 'Limited', none: 'Restricted', capLabel: 'withdrawal cap',
+};
 
-const DEPOSIT_OPTS: { value: DepositPolicy; label: string }[] = [
-  { value: 'open',    label: 'Open' },
-  { value: 'limited', label: 'Limited' },
-  { value: 'closed',  label: 'Closed' },
-];
-
-function accountDepositPolicy(a: Account): DepositPolicy {
-  if (a.acceptsDeposits === false) return 'closed';
+function accountDepositPolicy(a: Account): EligibilityPolicy {
+  if (a.acceptsDeposits === false) return 'none';
   if (a.depositLimitUsd != null) return 'limited';
-  return 'open';
+  return 'full';
 }
 
-// The two Account fields implied by a (policy, limit) pair.
-function depositFields(policy: DepositPolicy, limitStr: string): Pick<Account, 'acceptsDeposits' | 'depositLimitUsd'> {
-  if (policy === 'closed') return { acceptsDeposits: false, depositLimitUsd: undefined };
-  if (policy === 'open')   return { acceptsDeposits: undefined, depositLimitUsd: undefined };
-  // limited — an empty/invalid cap behaves as unlimited until a number is entered.
-  const v = parseFloat(limitStr);
+function depositFields(policy: EligibilityPolicy, limitStr: string): Pick<Account, 'acceptsDeposits' | 'depositLimitUsd'> {
+  if (policy === 'none') return { acceptsDeposits: false, depositLimitUsd: undefined };
+  if (policy === 'full') return { acceptsDeposits: undefined, depositLimitUsd: undefined };
+  const v = parseFloat(limitStr); // empty/invalid cap behaves as unlimited until entered
   return { acceptsDeposits: undefined, depositLimitUsd: isNaN(v) || v < 0 ? undefined : v };
+}
+
+// Withdrawal eligibility shown on the control. When acceptsWithdrawals is unset
+// the displayed default is derived from type (taxable Eligible, else Restricted),
+// matching the engine's isWithdrawalEligible.
+function accountWithdrawalPolicy(a: Account): EligibilityPolicy {
+  if (a.acceptsWithdrawals === false) return 'none';
+  if (a.withdrawalLimitUsd != null) return 'limited';
+  if (a.acceptsWithdrawals === true) return 'full';
+  return a.type === 'TAXABLE' ? 'full' : 'none';
+}
+
+function withdrawalFields(policy: EligibilityPolicy, limitStr: string): Pick<Account, 'acceptsWithdrawals' | 'withdrawalLimitUsd'> {
+  if (policy === 'none') return { acceptsWithdrawals: false, withdrawalLimitUsd: undefined };
+  if (policy === 'full') return { acceptsWithdrawals: true, withdrawalLimitUsd: undefined };
+  const v = parseFloat(limitStr);
+  return { acceptsWithdrawals: true, withdrawalLimitUsd: isNaN(v) || v < 0 ? undefined : v };
 }
 
 interface Props {
@@ -37,6 +58,8 @@ interface Props {
   onDeleteAccount: (id: string) => void;
   freeCash: number;
   setFreeCash: (v: number) => void;
+  plannedWithdrawal: number;
+  setPlannedWithdrawal: (v: number) => void;
   onLoadSample: () => void;
 }
 
@@ -60,8 +83,12 @@ interface FormState {
   institution: string;
   type: AccountType;
   newCash: string;
-  depositPolicy: DepositPolicy;
+  depositPolicy: EligibilityPolicy;
   depositLimit: string;
+  withdrawalPolicy: EligibilityPolicy;
+  withdrawalLimit: string;
+  withdrawalPriority: string;
+  rmdDue: string;
   restricted: boolean;
   allowedClasses: AssetClass[];
   concentrateClasses: AssetClass[];
@@ -70,23 +97,37 @@ interface FormState {
 function blankForm(): FormState {
   return {
     name: '', institution: 'Schwab', type: 'TAXABLE', newCash: '',
-    depositPolicy: 'open', depositLimit: '',
+    depositPolicy: 'full', depositLimit: '',
+    withdrawalPolicy: 'full', withdrawalLimit: '',
+    withdrawalPriority: String(defaultWithdrawalPriority('TAXABLE')), rmdDue: '',
     restricted: false, allowedClasses: [...PLACEABLE_CLASSES], concentrateClasses: [],
   };
 }
 
-// When the user selects 401k and the form isn't already restricted, pre-populate
-// the most common restriction: no ALTERNATIVES in a 401k menu.
+// When the type changes, reseed the type-derived defaults: the 401k fund-menu
+// restriction (no ALTERNATIVES), the withdrawal eligibility default (taxable
+// Eligible, else Restricted), and the withdrawal priority seed.
 function applyTypeDefaults(form: FormState, newType: AccountType): FormState {
+  const next: FormState = {
+    ...form,
+    type: newType,
+    withdrawalPolicy: newType === 'TAXABLE' ? 'full' : 'none',
+    withdrawalPriority: String(defaultWithdrawalPriority(newType)),
+  };
   if (newType === 'FOUR_OH_ONE_K' && !form.restricted) {
-    return {
-      ...form,
-      type: newType,
-      restricted: true,
-      allowedClasses: PLACEABLE_CLASSES.filter(c => c !== 'ALTERNATIVES'),
-    };
+    return { ...next, restricted: true, allowedClasses: PLACEABLE_CLASSES.filter(c => c !== 'ALTERNATIVES') };
   }
-  return { ...form, type: newType };
+  return next;
+}
+
+// Parse a withdrawal priority field, storing it only when it deviates from the
+// type's default seed (so untouched accounts stay free of the field).
+function withdrawalPriorityField(form: FormState): number | undefined {
+  const s = form.withdrawalPriority.trim();
+  if (s === '') return undefined;
+  const v = parseFloat(s);
+  if (isNaN(v) || v < 0 || v === defaultWithdrawalPriority(form.type)) return undefined;
+  return v;
 }
 
 function toggleClass(classes: AssetClass[], ac: AssetClass, checked: boolean): AssetClass[] {
@@ -101,85 +142,94 @@ function toAllowedAssetClasses(form: FormState): AssetClass[] | undefined {
   return form.allowedClasses.length > 0 ? form.allowedClasses : undefined;
 }
 
-// Segmented Open · Limited · Closed control plus a cap input revealed when
-// "Limited" is selected. Presentational — the caller owns (policy, limit) state.
-function DepositPolicyControl({
-  policy, limit, onPolicyChange, onLimitChange,
-}: {
-  policy: DepositPolicy;
-  limit: string;
-  onPolicyChange: (p: DepositPolicy) => void;
-  onLimitChange: (v: string) => void;
-}) {
-  const activeClass: Record<DepositPolicy, string> = {
-    open:    'bg-green-100 text-green-700',
-    limited: 'bg-amber-100 text-amber-700',
-    closed:  'bg-red-100 text-red-600',
-  };
+// Deposit + withdrawal eligibility controls plus the withdrawal priority and RMD
+// inputs, shared by the add and edit forms. The caller owns the FormState.
+function EligibilityFormFields({ f, onChange }: { f: FormState; onChange: (next: FormState) => void }) {
   return (
-    <div className="inline-flex flex-col items-start gap-1">
-      <div className="inline-flex rounded-full border border-gray-200 overflow-hidden text-xs">
-        {DEPOSIT_OPTS.map((opt, i) => (
-          <button
-            key={opt.value}
-            type="button"
-            onClick={() => onPolicyChange(opt.value)}
-            className={`px-2.5 py-0.5 font-medium transition-colors ${i > 0 ? 'border-l border-gray-200' : ''} ${
-              policy === opt.value ? activeClass[opt.value] : 'bg-white text-gray-400 hover:bg-gray-50'
-            }`}
-          >
-            {opt.label}
-          </button>
-        ))}
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1 border-t border-gray-200">
+      <div className="space-y-1">
+        <span className="flex items-center gap-1 text-xs font-medium text-gray-600">
+          Deposits
+          <HelpTip>
+            <strong>Open</strong> accepts any share of household free cash.
+            <strong> Limited</strong> caps the free-cash share at a dollar amount — use when a
+            contribution limit is partly consumed (e.g. a Roth IRA with room left this year).
+            <strong> Closed</strong> receives none. The account still rebalances its existing
+            holdings, and its own new cash always deploys in full regardless of this setting.
+          </HelpTip>
+        </span>
+        <EligibilityControl
+          policy={f.depositPolicy}
+          limit={f.depositLimit}
+          labels={DEPOSIT_LABELS}
+          onPolicyChange={p => onChange({ ...f, depositPolicy: p })}
+          onLimitChange={v => onChange({ ...f, depositPolicy: 'limited', depositLimit: v })}
+        />
       </div>
-      {policy === 'limited' && (
-        <div className="flex items-center gap-1 text-xs text-gray-600">
-          <span className="text-gray-400">$</span>
-          <input
-            type="number"
-            min="0"
-            value={limit}
-            onChange={e => onLimitChange(e.target.value)}
-            placeholder="cap"
-            className="w-24 border rounded px-1.5 py-0.5 text-xs"
+      <div className="space-y-2">
+        <div className="space-y-1">
+          <span className="flex items-center gap-1 text-xs font-medium text-gray-600">
+            Withdrawals
+            <HelpTip>
+              How much of a planned withdrawal this account may fund by selling.
+              <strong> Eligible</strong> can fund any share; <strong>Limited</strong> caps it at a
+              dollar amount; <strong>Restricted</strong> funds none (the default for tax-advantaged
+              accounts, which carry early-withdrawal penalties). A required minimum distribution
+              (below) is still sold regardless of this setting.
+            </HelpTip>
+          </span>
+          <EligibilityControl
+            policy={f.withdrawalPolicy}
+            limit={f.withdrawalLimit}
+            labels={WITHDRAWAL_LABELS}
+            onPolicyChange={p => onChange({ ...f, withdrawalPolicy: p })}
+            onLimitChange={v => onChange({ ...f, withdrawalPolicy: 'limited', withdrawalLimit: v })}
           />
-          <span className="text-gray-400">free-cash cap</span>
         </div>
-      )}
+        <div className="flex items-end gap-4">
+          <label className="text-xs text-gray-500">
+            <span className="flex items-center gap-1">
+              Drain priority
+              <HelpTip>
+                Lower numbers are drained first. Seeded from account type (taxable → traditional →
+                Roth); edit to change the order a withdrawal pulls from accounts.
+              </HelpTip>
+            </span>
+            <input
+              type="number"
+              min="0"
+              value={f.withdrawalPriority}
+              onChange={e => onChange({ ...f, withdrawalPriority: e.target.value })}
+              className="mt-1 w-20 border rounded px-1.5 py-0.5 text-xs"
+            />
+          </label>
+          <label className="text-xs text-gray-500">
+            <span className="flex items-center gap-1">
+              RMD due this year ($)
+              <HelpTip>
+                Required Minimum Distribution your custodian reports for this year. Sold first,
+                before any discretionary withdrawal, regardless of eligibility or limit. Leave blank
+                if none applies.
+              </HelpTip>
+            </span>
+            <input
+              type="number"
+              min="0"
+              value={f.rmdDue}
+              onChange={e => onChange({ ...f, rmdDue: e.target.value })}
+              placeholder="0"
+              className="mt-1 w-28 border rounded px-1.5 py-0.5 text-xs"
+            />
+          </label>
+        </div>
+      </div>
     </div>
   );
 }
 
-// Inline deposit control for a table row. Holds its own (policy, limit) draft so
-// selecting "Limited" can reveal an empty cap field without the account briefly
-// reading back as "open". Commits both Account fields on every change.
-function DepositCell({
-  acct, onChange,
-}: {
-  acct: Account;
-  onChange: (fields: Pick<Account, 'acceptsDeposits' | 'depositLimitUsd'>) => void;
-}) {
-  const [policy, setPolicy] = useState<DepositPolicy>(() => accountDepositPolicy(acct));
-  const [limit, setLimit]   = useState(() => (acct.depositLimitUsd != null ? String(acct.depositLimitUsd) : ''));
-
-  function commit(nextPolicy: DepositPolicy, nextLimit: string) {
-    setPolicy(nextPolicy);
-    setLimit(nextLimit);
-    onChange(depositFields(nextPolicy, nextLimit));
-  }
-
-  return (
-    <DepositPolicyControl
-      policy={policy}
-      limit={limit}
-      onPolicyChange={p => commit(p, limit)}
-      onLimitChange={v => commit('limited', v)}
-    />
-  );
-}
-
-export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash, setFreeCash, onLoadSample }: Props) {
+export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash, setFreeCash, plannedWithdrawal, setPlannedWithdrawal, onLoadSample }: Props) {
   const [freeCashInput, setFreeCashInput] = useState(freeCash > 0 ? String(freeCash) : '');
+  const [withdrawalInput, setWithdrawalInput] = useState(plannedWithdrawal > 0 ? String(plannedWithdrawal) : '');
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm]       = useState(blankForm);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -194,6 +244,9 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
       type:            form.type,
       newCash:         form.newCash ? parseFloat(form.newCash) : undefined,
       ...depositFields(form.depositPolicy, form.depositLimit),
+      ...withdrawalFields(form.withdrawalPolicy, form.withdrawalLimit),
+      withdrawalPriority: withdrawalPriorityField(form),
+      rmdDueUsd:           form.rmdDue ? parseFloat(form.rmdDue) : undefined,
       allowedAssetClasses: toAllowedAssetClasses(form),
       concentrateClasses:  form.concentrateClasses.length > 0 ? form.concentrateClasses : undefined,
     };
@@ -212,6 +265,10 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
       newCash:         acct.newCash != null ? String(acct.newCash) : '',
       depositPolicy:   accountDepositPolicy(acct),
       depositLimit:    acct.depositLimitUsd != null ? String(acct.depositLimitUsd) : '',
+      withdrawalPolicy: accountWithdrawalPolicy(acct),
+      withdrawalLimit:  acct.withdrawalLimitUsd != null ? String(acct.withdrawalLimitUsd) : '',
+      withdrawalPriority: String(withdrawalPriorityOf(acct)),
+      rmdDue:           acct.rmdDueUsd != null ? String(acct.rmdDueUsd) : '',
       restricted:      existing !== undefined,
       allowedClasses: existing
         ? PLACEABLE_CLASSES.filter(c => existing.includes(c))
@@ -231,6 +288,9 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
         type:            editForm.type,
         newCash:         editForm.newCash ? parseFloat(editForm.newCash) : undefined,
         ...depositFields(editForm.depositPolicy, editForm.depositLimit),
+        ...withdrawalFields(editForm.withdrawalPolicy, editForm.withdrawalLimit),
+        withdrawalPriority: withdrawalPriorityField(editForm),
+        rmdDueUsd:           editForm.rmdDue ? parseFloat(editForm.rmdDue) : undefined,
         allowedAssetClasses: toAllowedAssetClasses(editForm),
         concentrateClasses:  editForm.concentrateClasses.length > 0
           ? editForm.concentrateClasses : undefined,
@@ -351,9 +411,9 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
             Household free cash ($)
             <HelpTip>
               Cash not yet assigned to a specific account — for example, a check you're about to
-              deposit, or proceeds sitting in a sweep fund you want to invest. The engine distributes
-              it proportionally across accounts with deposits open before running placement. Accounts
-              marked "deposits closed" are excluded.
+              deposit, or proceeds sitting in a sweep fund you want to invest. The engine deploys it
+              into the deposit-eligible account with the most capacity first, spilling to others only
+              when a deposit limit forces it. Accounts marked "deposits closed" are excluded.
             </HelpTip>
           </label>
           <input
@@ -382,6 +442,45 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
         )}
       </div>
 
+      {/* Planned withdrawal (drawdown / spending mode) */}
+      <div className="flex items-center gap-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+        <div className="flex-1">
+          <label className="block text-xs font-medium text-gray-700 mb-1">
+            Planned withdrawal ($)
+            <HelpTip>
+              Cash to raise from the portfolio by selling — e.g. annual retirement spending. The
+              engine takes any required minimum distributions (RMDs) first, then drains
+              withdrawal-eligible accounts in their drain-priority order (taxable → traditional →
+              Roth by default), selling down toward your target allocation. Set each account's
+              eligibility, priority, and RMD in the table or Edit form.
+            </HelpTip>
+          </label>
+          <input
+            type="number"
+            min="0"
+            value={withdrawalInput}
+            onChange={e => {
+              setWithdrawalInput(e.target.value);
+              const v = parseFloat(e.target.value);
+              setPlannedWithdrawal(isNaN(v) || v < 0 ? 0 : v);
+            }}
+            onBlur={() => {
+              if (!withdrawalInput.trim() || parseFloat(withdrawalInput) === 0) {
+                setWithdrawalInput('');
+                setPlannedWithdrawal(0);
+              }
+            }}
+            placeholder="e.g. 40000"
+            className="w-48 border rounded px-2 py-1 text-sm"
+          />
+        </div>
+        {plannedWithdrawal > 0 && (
+          <p className="text-xs text-amber-700">
+            ${plannedWithdrawal.toLocaleString()} will be raised by selling, RMDs first, at run time.
+          </p>
+        )}
+      </div>
+
       <HelpBox label="About accounts">
         <p>
           Register every investment account in your household. The engine uses account type to determine
@@ -396,9 +495,13 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
         </HelpSection>
 
         <HelpSection title="Advanced options">
-          <HelpDef term="Household free cash">Cash not yet assigned to a specific account. Distributed proportionally to accounts with deposits open before placement runs. Enter it in the green bar above.</HelpDef>
+          <HelpDef term="Household free cash">Cash not yet assigned to a specific account. Deployed into the deposit-eligible account with the most capacity first (spilling only when a deposit limit forces it), before placement runs. Enter it in the green bar above.</HelpDef>
           <HelpDef term="New cash">Uninvested cash already sitting in a specific account (e.g. a dividend that landed). Counted in that account's value and deployed toward underweight classes.</HelpDef>
           <HelpDef term="Deposits: Open / Limited / Closed">How much household free cash an account can receive. <em>Open</em> takes any share; <em>Limited</em> caps the share at a dollar amount (use when a contribution limit is partly consumed — e.g. a Roth IRA with room left this year); <em>Closed</em> receives none. In every case the account still rebalances its existing holdings, and any new cash you've entered for it deploys in full regardless of this setting.</HelpDef>
+          <HelpDef term="Planned withdrawal">Cash to raise from the portfolio by selling (e.g. retirement spending). The engine takes RMDs first, then drains withdrawal-eligible accounts in drain-priority order, selling down toward your target allocation. Enter it in the amber bar above.</HelpDef>
+          <HelpDef term="Withdrawals: Eligible / Limited / Restricted">How much of a planned withdrawal an account may fund by selling. <em>Eligible</em> can fund any share; <em>Limited</em> caps it at a dollar amount; <em>Restricted</em> funds none. Tax-advantaged accounts default to Restricted (early-withdrawal penalties); taxable defaults to Eligible.</HelpDef>
+          <HelpDef term="Drain priority">The order a withdrawal pulls from eligible accounts — lower drains first. Seeded from account type (taxable → traditional → Roth) and editable per account.</HelpDef>
+          <HelpDef term="RMD due this year">The Required Minimum Distribution your custodian reports. Sold first, before any discretionary withdrawal, regardless of eligibility or limit. Entered manually — there is no age tracking.</HelpDef>
           <HelpDef term="Locked account">Counted in totals and weights but excluded from trade generation. Use when you're not actively managing the account right now (e.g. a 401k at a former employer).</HelpDef>
           <HelpDef term="Restrict investable classes">Limits which asset classes the engine may place here. Useful for 401(k) plans with a fixed fund menu. The engine spills restricted classes to other eligible accounts.</HelpDef>
           <HelpDef term="Concentrate here">Fills this account first for the listed classes before distributing proportionally to other accounts in the same bucket. Use to keep alternatives concentrated in a single IRA.</HelpDef>
@@ -440,6 +543,18 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
                 </th>
                 <th className="px-4 py-2 text-center">
                   <span className="inline-flex items-center gap-0.5">
+                    Withdrawals
+                    <HelpTip dir="left">
+                      How much of a planned withdrawal this account may fund by selling.
+                      <strong> Eligible</strong> = any share; <strong>Limited</strong> = capped;
+                      <strong> Restricted</strong> = none (the default for tax-advantaged accounts).
+                      Set a per-account drain priority and any RMD due in the Edit form. RMDs are
+                      sold first regardless of this setting.
+                    </HelpTip>
+                  </span>
+                </th>
+                <th className="px-4 py-2 text-center">
+                  <span className="inline-flex items-center gap-0.5">
                     Locked
                     <HelpTip dir="left">
                       A locked account counts in household totals and weights but receives no trade
@@ -455,7 +570,7 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
               {accounts.map(acct => (
                 editingId === acct.id ? (
                   <tr key={acct.id}>
-                    <td colSpan={7} className="px-0 py-0">
+                    <td colSpan={8} className="px-0 py-0">
                       <div className="bg-indigo-50 px-4 py-3 space-y-3">
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                           <div>
@@ -506,25 +621,7 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
                             />
                           </div>
                         </div>
-                        <div className="space-y-1">
-                          <span className="flex items-center gap-1 text-xs font-medium text-gray-600">
-                            Deposits
-                            <HelpTip>
-                              <strong>Open</strong> accepts any share of household free cash.
-                              <strong> Limited</strong> caps the free-cash share at a dollar amount —
-                              use when a contribution limit is partly consumed (e.g. a Roth IRA with
-                              room left this year). <strong>Closed</strong> receives none. The account
-                              still rebalances its existing holdings, and its own new cash always
-                              deploys in full regardless of this setting.
-                            </HelpTip>
-                          </span>
-                          <DepositPolicyControl
-                            policy={editForm.depositPolicy}
-                            limit={editForm.depositLimit}
-                            onPolicyChange={p => setEditForm({ ...editForm, depositPolicy: p })}
-                            onLimitChange={v => setEditForm({ ...editForm, depositPolicy: 'limited', depositLimit: v })}
-                          />
-                        </div>
+                        <EligibilityFormFields f={editForm} onChange={setEditForm} />
                         <ConstraintFields f={editForm} onChange={setEditForm} />
                         <div className="flex items-center gap-3 pt-1">
                           <button
@@ -557,10 +654,26 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
                     </td>
                     <td className="px-4 py-2 text-center">
                       <div className="inline-flex justify-center">
-                        <DepositCell
-                          acct={acct}
-                          onChange={fields => setAccounts(accounts.map(a =>
-                            a.id === acct.id ? { ...a, ...fields } : a
+                        <EligibilityCell
+                          key={`dep-${acct.id}`}
+                          initialPolicy={accountDepositPolicy(acct)}
+                          initialLimit={acct.depositLimitUsd != null ? String(acct.depositLimitUsd) : ''}
+                          labels={DEPOSIT_LABELS}
+                          onChange={(policy, limit) => setAccounts(accounts.map(a =>
+                            a.id === acct.id ? { ...a, ...depositFields(policy, limit) } : a
+                          ))}
+                        />
+                      </div>
+                    </td>
+                    <td className="px-4 py-2 text-center">
+                      <div className="inline-flex justify-center">
+                        <EligibilityCell
+                          key={`wd-${acct.id}`}
+                          initialPolicy={accountWithdrawalPolicy(acct)}
+                          initialLimit={acct.withdrawalLimitUsd != null ? String(acct.withdrawalLimitUsd) : ''}
+                          labels={WITHDRAWAL_LABELS}
+                          onChange={(policy, limit) => setAccounts(accounts.map(a =>
+                            a.id === acct.id ? { ...a, ...withdrawalFields(policy, limit) } : a
                           ))}
                         />
                       </div>
@@ -654,24 +767,7 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
               />
             </div>
           </div>
-          <div className="space-y-1">
-            <span className="flex items-center gap-1 text-xs font-medium text-gray-600">
-              Deposits
-              <HelpTip>
-                <strong>Open</strong> accepts any share of household free cash.
-                <strong> Limited</strong> caps the free-cash share at a dollar amount — use when a
-                contribution limit is partly consumed (e.g. a Roth IRA with room left this year).
-                <strong> Closed</strong> receives none. The account still rebalances its existing
-                holdings, and its own new cash always deploys in full regardless of this setting.
-              </HelpTip>
-            </span>
-            <DepositPolicyControl
-              policy={form.depositPolicy}
-              limit={form.depositLimit}
-              onPolicyChange={p => setForm({ ...form, depositPolicy: p })}
-              onLimitChange={v => setForm({ ...form, depositPolicy: 'limited', depositLimit: v })}
-            />
-          </div>
+          <EligibilityFormFields f={form} onChange={setForm} />
           <ConstraintFields f={form} onChange={setForm} />
           <div className="flex gap-2 pt-1">
             <button

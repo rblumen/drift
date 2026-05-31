@@ -68,6 +68,21 @@ describe('parseAccount — deposit eligibility', () => {
   it('rejects a negative depositLimitUsd', () => {
     expect(() => parseAccount({ ...base, depositLimitUsd: -1 })).toThrow();
   });
+
+  it('accepts withdrawal fields (eligibility, limit, priority, RMD)', () => {
+    const a = parseAccount({
+      ...base, acceptsWithdrawals: true, withdrawalLimitUsd: 5000, withdrawalPriority: 20, rmdDueUsd: 3000,
+    });
+    expect(a.acceptsWithdrawals).toBe(true);
+    expect(a.withdrawalLimitUsd).toBe(5000);
+    expect(a.withdrawalPriority).toBe(20);
+    expect(a.rmdDueUsd).toBe(3000);
+  });
+  it('rejects negative withdrawalLimitUsd / withdrawalPriority / rmdDueUsd', () => {
+    expect(() => parseAccount({ ...base, withdrawalLimitUsd: -1 })).toThrow();
+    expect(() => parseAccount({ ...base, withdrawalPriority: -1 })).toThrow();
+    expect(() => parseAccount({ ...base, rmdDueUsd: -1 })).toThrow();
+  });
 });
 
 describe('parseStrategy (sum-to-1 validation)', () => {

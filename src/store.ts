@@ -34,6 +34,7 @@ export const DEFAULT_APP_STATE: AppState = {
   tickerOverrides: {},
   decompositions:  {},
   freeCash:        0,
+  plannedWithdrawal: 0,
 };
 
 // ─── Internal backup helpers ──────────────────────────────────────────────────
@@ -200,6 +201,7 @@ export function buildState(
   tickerOverrides: Record<string, AssetClass>,
   decompositions:  Record<string, FundDecomposition> = {},
   freeCash:        number = 0,
+  plannedWithdrawal: number = 0,
 ): AppState {
-  return { version: SCHEMA_VERSION, accounts, positions, strategy, tickerOverrides, decompositions, freeCash };
+  return { version: SCHEMA_VERSION, accounts, positions, strategy, tickerOverrides, decompositions, freeCash, plannedWithdrawal };
 }

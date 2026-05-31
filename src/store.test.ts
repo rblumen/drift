@@ -15,6 +15,14 @@ describe('buildState', () => {
     expect(state.strategy).toEqual(DEFAULT_STRATEGY);
     expect(state.tickerOverrides).toEqual({});
   });
+
+  it('round-trips freeCash and plannedWithdrawal', () => {
+    const state = buildState([], [], DEFAULT_STRATEGY, {}, {}, 5_000, 40_000);
+    expect(state.freeCash).toBe(5_000);
+    expect(state.plannedWithdrawal).toBe(40_000);
+    const parsed = parseAppState(state);
+    expect(parsed.plannedWithdrawal).toBe(40_000);
+  });
 });
 
 // ─── parseAppState (schema validation) ───────────────────────────────────────

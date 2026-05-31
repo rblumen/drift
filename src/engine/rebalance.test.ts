@@ -945,6 +945,128 @@ describe('freeCash — household-level cash distribution', () => {
   });
 });
 
+// ─── plannedWithdrawal — drawdown / spending mode (issue #14) ────────────────
+
+describe('plannedWithdrawal — drawdown', () => {
+  // schwab (taxable, eligible by default) $200k; ira (traditional, RESTRICTED by
+  // default) $300k. Net trade delta per account == its (negative) withdrawal.
+  const ACCOUNTS: Account[] = [
+    { id: 'schwab', name: 'Schwab', institution: 'Schwab',   type: 'TAXABLE'         },
+    { id: 'ira',    name: 'IRA',    institution: 'Fidelity', type: 'TRADITIONAL_IRA' },
+  ];
+  const POSITIONS: Position[] = [
+    { accountId: 'schwab', ticker: 'MUNY',  marketValue: 200_000 },
+    { accountId: 'ira',    ticker: 'FZROX', marketValue: 300_000 },
+  ];
+
+  it('raises the full planned amount from the eligible account; net flow = −W', () => {
+    // Only schwab is eligible (ira is tax-advantaged → restricted by default), so
+    // it funds the whole $50k. Household value drops by the withdrawal.
+    const r = rebalance(ACCOUNTS, POSITIONS, ZERO_TOL_STRATEGY, {}, {}, 0, 50_000);
+    expect(near(accountSum(r.trades, 'schwab'), -50_000, 200)).toBe(true);
+    expect(near(accountSum(r.trades, 'ira'),    0,       200)).toBe(true);
+    expect(r.householdValue).toBeCloseTo(450_000, 0);
+    expect(near(r.contributionSummary.withdrawalRaised, 50_000, 200)).toBe(true);
+    expect(r.flags.some(f => f.kind === 'WITHDRAWAL_SHORTFALL')).toBe(false);
+  });
+
+  it('drains eligible accounts in withdrawalPriority order, spilling when exhausted', () => {
+    const accounts: Account[] = [
+      { id: 'a', name: 'A', institution: 'Schwab', type: 'TAXABLE', withdrawalPriority: 10 },
+      { id: 'b', name: 'B', institution: 'Schwab', type: 'TAXABLE', withdrawalPriority: 20 },
+    ];
+    const positions: Position[] = [
+      { accountId: 'a', ticker: 'MUNY', marketValue: 30_000 },
+      { accountId: 'b', ticker: 'MUNY', marketValue: 100_000 },
+    ];
+    // $50k: a (priority 10) drains its full $30k sellable, b (priority 20) covers $20k.
+    const r = rebalance(accounts, positions, ZERO_TOL_STRATEGY, {}, {}, 0, 50_000);
+    expect(near(accountSum(r.trades, 'a'), -30_000, 200)).toBe(true);
+    expect(near(accountSum(r.trades, 'b'), -20_000, 200)).toBe(true);
+  });
+
+  it('caps discretionary draw at withdrawalLimitUsd and spills the remainder', () => {
+    const accounts: Account[] = [
+      { id: 'a', name: 'A', institution: 'Schwab', type: 'TAXABLE', withdrawalPriority: 10, withdrawalLimitUsd: 20_000 },
+      { id: 'b', name: 'B', institution: 'Schwab', type: 'TAXABLE', withdrawalPriority: 20 },
+    ];
+    const positions: Position[] = [
+      { accountId: 'a', ticker: 'MUNY', marketValue: 100_000 },
+      { accountId: 'b', ticker: 'MUNY', marketValue: 100_000 },
+    ];
+    // a is capped at $20k despite having capacity; b absorbs the remaining $30k.
+    const r = rebalance(accounts, positions, ZERO_TOL_STRATEGY, {}, {}, 0, 50_000);
+    expect(near(accountSum(r.trades, 'a'), -20_000, 200)).toBe(true);
+    expect(near(accountSum(r.trades, 'b'), -30_000, 200)).toBe(true);
+  });
+
+  it('routes no discretionary withdrawal to a restricted (tax-advantaged) account', () => {
+    // ira is restricted by default → all $40k comes from the taxable account.
+    const r = rebalance(ACCOUNTS, POSITIONS, ZERO_TOL_STRATEGY, {}, {}, 0, 40_000);
+    expect(near(accountSum(r.trades, 'schwab'), -40_000, 200)).toBe(true);
+    expect(near(accountSum(r.trades, 'ira'),    0,       200)).toBe(true);
+  });
+
+  it('takes a forced RMD even from a restricted account and counts it toward the total', () => {
+    const accounts: Account[] = [
+      { id: 'schwab', name: 'Schwab', institution: 'Schwab',   type: 'TAXABLE'         },
+      { id: 'ira',    name: 'IRA',    institution: 'Fidelity', type: 'TRADITIONAL_IRA', rmdDueUsd: 20_000 },
+    ];
+    // $50k planned: ira's $20k RMD is forced (despite being restricted), the
+    // remaining $30k discretionary comes from the eligible taxable account.
+    const r = rebalance(accounts, POSITIONS, ZERO_TOL_STRATEGY, {}, {}, 0, 50_000);
+    expect(near(accountSum(r.trades, 'ira'),    -20_000, 200)).toBe(true);
+    expect(near(accountSum(r.trades, 'schwab'), -30_000, 200)).toBe(true);
+    expect(r.flags.some(f => f.kind === 'WITHDRAWAL_SHORTFALL')).toBe(false);
+  });
+
+  it('emits RMD_EXCEEDS_PLANNED and withdraws the larger RMD total', () => {
+    const accounts: Account[] = [
+      { id: 'schwab', name: 'Schwab', institution: 'Schwab',   type: 'TAXABLE'         },
+      { id: 'ira',    name: 'IRA',    institution: 'Fidelity', type: 'TRADITIONAL_IRA', rmdDueUsd: 40_000 },
+    ];
+    // Planned $10k < $40k RMD → the $40k RMD is taken; no discretionary draw.
+    const r = rebalance(accounts, POSITIONS, ZERO_TOL_STRATEGY, {}, {}, 0, 10_000);
+    const flag = r.flags.find(f => f.kind === 'RMD_EXCEEDS_PLANNED');
+    expect(flag).toBeDefined();
+    expect(flag?.kind === 'RMD_EXCEEDS_PLANNED' && flag.rmdTotalUsd).toBe(40_000);
+    expect(near(accountSum(r.trades, 'ira'),    -40_000, 200)).toBe(true);
+    expect(near(accountSum(r.trades, 'schwab'), 0,       200)).toBe(true);
+  });
+
+  it('emits WITHDRAWAL_SHORTFALL when planned exceeds eligible capacity', () => {
+    const accounts: Account[] = [
+      { id: 'schwab', name: 'Schwab', institution: 'Schwab', type: 'TAXABLE', withdrawalLimitUsd: 30_000 },
+    ];
+    const positions: Position[] = [
+      { accountId: 'schwab', ticker: 'MUNY', marketValue: 100_000 },
+    ];
+    // The account's withdrawal limit caps it at $30k; $50k planned leaves a $20k
+    // shortfall (the household still holds $70k afterward).
+    const r = rebalance(accounts, positions, ZERO_TOL_STRATEGY, {}, {}, 0, 50_000);
+    const flag = r.flags.find(f => f.kind === 'WITHDRAWAL_SHORTFALL');
+    expect(flag).toBeDefined();
+    expect(flag?.kind === 'WITHDRAWAL_SHORTFALL' && near(flag.amountUsd, 20_000, 1)).toBe(true);
+    expect(near(accountSum(r.trades, 'schwab'), -30_000, 200)).toBe(true);
+  });
+
+  it('still lands the household on target after a withdrawal (allocation-preserving)', () => {
+    // With zero tolerance the engine rebalances to the (reduced) post-withdrawal
+    // targets, so the drawdown does not knock the household off its allocation.
+    const r = rebalance(ACCOUNTS, POSITIONS, ZERO_TOL_STRATEGY, {}, {}, 0, 50_000);
+    for (const ac of ['US_LARGE_CAP', 'FIXED_INCOME'] as const) {
+      expect(near(r.projectedWeights[ac], ZERO_TOL_STRATEGY.targets[ac], 0.01)).toBe(true);
+    }
+  });
+
+  it('plannedWithdrawal=0 with no RMD is a no-op', () => {
+    const withZero    = rebalance(ACCOUNTS, POSITIONS, ZERO_TOL_STRATEGY, {}, {}, 0, 0);
+    const withDefault = rebalance(ACCOUNTS, POSITIONS, ZERO_TOL_STRATEGY);
+    expect(withZero.trades).toEqual(withDefault.trades);
+    expect(withZero.householdValue).toBe(withDefault.householdValue);
+  });
+});
+
 // ─── step 7.7 — redirect taxable equity sells to tax-advantaged accounts ─────
 //
 // Scenario: taxable holds equity that is overweight at household level. Without
@@ -1725,7 +1847,7 @@ describe('no-preference placement — empty bucket list', () => {
 describe('contributionSummary', () => {
   it('is all zeros for an empty portfolio', () => {
     const r = rebalance([], [], DEFAULT_STRATEGY);
-    expect(r.contributionSummary).toEqual({ newCashDeployed: 0, buysUsd: 0, sellsUsd: 0 });
+    expect(r.contributionSummary).toEqual({ newCashDeployed: 0, buysUsd: 0, sellsUsd: 0, withdrawalRaised: 0 });
   });
 
   it('counts new contributions as rebalanced-with-new-money', () => {

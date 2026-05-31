@@ -1,4 +1,4 @@
-import type { Account, Position, Strategy, RebalanceResult, AssetClass, Flag, FundDecomposition, Trade } from './types';
+import type { Account, AccountType, Position, Strategy, RebalanceResult, AssetClass, Flag, FundDecomposition, Trade } from './types';
 import { ALL_ASSET_CLASSES } from './types';
 import { makeClassifier } from './classify';
 import { rollup } from './rollup';
@@ -20,7 +20,101 @@ function summarizeContributions(trades: Trade[]): RebalanceResult['contributionS
     if (t.deltaUsd > 0) buysUsd += t.deltaUsd;
     else sellsUsd += -t.deltaUsd;
   }
-  return { newCashDeployed: Math.max(0, buysUsd - sellsUsd), buysUsd, sellsUsd };
+  return {
+    newCashDeployed: Math.max(0, buysUsd - sellsUsd),
+    buysUsd,
+    sellsUsd,
+    withdrawalRaised: Math.max(0, sellsUsd - buysUsd),
+  };
+}
+
+// ── Drawdown / withdrawal helpers (issue #14) ────────────────────────────────
+
+/**
+ * Default drain order seeded from account type: taxable first, then tax-deferred,
+ * then HSA, then Roth, then 529, then other. Users override per account via
+ * withdrawalPriority to deviate from the default tax order.
+ */
+const WITHDRAWAL_PRIORITY_SEED: Record<AccountType, number> = {
+  TAXABLE: 10,
+  TRADITIONAL_IRA: 20,
+  FOUR_OH_ONE_K: 20,
+  HSA: 30,
+  ROTH_IRA: 40,
+  FIVE_TWENTY_NINE: 50,
+  OTHER: 60,
+};
+
+export function defaultWithdrawalPriority(type: AccountType): number {
+  return WITHDRAWAL_PRIORITY_SEED[type] ?? 60;
+}
+
+export function withdrawalPriorityOf(a: Account): number {
+  return a.withdrawalPriority ?? defaultWithdrawalPriority(a.type);
+}
+
+/**
+ * Default eligibility when acceptsWithdrawals is unset: taxable accounts are
+ * eligible; tax-advantaged accounts are restricted (early-withdrawal penalties).
+ * Locked accounts never fund withdrawals. RMDs bypass this — see below.
+ */
+export function isWithdrawalEligible(a: Account): boolean {
+  if (a.locked) return false;
+  if (a.acceptsWithdrawals !== undefined) return a.acceptsWithdrawals;
+  return accountBucket(a.type) === 'TAXABLE';
+}
+
+/**
+ * Resolve how much each account funds toward a planned withdrawal:
+ *   1. Forced RMDs first — mandatory, so they ignore eligibility and
+ *      withdrawalLimitUsd (bounded only by the account's sellable value) and
+ *      count toward the planned total.
+ *   2. The discretionary remainder drains withdrawal-eligible accounts in
+ *      ascending withdrawalPriority (concentrate-then-spill via fillOrdered),
+ *      each capped at min(sellable − forced, withdrawalLimitUsd).
+ * Emits RMD_EXCEEDS_PLANNED when forced RMDs alone exceed the plan, and
+ * WITHDRAWAL_SHORTFALL when eligible capacity can't cover the discretionary need.
+ */
+function computeWithdrawalAllocations(
+  accounts: Account[],
+  sellable: Record<string, number>,
+  plannedWithdrawal: number,
+): { alloc: Record<string, number>; flags: Flag[] } {
+  const flags: Flag[] = [];
+
+  const forced: Record<string, number> = {};
+  let forcedTotal = 0;
+  for (const a of accounts) {
+    const rmd = Math.min(a.rmdDueUsd ?? 0, sellable[a.id] ?? 0);
+    if (rmd > EPSILON) { forced[a.id] = rmd; forcedTotal += rmd; }
+  }
+
+  const total = Math.max(plannedWithdrawal, forcedTotal);
+  if (forcedTotal > plannedWithdrawal + EPSILON) {
+    flags.push({ kind: 'RMD_EXCEEDS_PLANNED', rmdTotalUsd: forcedTotal, plannedUsd: plannedWithdrawal });
+  }
+
+  const discretionaryNeed = Math.max(0, total - forcedTotal);
+  const byId: Record<string, Account> = {};
+  for (const a of accounts) byId[a.id] = a;
+  const order = accounts
+    .filter(isWithdrawalEligible)
+    .sort((a, b) => withdrawalPriorityOf(a) - withdrawalPriorityOf(b) || a.id.localeCompare(b.id))
+    .map(a => a.id);
+  const roomOf = (id: string): number => {
+    const room = (sellable[id] ?? 0) - (forced[id] ?? 0);
+    const cap = byId[id].withdrawalLimitUsd ?? Infinity;
+    return Math.min(Math.max(0, room), cap);
+  };
+  const { alloc: disc, residual } = fillOrdered(order, roomOf, discretionaryNeed);
+  if (residual > EPSILON) flags.push({ kind: 'WITHDRAWAL_SHORTFALL', amountUsd: residual });
+
+  const alloc: Record<string, number> = {};
+  for (const a of accounts) {
+    const v = (forced[a.id] ?? 0) + (disc[a.id] ?? 0);
+    if (v > EPSILON) alloc[a.id] = v;
+  }
+  return { alloc, flags };
 }
 
 /**
@@ -112,10 +206,19 @@ export function rebalance(
   tickerOverrides: Record<string, AssetClass> = {},
   decompositions: Record<string, FundDecomposition> = {},
   freeCash: number = 0,
+  plannedWithdrawal: number = 0,
 ): RebalanceResult {
   const classify = makeClassifier(tickerOverrides);
 
   const flags: Flag[] = [];
+
+  // Are we in drawdown mode? A planned withdrawal or any forced RMD turns the run
+  // into a net cash-raising rebalance. This disables the within-tolerance skip
+  // below so the engine actually sells down to the (reduced) post-withdrawal
+  // targets rather than leaving balanced classes untouched.
+  const inDrawdown = plannedWithdrawal > EPSILON || accounts.some(a => (a.rmdDueUsd ?? 0) > 0);
+  // Per-account dollars withdrawn (RMD + discretionary), surfaced in the result.
+  const withdrawalByAccount: Record<string, number> = {};
 
   // Step 0 — Distribute household free cash to deposit-eligible accounts.
   // Concentrate-then-spill (backlog #37): deploy the cash into the single
@@ -161,6 +264,36 @@ export function rebalance(
     }
   }
 
+  // Step 0.5 — Drawdown: raise a planned withdrawal (and any forced RMDs) by
+  // assigning a NEGATIVE net flow to the chosen accounts. A withdrawal is just a
+  // negative newCash — Principle #3 (per-account net = newCash) already supports
+  // it, and Step 8.5's net-correction enforces it exactly. The class-level split
+  // is left to greedyPlace targeting the reduced post-withdrawal weights, which is
+  // what keeps the sells allocation-preserving; account selection is controlled
+  // entirely by which accounts receive the negative newCash (RMD-first, then
+  // priority order). sellable = unlocked, mapped, non-decomposed position value
+  // (the only holdings the engine can actually trade to raise cash).
+  if (inDrawdown) {
+    const sellable: Record<string, number> = {};
+    for (const a of accounts) sellable[a.id] = 0;
+    for (const pos of positions) {
+      if (pos.locked) continue;
+      const acct = accounts.find(a => a.id === pos.accountId);
+      if (!acct || acct.locked) continue;
+      if (decompositions[pos.ticker.toUpperCase()]) continue; // decomposed funds are frozen
+      if (classify(pos.ticker) === null) continue;            // unmapped — not tradeable
+      sellable[pos.accountId] += pos.marketValue;
+    }
+    const { alloc, flags: withdrawalFlags } = computeWithdrawalAllocations(accounts, sellable, plannedWithdrawal);
+    flags.push(...withdrawalFlags);
+    Object.assign(withdrawalByAccount, alloc);
+    accounts = accounts.map(a =>
+      alloc[a.id] !== undefined
+        ? { ...a, newCash: (a.newCash ?? 0) - alloc[a.id] }
+        : a,
+    );
+  }
+
   const {
     householdValue, currentValue, currentValueByAccount,
     accountValues, lockedValueByAccount, unmappedTickers,
@@ -178,6 +311,7 @@ export function rebalance(
       targetWeights: strategy.targets,
       projectedWeights: zeros,
       currentValueByAccount,
+      withdrawalByAccount,
       trades: [],
       flags,
       contributionSummary: summarizeContributions([]),
@@ -193,11 +327,18 @@ export function rebalance(
   // A class is within tolerance when drift is within the *tighter* of the two bands:
   //   absolute (toleranceAbs) or relative (toleranceRel × target).
   // For small targets the relative band fires first; for large targets the absolute band wins.
+  //
+  // Skipped entirely in drawdown mode: raising cash means we must sell down to the
+  // reduced post-withdrawal targets, so no class may be frozen as "close enough."
+  // With withinTolerance empty, every class participates in placement and the net
+  // per account (= the negative newCash from Step 0.5) is realized as sells.
   const withinTolerance = new Set<AssetClass>();
-  for (const ac of ALL_ASSET_CLASSES) {
-    if (Math.abs(currentWeights[ac] - strategy.targets[ac]) <= effectiveTolerance(ac, strategy)) {
-      withinTolerance.add(ac);
-      flags.push({ kind: 'WITHIN_TOLERANCE', assetClass: ac });
+  if (!inDrawdown) {
+    for (const ac of ALL_ASSET_CLASSES) {
+      if (Math.abs(currentWeights[ac] - strategy.targets[ac]) <= effectiveTolerance(ac, strategy)) {
+        withinTolerance.add(ac);
+        flags.push({ kind: 'WITHIN_TOLERANCE', assetClass: ac });
+      }
     }
   }
 
@@ -208,6 +349,7 @@ export function rebalance(
       targetWeights: strategy.targets,
       projectedWeights: currentWeights,
       currentValueByAccount,
+      withdrawalByAccount,
       trades: [],
       flags,
       contributionSummary: summarizeContributions([]),
@@ -593,7 +735,7 @@ export function rebalance(
 
   return {
     householdValue, currentWeights, targetWeights: strategy.targets,
-    projectedWeights, currentValueByAccount, trades, flags,
+    projectedWeights, currentValueByAccount, withdrawalByAccount, trades, flags,
     contributionSummary: summarizeContributions(trades),
   };
 }
