@@ -35,6 +35,7 @@ export const accountSchema = z.object({
   concentrateClasses: z.array(z.enum(ASSET_CLASSES)).optional(),
   locked: z.boolean().optional(),
   acceptsDeposits: z.boolean().optional(),
+  depositLimitUsd: z.number().nonnegative().optional(),
 });
 
 const targetsSchema = z.object({
