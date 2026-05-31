@@ -860,6 +860,70 @@ describe('freeCash — household-level cash distribution', () => {
     expect(near(accountSum(r.trades, 'schwab'), 10_000, 100)).toBe(true);
     expect(near(accountSum(r.trades, 'roth'),   10_000, 100)).toBe(true);
   });
+
+  it('caps a limited account at depositLimitUsd; remainder spills to the unlimited account', () => {
+    // schwab $200k (unlimited), roth $300k (limited to $10k). Pro-rata would send
+    // roth 60% = $30k, but its cap clamps it to $10k; the remaining $40k goes to schwab.
+    const accounts: Account[] = [
+      { id: 'schwab', name: 'Schwab', institution: 'Schwab',   type: 'TAXABLE'  },
+      { id: 'roth',   name: 'Roth',   institution: 'Fidelity', type: 'ROTH_IRA', depositLimitUsd: 10_000 },
+    ];
+    const positions: Position[] = [
+      { accountId: 'schwab', ticker: 'MUNY',  marketValue: 200_000 },
+      { accountId: 'roth',   ticker: 'FZROX', marketValue: 300_000 },
+    ];
+    const r = rebalance(accounts, positions, ZERO_TOL_STRATEGY, {}, {}, 50_000);
+    expect(near(accountSum(r.trades, 'roth'),   10_000, 100)).toBe(true);
+    expect(near(accountSum(r.trades, 'schwab'), 40_000, 100)).toBe(true);
+    expect(r.flags.some(f => f.kind === 'EXCESS_CASH')).toBe(false);
+  });
+
+  it('emits EXCESS_CASH for free cash exceeding the sum of all caps', () => {
+    // Both accounts limited: schwab $5k, roth $8k → $13k total capacity. $20k free
+    // cash leaves $7k un-allocatable.
+    const accounts: Account[] = [
+      { id: 'schwab', name: 'Schwab', institution: 'Schwab',   type: 'TAXABLE',  depositLimitUsd: 5_000 },
+      { id: 'roth',   name: 'Roth',   institution: 'Fidelity', type: 'ROTH_IRA', depositLimitUsd: 8_000 },
+    ];
+    const positions: Position[] = [
+      { accountId: 'schwab', ticker: 'MUNY',  marketValue: 200_000 },
+      { accountId: 'roth',   ticker: 'FZROX', marketValue: 300_000 },
+    ];
+    const r = rebalance(accounts, positions, ZERO_TOL_STRATEGY, {}, {}, 20_000);
+    expect(near(accountSum(r.trades, 'schwab'), 5_000, 100)).toBe(true);
+    expect(near(accountSum(r.trades, 'roth'),   8_000, 100)).toBe(true);
+    const flag = r.flags.find(f => f.kind === 'EXCESS_CASH');
+    expect(flag).toBeDefined();
+    expect(flag?.kind === 'EXCESS_CASH' && near(flag.amountUsd, 7_000, 1)).toBe(true);
+  });
+
+  it('deploys per-account newCash in full regardless of the deposit cap', () => {
+    // roth has a tight $1k free-cash cap but $9k of its own newCash. The cap governs
+    // only household free-cash routing — the $9k must still deploy in full.
+    const accounts: Account[] = [
+      { id: 'roth', name: 'Roth', institution: 'Fidelity', type: 'ROTH_IRA', newCash: 9_000, depositLimitUsd: 1_000 },
+    ];
+    const positions: Position[] = [
+      { accountId: 'roth', ticker: 'FZROX', marketValue: 300_000 },
+    ];
+    const r = rebalance(accounts, positions, ZERO_TOL_STRATEGY, {}, {}, 0);
+    expect(near(accountSum(r.trades, 'roth'), 9_000, 100)).toBe(true);
+  });
+
+  it('treats depositLimitUsd === 0 as closed', () => {
+    // roth capped at $0 is functionally closed → all free cash goes to schwab.
+    const accounts: Account[] = [
+      { id: 'schwab', name: 'Schwab', institution: 'Schwab',   type: 'TAXABLE'  },
+      { id: 'roth',   name: 'Roth',   institution: 'Fidelity', type: 'ROTH_IRA', depositLimitUsd: 0 },
+    ];
+    const positions: Position[] = [
+      { accountId: 'schwab', ticker: 'MUNY',  marketValue: 200_000 },
+      { accountId: 'roth',   ticker: 'FZROX', marketValue: 300_000 },
+    ];
+    const r = rebalance(accounts, positions, ZERO_TOL_STRATEGY, {}, {}, 20_000);
+    expect(near(accountSum(r.trades, 'schwab'), 20_000, 100)).toBe(true);
+    expect(near(accountSum(r.trades, 'roth'),   0, 100)).toBe(true);
+  });
 });
 
 // ─── step 7.7 — redirect taxable equity sells to tax-advantaged accounts ─────

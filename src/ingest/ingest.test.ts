@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parsePosition, parseStrategy, safeParseStrategy, safeParsePosition, parsePortfolio } from './schema';
+import { parsePosition, parseStrategy, safeParseStrategy, safeParsePosition, parsePortfolio, parseAccount } from './schema';
 import { parseCsv, parseMoney } from './csv';
 import { parseSchwabCsv } from './adapters/schwab';
 import { parseFidelityCsv, parseFidelityMultiCsv } from './adapters/fidelity';
@@ -50,6 +50,23 @@ describe('parsePosition', () => {
   it('accepts optional price field', () => {
     const pos = parsePosition({ accountId: 'a1', ticker: 'VTI', marketValue: 1000, price: 240.50 });
     expect(pos.price).toBeCloseTo(240.50);
+  });
+});
+
+describe('parseAccount — deposit eligibility', () => {
+  const base = { id: 'a1', name: 'Roth', institution: 'Fidelity', type: 'ROTH_IRA' as const };
+
+  it('accepts an account with no deposit fields (unlimited)', () => {
+    const a = parseAccount(base);
+    expect(a.acceptsDeposits).toBeUndefined();
+    expect(a.depositLimitUsd).toBeUndefined();
+  });
+  it('accepts a non-negative depositLimitUsd', () => {
+    expect(parseAccount({ ...base, depositLimitUsd: 4000 }).depositLimitUsd).toBe(4000);
+    expect(parseAccount({ ...base, depositLimitUsd: 0 }).depositLimitUsd).toBe(0);
+  });
+  it('rejects a negative depositLimitUsd', () => {
+    expect(() => parseAccount({ ...base, depositLimitUsd: -1 })).toThrow();
   });
 });
 

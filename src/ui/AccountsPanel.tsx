@@ -3,6 +3,33 @@ import type { Account, AccountType, AssetClass } from '../engine/types';
 import { ACCT_TYPE_LABEL, AC_LABEL } from './fmt';
 import { HelpBox, HelpDef, HelpSection, HelpTip } from './HelpBox';
 
+// Three-state deposit eligibility (issue #30). Maps to Account fields:
+//   open    → acceptsDeposits: undefined, depositLimitUsd: undefined
+//   limited → acceptsDeposits: undefined, depositLimitUsd: <cap>
+//   closed  → acceptsDeposits: false,     depositLimitUsd: undefined
+type DepositPolicy = 'open' | 'limited' | 'closed';
+
+const DEPOSIT_OPTS: { value: DepositPolicy; label: string }[] = [
+  { value: 'open',    label: 'Open' },
+  { value: 'limited', label: 'Limited' },
+  { value: 'closed',  label: 'Closed' },
+];
+
+function accountDepositPolicy(a: Account): DepositPolicy {
+  if (a.acceptsDeposits === false) return 'closed';
+  if (a.depositLimitUsd != null) return 'limited';
+  return 'open';
+}
+
+// The two Account fields implied by a (policy, limit) pair.
+function depositFields(policy: DepositPolicy, limitStr: string): Pick<Account, 'acceptsDeposits' | 'depositLimitUsd'> {
+  if (policy === 'closed') return { acceptsDeposits: false, depositLimitUsd: undefined };
+  if (policy === 'open')   return { acceptsDeposits: undefined, depositLimitUsd: undefined };
+  // limited — an empty/invalid cap behaves as unlimited until a number is entered.
+  const v = parseFloat(limitStr);
+  return { acceptsDeposits: undefined, depositLimitUsd: isNaN(v) || v < 0 ? undefined : v };
+}
+
 interface Props {
   accounts: Account[];
   setAccounts: (a: Account[]) => void;
@@ -33,7 +60,8 @@ interface FormState {
   institution: string;
   type: AccountType;
   newCash: string;
-  acceptsDeposits: boolean;
+  depositPolicy: DepositPolicy;
+  depositLimit: string;
   restricted: boolean;
   allowedClasses: AssetClass[];
   concentrateClasses: AssetClass[];
@@ -42,7 +70,7 @@ interface FormState {
 function blankForm(): FormState {
   return {
     name: '', institution: 'Schwab', type: 'TAXABLE', newCash: '',
-    acceptsDeposits: true,
+    depositPolicy: 'open', depositLimit: '',
     restricted: false, allowedClasses: [...PLACEABLE_CLASSES], concentrateClasses: [],
   };
 }
@@ -73,6 +101,83 @@ function toAllowedAssetClasses(form: FormState): AssetClass[] | undefined {
   return form.allowedClasses.length > 0 ? form.allowedClasses : undefined;
 }
 
+// Segmented Open · Limited · Closed control plus a cap input revealed when
+// "Limited" is selected. Presentational — the caller owns (policy, limit) state.
+function DepositPolicyControl({
+  policy, limit, onPolicyChange, onLimitChange,
+}: {
+  policy: DepositPolicy;
+  limit: string;
+  onPolicyChange: (p: DepositPolicy) => void;
+  onLimitChange: (v: string) => void;
+}) {
+  const activeClass: Record<DepositPolicy, string> = {
+    open:    'bg-green-100 text-green-700',
+    limited: 'bg-amber-100 text-amber-700',
+    closed:  'bg-red-100 text-red-600',
+  };
+  return (
+    <div className="inline-flex flex-col items-start gap-1">
+      <div className="inline-flex rounded-full border border-gray-200 overflow-hidden text-xs">
+        {DEPOSIT_OPTS.map((opt, i) => (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => onPolicyChange(opt.value)}
+            className={`px-2.5 py-0.5 font-medium transition-colors ${i > 0 ? 'border-l border-gray-200' : ''} ${
+              policy === opt.value ? activeClass[opt.value] : 'bg-white text-gray-400 hover:bg-gray-50'
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+      {policy === 'limited' && (
+        <div className="flex items-center gap-1 text-xs text-gray-600">
+          <span className="text-gray-400">$</span>
+          <input
+            type="number"
+            min="0"
+            value={limit}
+            onChange={e => onLimitChange(e.target.value)}
+            placeholder="cap"
+            className="w-24 border rounded px-1.5 py-0.5 text-xs"
+          />
+          <span className="text-gray-400">free-cash cap</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Inline deposit control for a table row. Holds its own (policy, limit) draft so
+// selecting "Limited" can reveal an empty cap field without the account briefly
+// reading back as "open". Commits both Account fields on every change.
+function DepositCell({
+  acct, onChange,
+}: {
+  acct: Account;
+  onChange: (fields: Pick<Account, 'acceptsDeposits' | 'depositLimitUsd'>) => void;
+}) {
+  const [policy, setPolicy] = useState<DepositPolicy>(() => accountDepositPolicy(acct));
+  const [limit, setLimit]   = useState(() => (acct.depositLimitUsd != null ? String(acct.depositLimitUsd) : ''));
+
+  function commit(nextPolicy: DepositPolicy, nextLimit: string) {
+    setPolicy(nextPolicy);
+    setLimit(nextLimit);
+    onChange(depositFields(nextPolicy, nextLimit));
+  }
+
+  return (
+    <DepositPolicyControl
+      policy={policy}
+      limit={limit}
+      onPolicyChange={p => commit(p, limit)}
+      onLimitChange={v => commit('limited', v)}
+    />
+  );
+}
+
 export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash, setFreeCash, onLoadSample }: Props) {
   const [freeCashInput, setFreeCashInput] = useState(freeCash > 0 ? String(freeCash) : '');
   const [showAdd, setShowAdd] = useState(false);
@@ -88,7 +193,7 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
       institution:     form.institution,
       type:            form.type,
       newCash:         form.newCash ? parseFloat(form.newCash) : undefined,
-      acceptsDeposits: form.acceptsDeposits ? undefined : false,
+      ...depositFields(form.depositPolicy, form.depositLimit),
       allowedAssetClasses: toAllowedAssetClasses(form),
       concentrateClasses:  form.concentrateClasses.length > 0 ? form.concentrateClasses : undefined,
     };
@@ -105,7 +210,8 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
       institution:     acct.institution,
       type:            acct.type,
       newCash:         acct.newCash != null ? String(acct.newCash) : '',
-      acceptsDeposits: acct.acceptsDeposits !== false,
+      depositPolicy:   accountDepositPolicy(acct),
+      depositLimit:    acct.depositLimitUsd != null ? String(acct.depositLimitUsd) : '',
       restricted:      existing !== undefined,
       allowedClasses: existing
         ? PLACEABLE_CLASSES.filter(c => existing.includes(c))
@@ -124,7 +230,7 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
         institution:     editForm.institution,
         type:            editForm.type,
         newCash:         editForm.newCash ? parseFloat(editForm.newCash) : undefined,
-        acceptsDeposits: editForm.acceptsDeposits ? undefined : false,
+        ...depositFields(editForm.depositPolicy, editForm.depositLimit),
         allowedAssetClasses: toAllowedAssetClasses(editForm),
         concentrateClasses:  editForm.concentrateClasses.length > 0
           ? editForm.concentrateClasses : undefined,
@@ -292,7 +398,7 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
         <HelpSection title="Advanced options">
           <HelpDef term="Household free cash">Cash not yet assigned to a specific account. Distributed proportionally to accounts with deposits open before placement runs. Enter it in the green bar above.</HelpDef>
           <HelpDef term="New cash">Uninvested cash already sitting in a specific account (e.g. a dividend that landed). Counted in that account's value and deployed toward underweight classes.</HelpDef>
-          <HelpDef term="Deposits open / closed">Whether an account can currently accept new external deposits. Toggle to "closed" when an annual contribution limit is reached (e.g. Roth IRA maxed for the year). The account still rebalances its existing holdings — it just won't receive a share of household free cash.</HelpDef>
+          <HelpDef term="Deposits: Open / Limited / Closed">How much household free cash an account can receive. <em>Open</em> takes any share; <em>Limited</em> caps the share at a dollar amount (use when a contribution limit is partly consumed — e.g. a Roth IRA with room left this year); <em>Closed</em> receives none. In every case the account still rebalances its existing holdings, and any new cash you've entered for it deploys in full regardless of this setting.</HelpDef>
           <HelpDef term="Locked account">Counted in totals and weights but excluded from trade generation. Use when you're not actively managing the account right now (e.g. a 401k at a former employer).</HelpDef>
           <HelpDef term="Restrict investable classes">Limits which asset classes the engine may place here. Useful for 401(k) plans with a fixed fund menu. The engine spills restricted classes to other eligible accounts.</HelpDef>
           <HelpDef term="Concentrate here">Fills this account first for the listed classes before distributing proportionally to other accounts in the same bucket. Use to keep alternatives concentrated in a single IRA.</HelpDef>
@@ -324,10 +430,11 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
                   <span className="inline-flex items-center gap-0.5">
                     Deposits
                     <HelpTip dir="left">
-                      Whether this account can currently accept new external deposits. Toggle to
-                      "closed" when a contribution limit is reached (e.g. Roth IRA maxed for the
-                      year). The account still rebalances internally — it just won't receive a share
-                      of household free cash.
+                      How much household free cash this account can receive. <strong>Open</strong> =
+                      any share; <strong>Limited</strong> = capped at a dollar amount (use when a
+                      contribution limit is partly consumed); <strong>Closed</strong> = none. The
+                      account still rebalances internally, and its own new cash always deploys in
+                      full regardless of this setting.
                     </HelpTip>
                   </span>
                 </th>
@@ -399,21 +506,25 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
                             />
                           </div>
                         </div>
-                        <label className="flex items-center gap-2 text-xs font-medium text-gray-600 cursor-pointer select-none">
-                          <input
-                            type="checkbox"
-                            checked={editForm.acceptsDeposits}
-                            onChange={e => setEditForm({ ...editForm, acceptsDeposits: e.target.checked })}
-                            className="rounded"
+                        <div className="space-y-1">
+                          <span className="flex items-center gap-1 text-xs font-medium text-gray-600">
+                            Deposits
+                            <HelpTip>
+                              <strong>Open</strong> accepts any share of household free cash.
+                              <strong> Limited</strong> caps the free-cash share at a dollar amount —
+                              use when a contribution limit is partly consumed (e.g. a Roth IRA with
+                              room left this year). <strong>Closed</strong> receives none. The account
+                              still rebalances its existing holdings, and its own new cash always
+                              deploys in full regardless of this setting.
+                            </HelpTip>
+                          </span>
+                          <DepositPolicyControl
+                            policy={editForm.depositPolicy}
+                            limit={editForm.depositLimit}
+                            onPolicyChange={p => setEditForm({ ...editForm, depositPolicy: p })}
+                            onLimitChange={v => setEditForm({ ...editForm, depositPolicy: 'limited', depositLimit: v })}
                           />
-                          Deposits open
-                          <HelpTip>
-                            Uncheck when this account cannot accept new external deposits — for
-                            example, when a Roth IRA annual contribution limit is reached. The
-                            account still rebalances its existing holdings; it just won't receive a
-                            share of household free cash.
-                          </HelpTip>
-                        </label>
+                        </div>
                         <ConstraintFields f={editForm} onChange={setEditForm} />
                         <div className="flex items-center gap-3 pt-1">
                           <button
@@ -445,23 +556,14 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
                       {acct.newCash ? `$${acct.newCash.toLocaleString()}` : '—'}
                     </td>
                     <td className="px-4 py-2 text-center">
-                      <button
-                        onClick={() => setAccounts(accounts.map(a =>
-                          a.id === acct.id
-                            ? { ...a, acceptsDeposits: a.acceptsDeposits === false ? undefined : false }
-                            : a
-                        ))}
-                        title={acct.acceptsDeposits === false
-                          ? 'Deposits closed — click to reopen'
-                          : 'Deposits open — click to close (e.g. contribution limit reached)'}
-                        className={`text-xs font-medium px-2 py-0.5 rounded-full transition-colors ${
-                          acct.acceptsDeposits === false
-                            ? 'bg-red-100 text-red-600 hover:bg-red-200'
-                            : 'bg-green-100 text-green-700 hover:bg-green-200'
-                        }`}
-                      >
-                        {acct.acceptsDeposits === false ? 'Closed' : 'Open'}
-                      </button>
+                      <div className="inline-flex justify-center">
+                        <DepositCell
+                          acct={acct}
+                          onChange={fields => setAccounts(accounts.map(a =>
+                            a.id === acct.id ? { ...a, ...fields } : a
+                          ))}
+                        />
+                      </div>
                     </td>
                     <td className="px-4 py-2 text-center">
                       <button
@@ -552,20 +654,24 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
               />
             </div>
           </div>
-          <label className="flex items-center gap-2 text-xs font-medium text-gray-600 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={form.acceptsDeposits}
-              onChange={e => setForm({ ...form, acceptsDeposits: e.target.checked })}
-              className="rounded"
+          <div className="space-y-1">
+            <span className="flex items-center gap-1 text-xs font-medium text-gray-600">
+              Deposits
+              <HelpTip>
+                <strong>Open</strong> accepts any share of household free cash.
+                <strong> Limited</strong> caps the free-cash share at a dollar amount — use when a
+                contribution limit is partly consumed (e.g. a Roth IRA with room left this year).
+                <strong> Closed</strong> receives none. The account still rebalances its existing
+                holdings, and its own new cash always deploys in full regardless of this setting.
+              </HelpTip>
+            </span>
+            <DepositPolicyControl
+              policy={form.depositPolicy}
+              limit={form.depositLimit}
+              onPolicyChange={p => setForm({ ...form, depositPolicy: p })}
+              onLimitChange={v => setForm({ ...form, depositPolicy: 'limited', depositLimit: v })}
             />
-            Deposits open
-            <HelpTip>
-              Uncheck when this account cannot accept new external deposits — for example, when a
-              Roth IRA annual contribution limit is reached. The account still rebalances its
-              existing holdings; it just won't receive a share of household free cash.
-            </HelpTip>
-          </label>
+          </div>
           <ConstraintFields f={form} onChange={setForm} />
           <div className="flex gap-2 pt-1">
             <button

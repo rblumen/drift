@@ -104,8 +104,9 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
     return (
       <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
         <strong>Free cash undeployed:</strong>{' '}
-        {fmtUsd(flag.amountUsd)} of household free cash could not be distributed — all accounts
-        have deposits closed or are locked. Open deposits on at least one account to deploy it.
+        {fmtUsd(flag.amountUsd)} of household free cash could not be distributed — every eligible
+        account is closed, locked, or has hit its deposit limit. Open deposits or raise a limit on
+        at least one account to deploy it.
       </div>
     );
   }
@@ -469,8 +470,9 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash }: Pro
             above target, no eligible account, or a minimum trade size that suppresses the needed adjustment.
           </HelpDef>
           <HelpDef term="EXCESS_CASH (amber)">
-            Household free cash could not be distributed because all accounts have deposits closed or are
-            locked. Open deposits on at least one account in the Accounts tab.
+            Household free cash could not be fully distributed because every eligible account is closed,
+            locked, or has hit its deposit limit. Open deposits or raise a limit on at least one account
+            in the Accounts tab.
           </HelpDef>
         </HelpSection>
 
@@ -517,6 +519,7 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash }: Pro
                   .filter(t => t.accountId === a.id)
                   .reduce((s, t) => s + t.deltaUsd, 0);
                 const depositsOpen = a.acceptsDeposits !== false;
+                const limited = depositsOpen && a.depositLimitUsd != null;
                 const freeCashShare = freeCash > 0 && depositsOpen
                   ? netDeploy - ownCash  // approximate: net − own cash ≈ free cash routed here
                   : 0;
@@ -541,9 +544,13 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash }: Pro
                     </td>
                     <td className="px-4 py-2 text-right">
                       <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                        depositsOpen ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'
+                        !depositsOpen ? 'bg-red-100 text-red-600'
+                          : limited ? 'bg-amber-100 text-amber-700'
+                          : 'bg-green-100 text-green-700'
                       }`}>
-                        {depositsOpen ? 'Open' : 'Closed'}
+                        {!depositsOpen ? 'Closed'
+                          : limited ? `Limited · ${fmtUsd(a.depositLimitUsd!)}`
+                          : 'Open'}
                       </span>
                     </td>
                   </tr>

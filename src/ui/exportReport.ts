@@ -177,6 +177,7 @@ td{padding:7px 12px;border-top:1px solid #f3f4f6;vertical-align:middle}
 .badge{display:inline-block;font-size:11px;font-weight:700;padding:1px 7px;border-radius:99px}
 .buy{background:#dcfce7;color:#15803d}
 .sell{background:#fee2e2;color:#b91c1c}
+.limited{background:#fef3c7;color:#b45309}
 .flag{padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:10px}
 .flag-warn{background:#fffbeb;border:1px solid #fcd34d;color:#92400e}
 .flag-orange{background:#fff7ed;border:1px solid #fdba74;color:#9a3412}
@@ -291,14 +292,20 @@ function buildHtml(result: RebalanceResult, accounts: Account[], resolvedTrades:
     const ownCash   = a.newCash ?? 0;
     const netDeploy = trades.filter(t => t.accountId === a.id).reduce((s, t) => s + t.deltaUsd, 0);
     const depositsOpen = a.acceptsDeposits !== false;
+    const limited = depositsOpen && a.depositLimitUsd != null;
     const freeCashShare = freeCash > 0 && depositsOpen ? netDeploy - ownCash : 0;
     if (ownCash === 0 && freeCash === 0) return '';
+    const depositBadge = !depositsOpen
+      ? `<span class="badge sell">Closed</span>`
+      : limited
+      ? `<span class="badge limited">Limited · ${esc(fmtUsd(a.depositLimitUsd!))}</span>`
+      : `<span class="badge buy">Open</span>`;
     return `<tr>
       <td style="font-weight:600;color:#111827">${esc(a.name)}</td>
       <td class="num" style="color:#374151">${ownCash > 0 ? esc(fmtUsd(ownCash)) : '—'}</td>
       ${freeCash > 0 ? `<td class="num" style="color:${depositsOpen && freeCashShare > 0.5 ? '#16a34a' : '#9ca3af'}">${depositsOpen && freeCashShare > 0.5 ? esc(fmtUsd(freeCashShare)) : '—'}</td>` : ''}
       <td class="num" style="color:${netDeploy > 0.5 ? '#16a34a' : '#9ca3af'}">${netDeploy > 0.5 ? '+' + esc(fmtUsd(netDeploy)) : '—'}</td>
-      <td class="num"><span class="badge ${depositsOpen ? 'buy' : 'sell'}">${depositsOpen ? 'Open' : 'Closed'}</span></td>
+      <td class="num">${depositBadge}</td>
     </tr>`;
   }).join('');
 

@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Strategy panel** — the Target allocation and Placement rules cards are now collapsible; click the section heading to show or hide the card.
+- **Per-account deposit limits** ([#30](https://github.com/rblumen/drift/issues/30)) — account deposit eligibility is now a three-way choice: **Open** (any share of household free cash), **Limited** (capped at a dollar amount), or **Closed** (none). Use "Limited" when a contribution limit is partly consumed — e.g. a Roth IRA with room left this year. Free cash fills accounts pro-rata by value, clamps each at its limit, and spills the overflow to accounts with remaining room; anything that still can't be placed surfaces as `EXCESS_CASH`. An account's own new cash always deploys in full regardless of the limit. The Accounts table, Add/Edit forms, Results cash-deployment table, and exported HTML report all show the new state.
 
 ## [0.1.0] - 2026-05-29
 

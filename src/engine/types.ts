@@ -59,6 +59,13 @@ export interface Account {
    *  Use when a contribution limit is reached (e.g. Roth IRA maxed for the year).
    *  Per-account newCash already in the account is still deployed normally. */
   acceptsDeposits?: boolean;
+  /** Cap on the household free-cash share this account may receive, in dollars.
+   *  undefined = unlimited (the default). 0 is functionally equivalent to closed.
+   *  Ignored when acceptsDeposits === false. Does not constrain per-account newCash
+   *  (a fact the user asserts) or internal rebalancing buys — only the Step 0
+   *  free-cash distribution. A static "remaining capacity" figure the user maintains;
+   *  there is no calendar/year awareness. */
+  depositLimitUsd?: number;
 }
 
 export interface Position {
