@@ -784,12 +784,13 @@ describe('freeCash — household-level cash distribution', () => {
     { accountId: 'ira',    ticker: 'FZROX', marketValue: 300_000 },
   ];
 
-  it('distributes freeCash proportionally to account value', () => {
-    // Total value $500k; schwab 40%, ira 60%. freeCash $50k → schwab gets $20k, ira gets $30k.
+  it('concentrates freeCash into the largest-capacity account (#37)', () => {
+    // ira ($300k) has more capacity than schwab ($200k), so all $50k of free cash
+    // lands in ira; schwab receives none. Concentrate-then-spill minimizes the
+    // number of accounts touched rather than spreading the cash pro-rata.
     const r = rebalance(ACCOUNTS_NO_CASH_ELIGIBLE, POSITIONS_TWO_ACCOUNTS, ZERO_TOL_STRATEGY, {}, {}, 50_000);
-    // Net trade delta per account must equal its share of freeCash.
-    expect(near(accountSum(r.trades, 'schwab'), 20_000, 100)).toBe(true);
-    expect(near(accountSum(r.trades, 'ira'),    30_000, 100)).toBe(true);
+    expect(near(accountSum(r.trades, 'ira'),    50_000, 100)).toBe(true);
+    expect(near(accountSum(r.trades, 'schwab'), 0,      100)).toBe(true);
   });
 
   it('householdValue includes freeCash', () => {
@@ -829,10 +830,11 @@ describe('freeCash — household-level cash distribution', () => {
       { accountId: 'schwab', ticker: 'MUNY',  marketValue: 200_000 },
       { accountId: 'ira',    ticker: 'FZROX', marketValue: 300_000 },
     ];
-    // freeCash $50k; schwab gets 40% = $20k + $5k existing = $25k net; ira gets $30k + $5k = $35k.
+    // freeCash $50k concentrates into the larger account (ira): ira net = $5k own
+    // + $50k = $55k; schwab keeps just its own $5k.
     const r = rebalance(accounts, positions, ZERO_TOL_STRATEGY, {}, {}, 50_000);
-    expect(near(accountSum(r.trades, 'schwab'), 25_000, 100)).toBe(true);
-    expect(near(accountSum(r.trades, 'ira'),    35_000, 100)).toBe(true);
+    expect(near(accountSum(r.trades, 'schwab'), 5_000,  100)).toBe(true);
+    expect(near(accountSum(r.trades, 'ira'),    55_000, 100)).toBe(true);
   });
 
   it('emits EXCESS_CASH flag when all accounts are ineligible', () => {
@@ -850,15 +852,32 @@ describe('freeCash — household-level cash distribution', () => {
     expect(flag?.kind === 'EXCESS_CASH' && flag.amountUsd).toBe(10_000);
   });
 
-  it('distributes equally when all eligible accounts have zero value (greenfield)', () => {
+  it('concentrates into the first account by id when all eligible accounts are zero value (greenfield)', () => {
     const accounts: Account[] = [
       { id: 'schwab', name: 'Schwab', institution: 'Schwab',   type: 'TAXABLE'         },
       { id: 'roth',   name: 'Roth',   institution: 'Fidelity', type: 'ROTH_IRA'        },
     ];
-    // $20k freeCash split equally between two zero-value accounts → $10k each.
+    // Both accounts have zero value, so capacity ties and the id tie-break decides:
+    // 'roth' < 'schwab', so all $20k concentrates into roth (deterministic).
     const r = rebalance(accounts, NO_POSITIONS, ZERO_TOL_STRATEGY, {}, {}, 20_000);
-    expect(near(accountSum(r.trades, 'schwab'), 10_000, 100)).toBe(true);
-    expect(near(accountSum(r.trades, 'roth'),   10_000, 100)).toBe(true);
+    expect(near(accountSum(r.trades, 'roth'),   20_000, 100)).toBe(true);
+    expect(near(accountSum(r.trades, 'schwab'), 0,      100)).toBe(true);
+  });
+
+  it('spills to additional accounts only when a deposit cap forces it, touching fewer accounts than pro-rata (#37)', () => {
+    // ira ($300k) is largest. Without a cap, $50k all lands in ira (one account).
+    // With a $30k cap on ira, $30k fills ira and the remaining $20k spills to schwab.
+    const uncapped = rebalance(ACCOUNTS_NO_CASH_ELIGIBLE, POSITIONS_TWO_ACCOUNTS, ZERO_TOL_STRATEGY, {}, {}, 50_000);
+    const fundedUncapped = ['schwab', 'ira'].filter(id => Math.abs(accountSum(uncapped.trades, id)) > 1);
+    expect(fundedUncapped).toEqual(['ira']); // a single account touched
+
+    const capped: Account[] = [
+      { id: 'schwab', name: 'Schwab', institution: 'Schwab',   type: 'TAXABLE'         },
+      { id: 'ira',    name: 'IRA',    institution: 'Fidelity', type: 'TRADITIONAL_IRA', depositLimitUsd: 30_000 },
+    ];
+    const r = rebalance(capped, POSITIONS_TWO_ACCOUNTS, ZERO_TOL_STRATEGY, {}, {}, 50_000);
+    expect(near(accountSum(r.trades, 'ira'),    30_000, 100)).toBe(true);
+    expect(near(accountSum(r.trades, 'schwab'), 20_000, 100)).toBe(true);
   });
 
   it('caps a limited account at depositLimitUsd; remainder spills to the unlimited account', () => {

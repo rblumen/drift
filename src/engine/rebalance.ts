@@ -3,6 +3,7 @@ import { ALL_ASSET_CLASSES } from './types';
 import { makeClassifier } from './classify';
 import { rollup } from './rollup';
 import { accountBucket, greedyPlace } from './placement';
+import { fillOrdered } from './cashfill';
 import { EPSILON, effectiveTolerance, zeroByClass } from './utils';
 
 /**
@@ -117,11 +118,13 @@ export function rebalance(
   const flags: Flag[] = [];
 
   // Step 0 — Distribute household free cash to deposit-eligible accounts.
-  // Proportional to each account's current position value (pre-rollup sum),
-  // but clamped at each account's depositLimitUsd ("remaining capacity") via a
-  // capped water-filling pass: cash that would overflow a capped account spills
-  // pro-rata to the accounts still under their cap. Whatever can't be placed
-  // (free cash exceeds the sum of all remaining capacities) surfaces as
+  // Concentrate-then-spill (backlog #37): deploy the cash into the single
+  // largest-capacity eligible account first, spilling to the next only when that
+  // account's depositLimitUsd cap is reached. This minimizes the number of
+  // accounts touched (PRINCIPLES.md #10/#11) — spreading cash pro-rata would
+  // force every funded account to a net buy without improving the allocation,
+  // since greedyPlace already places each class in its tax-correct account.
+  // Whatever can't be placed (free cash exceeds the sum of all caps) surfaces as
   // EXCESS_CASH. Locked accounts and accounts with acceptsDeposits === false are
   // excluded; an account with depositLimitUsd === 0 is treated as closed.
   if (freeCash > 0) {
@@ -138,50 +141,21 @@ export function rebalance(
     if (eligible.length === 0) {
       flags.push({ kind: 'EXCESS_CASH', amountUsd: freeCash });
     } else {
-      // Remaining capacity per account: undefined cap = unlimited.
-      const cap: Record<string, number> = {};
-      const got: Record<string, number> = {};
-      for (const a of eligible) {
-        cap[a.id] = a.depositLimitUsd ?? Infinity;
-        got[a.id] = 0;
-      }
+      // Largest free capacity first; tie-break by id for determinism. When every
+      // eligible account has zero value (greenfield) the order is by id alone, so
+      // the cash concentrates into the first such account rather than splitting.
+      const capOf: Record<string, number> = {};
+      for (const a of eligible) capOf[a.id] = a.depositLimitUsd ?? Infinity;
+      const order = [...eligible]
+        .sort((a, b) => (baseValue[b.id] ?? 0) - (baseValue[a.id] ?? 0) || a.id.localeCompare(b.id))
+        .map(a => a.id);
 
-      // Water-fill: each round distributes the still-unplaced cash pro-rata by
-      // base value among accounts not yet at their cap, clamping each at its
-      // remaining room. Converges in ≤ eligible.length rounds because every
-      // round either clamps (and removes) at least one account or places the
-      // full remainder.
-      let remaining = freeCash;
-      while (remaining > EPSILON) {
-        const active = eligible.filter(a => cap[a.id] - got[a.id] > EPSILON);
-        if (active.length === 0) break;
-        const activeBase = active.reduce((s, a) => s + (baseValue[a.id] ?? 0), 0);
+      const { alloc, residual } = fillOrdered(order, id => capOf[id], freeCash);
 
-        let placed = 0;
-        let clamped = false;
-        for (const a of active) {
-          const share = activeBase > 0
-            ? remaining * ((baseValue[a.id] ?? 0) / activeBase)
-            : remaining / active.length;
-          const room = cap[a.id] - got[a.id];
-          const give = Math.min(share, room);
-          got[a.id] += give;
-          placed += give;
-          if (give < share - EPSILON) clamped = true;
-        }
-        remaining -= placed;
-        // No account hit its cap → everyone got their full share, done.
-        // Guard against a stuck round (e.g. all active have zero base while
-        // others hold all the value) by also breaking when nothing was placed.
-        if (!clamped || placed <= EPSILON) break;
-      }
-
-      if (remaining > EPSILON) {
-        flags.push({ kind: 'EXCESS_CASH', amountUsd: remaining });
-      }
+      if (residual > 0) flags.push({ kind: 'EXCESS_CASH', amountUsd: residual });
       accounts = accounts.map(a =>
-        got[a.id] !== undefined
-          ? { ...a, newCash: (a.newCash ?? 0) + got[a.id] }
+        alloc[a.id] !== undefined
+          ? { ...a, newCash: (a.newCash ?? 0) + alloc[a.id] }
           : a,
       );
     }
