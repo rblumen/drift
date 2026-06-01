@@ -120,6 +120,14 @@ export interface Trade {
   assetClass: AssetClass;
   deltaUsd: number;        // + = buy, − = sell
   inTaxableAccount: boolean;
+  /** Blended-fund routing hint (issue #40). When set, the resolver routes this
+   *  trade to the named ticker unconditionally. Used by Step 8.7 to bind sub-class
+   *  sells to the specific blended fund being proportionally liquidated. */
+  forceTicker?: string;
+  /** Tickers the resolver must NOT consider for this trade. Set by Step 8.7 on
+   *  compensating buys so the buy-back of an over-sold sub-class can't get routed
+   *  back to the blended fund the engine just told the user to sell. */
+  excludeTickers?: string[];
 }
 
 export interface ResolvedTrade extends Trade {
@@ -180,4 +188,10 @@ export type Flag =
   /** Drawdown (#14): the additional withdrawal could not be fully funded — every
    *  withdrawal-eligible account is restricted, locked, or has hit its sellable
    *  capacity. amountUsd is the un-raisable remainder. */
-  | { kind: 'WITHDRAWAL_SHORTFALL'; amountUsd: number };
+  | { kind: 'WITHDRAWAL_SHORTFALL'; amountUsd: number }
+  /** Blended funds (#40): a sub-class sale forced a proportional sale of a
+   *  blended fund (TDF, balanced fund), over-selling another sub-class. The engine
+   *  tried to compensate by routing a buy elsewhere; this flag fires when no
+   *  eligible destination existed for the over-sold portion, so the household
+   *  allocation drifts. amountUsd is the uncompensated over-sell. */
+  | { kind: 'BLENDED_FUND_OVERSELL'; accountId: string; ticker: string; assetClass: AssetClass; amountUsd: number };

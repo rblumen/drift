@@ -21,7 +21,7 @@
 - Per-position `locked` flag (freezes individual holdings)
 - `resolve.ts` — resolves engine trades to specific tickers for actionable output
 - Household-level `freeCash` for new cash not yet attributed to a specific account
-- Target date fund decomposition map (`targetDateFunds.ts`) with automatic multi-class splitting
+- Blended-fund decomposition (target-date funds, balanced funds) with automatic multi-class splitting (`targetDateFunds.ts` for TDF-specific glide-path detection); sellable as a whole during drawdowns (issue #40)
 - `EXCESS_CASH`, `NO_ELIGIBLE_ACCOUNT`, and `PROJECTED_OFF_TARGET` flag types
 - `appStateSchema` v1 with forward-migration logic
 

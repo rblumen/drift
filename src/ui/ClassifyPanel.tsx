@@ -289,7 +289,7 @@ export function ClassifyPanel({
         <HelpSection title="Classification sources">
           <HelpDef term="Built-in map">Common ETFs and mutual funds (VTI, FZROX, MUNY, etc.) are pre-mapped. No action needed.</HelpDef>
           <HelpDef term="Your overrides">Assignments you make here are saved and take precedence over the built-in map.</HelpDef>
-          <HelpDef term="Decomposed">For blended funds — target-date funds, balanced funds — you can define a custom split by percentage across multiple asset classes. The engine treats each portion independently.</HelpDef>
+          <HelpDef term="Decomposed">For blended funds — target-date funds, balanced funds, etc. — you can define the percentage split across multiple asset classes. The engine keeps the composition fixed during normal rebalancing and sells the fund proportionally when funding a withdrawal or RMD.</HelpDef>
         </HelpSection>
 
         <HelpSection title="US Total Market — the Russell split">
@@ -301,12 +301,14 @@ export function ClassifyPanel({
           </p>
         </HelpSection>
 
-        <HelpSection title="Target-date funds">
+        <HelpSection title="Blended funds (target-date, balanced)">
           <p>
-            The app will auto-detect common Fidelity Freedom and Vanguard Target Retirement tickers and suggest
+            The app auto-detects common Fidelity Freedom and Vanguard Target Retirement tickers and suggests
             a decomposition based on the fund's current glide-path allocation.
             You can accept the estimate or edit the percentages to match the fund's actual fact sheet.
-            These funds are always treated as locked in trade calculations — the engine won't suggest trading sub-components.
+            Blended funds are treated as immovable during normal rebalancing — the engine won't tear one apart
+            to chase a small placement preference. When a withdrawal or RMD requires it, the fund is sold
+            proportionally as a whole.
           </p>
         </HelpSection>
       </HelpBox>
@@ -402,7 +404,7 @@ export function ClassifyPanel({
         </div>
       )}
 
-      {/* ── Target date funds (decomposed) ─────────────────────────────────── */}
+      {/* ── Blended funds (decomposed) ─────────────────────────────────────── */}
       {decomposed.length > 0 && (
         <div className="space-y-2">
           <h3 className="text-sm font-medium text-gray-600">Blended funds</h3>
