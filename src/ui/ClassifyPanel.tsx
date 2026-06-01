@@ -289,7 +289,7 @@ export function ClassifyPanel({
         <HelpSection title="Classification sources">
           <HelpDef term="Built-in map">Common ETFs and mutual funds (VTI, FZROX, MUNY, etc.) are pre-mapped. No action needed.</HelpDef>
           <HelpDef term="Your overrides">Assignments you make here are saved and take precedence over the built-in map.</HelpDef>
-          <HelpDef term="Decomposed">For blended funds — target-date funds, balanced funds — you can define a custom split by percentage across multiple asset classes. The engine treats each portion independently.</HelpDef>
+          <HelpDef term="Decomposed">For blended funds — target-date funds, balanced funds, etc. — you can define the percentage split across multiple asset classes. The engine keeps the composition fixed but treats the fund as sellable as a whole: when the household drift requires it, the fund is sold proportionally and replacement positions are bought in the same account.</HelpDef>
         </HelpSection>
 
         <HelpSection title="US Total Market — the Russell split">
@@ -301,12 +301,21 @@ export function ClassifyPanel({
           </p>
         </HelpSection>
 
-        <HelpSection title="Target-date funds">
+        <HelpSection title="Blended funds (target-date, balanced)">
           <p>
-            The app will auto-detect common Fidelity Freedom and Vanguard Target Retirement tickers and suggest
+            The app auto-detects common Fidelity Freedom and Vanguard Target Retirement tickers and suggests
             a decomposition based on the fund's current glide-path allocation.
             You can accept the estimate or edit the percentages to match the fund's actual fact sheet.
-            These funds are always treated as locked in trade calculations — the engine won't suggest trading sub-components.
+            Blended funds participate in rebalancing as a single unit — the engine prefers non-blended
+            positions when those can absorb the needed change, and falls back to a proportional sale of
+            the fund (with compensating buys in other tickers) only when the household drift demands it.
+            Use the position-level lock if you want a specific blended-fund holding excluded entirely.
+          </p>
+          <p className="mt-2 text-amber-700">
+            <strong>Asymmetry to be aware of:</strong> the engine will <em>sell</em> a blended fund when
+            drift demands but has no symmetric mechanism to <em>buy</em> one back. Over repeated rebalances
+            your allocation will gradually trend away from any blended fund the engine has touched.
+            If you'd rather preserve a specific blended-fund holding, lock the position.
           </p>
         </HelpSection>
       </HelpBox>
@@ -402,7 +411,7 @@ export function ClassifyPanel({
         </div>
       )}
 
-      {/* ── Target date funds (decomposed) ─────────────────────────────────── */}
+      {/* ── Blended funds (decomposed) ─────────────────────────────────────── */}
       {decomposed.length > 0 && (
         <div className="space-y-2">
           <h3 className="text-sm font-medium text-gray-600">Blended funds</h3>

@@ -186,6 +186,170 @@ function redirectTaxableSells(
   }
 }
 
+/**
+ * Step 8.7 — Composite-sell synthesis for blended funds (issue #40).
+ *
+ * See the call site in `rebalance` for the high-level intent. Implementation notes:
+ *
+ *  • `nonBlendedSellable[ac]` is what non-blended unlocked positions in A can
+ *    absorb for sub-class `ac`. It equals `unlockedCurrent[A][ac]` minus the
+ *    blended-fund contribution to that slot.
+ *  • `residual[ac]` is the part of the engine's existing sell demand for `ac`
+ *    that non-blended positions can't cover. That's what the blended fund must
+ *    sell.
+ *  • The binding sub-class — the one with the largest `residual / weight` ratio —
+ *    sets the fund sale rate `r`. Other sub-classes get over-sold by
+ *    `r·w[ac]·V - residual[ac]`.
+ *  • Each over-sell gets a compensating buy in the same slot, tagged so the
+ *    resolver routes it to a non-blended ticker. Net per-account delta is
+ *    preserved, satisfying Principle #3.
+ *  • Multiple blended funds in one account are processed largest-first; each
+ *    one's contribution decrements the remaining sell demand seen by later funds.
+ */
+function synthesizeBlendedFundSells(
+  accounts: Account[],
+  positions: Position[],
+  decompositions: Record<string, FundDecomposition>,
+  trades: Trade[],
+  unlockedCurrent: Record<string, Record<AssetClass, number>>,
+  effectiveAllowed: Record<string, Set<AssetClass>>,
+  strategy: Strategy,
+): Flag[] {
+  const flags: Flag[] = [];
+
+  for (const A of accounts) {
+    if (A.locked) continue;
+
+    const blendedFunds = positions
+      .filter(p => p.accountId === A.id && decompositions[p.ticker.toUpperCase()] && !p.locked)
+      .sort((a, b) => b.marketValue - a.marketValue);
+    if (blendedFunds.length === 0) continue;
+
+    const inTaxable = accountBucket(A.type) === 'TAXABLE';
+
+    // Total non-locked blended-fund contribution per sub-class in A.
+    const blendedContrib = zeroByClass();
+    for (const B of blendedFunds) {
+      const w = decompositions[B.ticker.toUpperCase()]!;
+      for (const [ac, weight] of Object.entries(w) as [AssetClass, number][]) {
+        blendedContrib[ac] += B.marketValue * weight;
+      }
+    }
+
+    // Slot value that does NOT come from a blended fund and isn't locked.
+    const nonBlendedSellable = zeroByClass();
+    for (const ac of ALL_ASSET_CLASSES) {
+      nonBlendedSellable[ac] = Math.max(0, unlockedCurrent[A.id][ac] - blendedContrib[ac]);
+    }
+
+    // Current sell demand per sub-class from the engine's existing trades.
+    const sellDemand = zeroByClass();
+    for (const t of trades) {
+      if (t.accountId !== A.id) continue;
+      if (t.deltaUsd < 0) sellDemand[t.assetClass] += -t.deltaUsd;
+    }
+
+    for (const B of blendedFunds) {
+      const decomp = decompositions[B.ticker.toUpperCase()]!;
+      const subClasses = Object.keys(decomp) as AssetClass[];
+
+      // Demand that lands on B for each sub-class.
+      const residual: Record<AssetClass, number> = zeroByClass();
+      for (const ac of subClasses) {
+        const w = decomp[ac] ?? 0;
+        if (w <= 0) continue;
+        residual[ac] = Math.max(0, sellDemand[ac] - nonBlendedSellable[ac]);
+      }
+
+      // Fund-level sale rate (binding sub-class wins).
+      let r = 0;
+      for (const ac of subClasses) {
+        const w = decomp[ac] ?? 0;
+        if (w <= 0) continue;
+        const ratio = residual[ac] / (w * B.marketValue);
+        if (ratio > r) r = ratio;
+      }
+      r = Math.min(1, r);
+      if (r * B.marketValue < strategy.minTradeUsd) continue;
+
+      // Fund-level sale total — surfaced as an informational flag so the user
+      // sees that this run touched a blended-fund position. The engine has no
+      // symmetric buy mechanism for blended funds, so repeated rebalances will
+      // trend the allocation away from this position; the flag makes that
+      // asymmetry visible at the moment of impact.
+      flags.push({
+        kind: 'BLENDED_FUND_SOLD',
+        accountId: A.id, ticker: B.ticker, amountUsd: r * B.marketValue,
+      });
+
+      // Emit forced sells and compensating buys per sub-class.
+      for (const ac of subClasses) {
+        const w = decomp[ac] ?? 0;
+        if (w <= 0) continue;
+        const forcedAmt = r * w * B.marketValue;
+        const blendedPart = Math.min(residual[ac], forcedAmt);
+        const overAmt = Math.max(0, forcedAmt - residual[ac]);
+
+        // Re-route the residual portion of the engine's existing sell trade to B
+        // (so the resolver pins it to B's ticker rather than guessing). If the
+        // existing sell trade is fully satisfied by non-blended capacity, no
+        // re-route is needed — it routes to a non-blended ticker as before.
+        if (blendedPart > EPSILON) {
+          const nonBlendedPart = Math.max(0, sellDemand[ac] - blendedPart);
+          // Find the engine's plain sell trade for this slot (one or none — Step 8
+          // emits at most one per slot, and we haven't pushed any yet for this slot).
+          const existingIdx = trades.findIndex(t =>
+            t.accountId === A.id && t.assetClass === ac && t.deltaUsd < 0 && !t.forceTicker
+          );
+          if (existingIdx >= 0) {
+            if (nonBlendedPart > EPSILON) {
+              trades[existingIdx] = { ...trades[existingIdx], deltaUsd: -nonBlendedPart };
+            } else {
+              trades.splice(existingIdx, 1);
+            }
+          }
+          trades.push({
+            accountId: A.id, assetClass: ac, deltaUsd: -blendedPart,
+            inTaxableAccount: inTaxable, forceTicker: B.ticker,
+          });
+        }
+
+        // Over-sells: B forced to liquidate more of ac than the engine wanted.
+        // Pair each over-sell with a compensating buy in the same slot. The buy
+        // is tagged to exclude B from candidate tickers so the user actually
+        // executes the buy-back against a different fund.
+        if (overAmt > EPSILON) {
+          trades.push({
+            accountId: A.id, assetClass: ac, deltaUsd: -overAmt,
+            inTaxableAccount: inTaxable, forceTicker: B.ticker,
+          });
+          if (effectiveAllowed[A.id]?.has(ac)) {
+            trades.push({
+              accountId: A.id, assetClass: ac, deltaUsd: overAmt,
+              inTaxableAccount: inTaxable, excludeTickers: [B.ticker],
+            });
+          } else {
+            flags.push({
+              kind: 'BLENDED_FUND_OVERSELL',
+              accountId: A.id, ticker: B.ticker, assetClass: ac, amountUsd: overAmt,
+            });
+          }
+        }
+      }
+
+      // Decrement remaining demand seen by subsequent (smaller) blended funds.
+      for (const ac of subClasses) {
+        const w = decomp[ac] ?? 0;
+        if (w <= 0) continue;
+        const forcedAmt = r * w * B.marketValue;
+        sellDemand[ac] = Math.max(0, sellDemand[ac] - Math.min(forcedAmt, sellDemand[ac]));
+      }
+    }
+  }
+
+  return flags;
+}
+
 export function rebalance(
   accounts: Account[],
   positions: Position[],
@@ -214,8 +378,10 @@ export function rebalance(
   // is left to greedyPlace targeting the reduced post-withdrawal weights, which is
   // what keeps the sells allocation-preserving; account selection is controlled
   // entirely by which accounts receive the negative newCash (RMD-first, then
-  // priority order). sellable = unlocked, mapped, non-decomposed position value
-  // (the only holdings the engine can actually trade to raise cash).
+  // priority order). sellable = unlocked, mapped position value (the only
+  // holdings the engine can actually trade to raise cash). Blended funds (issue
+  // #40) count toward sellable — they're sold as a unit, with the proportional
+  // sub-class deltas synthesized by Step 8.7 below.
   //
   // Runs BEFORE the deposit pass so free cash can offset the resulting sells
   // (minimizing net cash movement — see Step 0b).
@@ -226,7 +392,11 @@ export function rebalance(
       if (pos.locked) continue;
       const acct = accounts.find(a => a.id === pos.accountId);
       if (!acct || acct.locked) continue;
-      if (decompositions[pos.ticker.toUpperCase()]) continue; // decomposed funds are frozen
+      if (decompositions[pos.ticker.toUpperCase()]) {
+        // Blended fund — sellable as a whole; Step 8.7 enforces proportionality.
+        sellable[pos.accountId] += pos.marketValue;
+        continue;
+      }
       if (classify(pos.ticker) === null) continue;            // unmapped — not tradeable
       sellable[pos.accountId] += pos.marketValue;
     }
@@ -290,8 +460,25 @@ export function rebalance(
 
   const {
     householdValue, currentValue, currentValueByAccount,
-    accountValues, lockedValueByAccount, unmappedTickers,
+    accountValues, lockedValueByAccount, blendedValueByAccount, unmappedTickers,
   } = rollup(accounts, positions, classify, decompositions);
+
+  // Blended-fund value (issue #40) is always tradeable as a whole. rollup adds
+  // it to lockedValueByAccount so callers that don't know about #40 still see
+  // immovability; we subtract it back out here so the engine's free-capacity
+  // math sees the value as available. The 5/25 tolerance band + non-blended-
+  // first attribution in Step 8.7 prevent gratuitous liquidation when the drift
+  // doesn't actually demand it. pos.locked = true is the per-position escape
+  // hatch for "don't touch this specific holding."
+  const effectiveLocked: Record<string, Record<AssetClass, number>> = {};
+  for (const acct of accounts) {
+    effectiveLocked[acct.id] = zeroByClass();
+    for (const ac of ALL_ASSET_CLASSES) {
+      const locked = lockedValueByAccount[acct.id][ac] ?? 0;
+      const blended = blendedValueByAccount[acct.id][ac] ?? 0;
+      effectiveLocked[acct.id][ac] = Math.max(0, locked - blended);
+    }
+  }
 
   for (const ticker of unmappedTickers) {
     flags.push({ kind: 'UNMAPPED_HOLDING', ticker });
@@ -390,7 +577,7 @@ export function rebalance(
         unlockedCurrent[acct.id][ac] = 0;
       } else {
         // Only individually-locked positions are frozen.
-        const lockedPos = lockedValueByAccount[acct.id][ac];
+        const lockedPos = effectiveLocked[acct.id][ac];
         frozen += lockedPos;
         unlockedCurrent[acct.id][ac] = current - lockedPos;
       }
@@ -417,7 +604,7 @@ export function rebalance(
       if (withinTolerance.has(ac)) continue;
       immovableByClass[ac] += acct.locked
         ? (currentValueByAccount[acct.id]?.[ac] ?? 0)
-        : (lockedValueByAccount[acct.id]?.[ac] ?? 0);
+        : (effectiveLocked[acct.id]?.[ac] ?? 0);
     }
   }
 
@@ -671,6 +858,38 @@ export function rebalance(
       }
     }
   }
+
+  // Step 8.7 — Composite-sell synthesis for blended funds (issue #40).
+  //
+  // The engine emits per-(account, sub-class) deltas. A blended fund (TDF, balanced
+  // fund) is a single position whose composition is fixed — selling N% of it sells
+  // N% of every sub-class proportionally. Sub-class trades that route to a blended
+  // fund must therefore reflect that constraint, or the user can't execute them.
+  //
+  // Runs on every rebalance. The 5/25 tolerance band gates "should we act at all?"
+  // and the non-blended-first attribution below gates "do we need to touch the
+  // fund?" — so the fund only gets liquidated when the household drift exceeds
+  // tolerance AND non-blended positions can't absorb the required sell. This
+  // covers the realistic scenario where a user holds a large blended position
+  // that no longer fits their target strategy and the only way to fix the
+  // allocation is to sell it.
+  //
+  // For each non-locked account A with non-locked blended funds in it:
+  //   1. Attribute existing sell demand per sub-class to non-blended positions first
+  //      (the engine prefers selling them — they have no composition lock).
+  //   2. For each blended fund B, compute the rate r at which B must be sold to
+  //      satisfy the binding sub-class (the one whose residual / w_B[ac] is largest).
+  //   3. Emit per-sub-class sells tagged with forceTicker = B.ticker for B's share.
+  //      The resolver merges these into a single "sell N% of B" ResolvedTrade.
+  //   4. Where r forces selling more of a sub-class than the engine wanted (over-sell),
+  //      emit a compensating buy tagged with excludeTickers = [B.ticker] so the
+  //      buy-back routes to another ticker in A. Net per-account delta is preserved.
+  //   5. If A's effectiveAllowed excludes the over-sold class, no in-place buy-back
+  //      is possible — emit BLENDED_FUND_OVERSELL and let the over-sell stand.
+  flags.push(...synthesizeBlendedFundSells(
+    accounts, positions, decompositions, trades,
+    unlockedCurrent, effectiveAllowed, strategy,
+  ));
 
   // Generate TAXABLE_SALE flags from the corrected trade list.
   for (const trade of trades) {
