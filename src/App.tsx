@@ -15,7 +15,7 @@ import {
   buildState, clearState, DEFAULT_APP_STATE, saveJson, loadJson,
   loadState, saveState, saveBackup,
 } from './store';
-import { appStateSchema } from './ingest/schema';
+import { appStateSchema, type Reminder } from './ingest/schema';
 import SAMPLE_PORTFOLIO from './data/sample-portfolio.json';
 
 type Tab = 'overview' | 'accounts' | 'import' | 'classify' | 'strategy' | 'results';
@@ -51,6 +51,7 @@ export default function App() {
   const [decompositions,   setDecompositions]   = useState<Record<string, FundDecomposition>>(saved.decompositions ?? {});
   const [freeCash,         setFreeCash]         = useState<number>(saved.freeCash ?? 0);
   const [plannedWithdrawal, setPlannedWithdrawal] = useState<number>(saved.plannedWithdrawal ?? 0);
+  const [reminder,          setReminder]          = useState<Reminder>(saved.reminder ?? {});
   const [activeTab,        setActiveTab]        = useState<Tab>('overview');
   const [loadError,        setLoadError]        = useState<string | null>(null);
   const [isDemoMode,       setIsDemoMode]       = useState<boolean>(_isDemoInit);
@@ -66,10 +67,10 @@ export default function App() {
   const loadFileRef = useRef<HTMLInputElement>(null);
 
   // Keep a ref to the latest state slices for the backup interval closure.
-  const stateRef = useRef({ accounts, positions, strategy, tickerOverrides, decompositions, freeCash, plannedWithdrawal });
+  const stateRef = useRef({ accounts, positions, strategy, tickerOverrides, decompositions, freeCash, plannedWithdrawal, reminder });
   useEffect(() => {
-    stateRef.current = { accounts, positions, strategy, tickerOverrides, decompositions, freeCash, plannedWithdrawal };
-  }, [accounts, positions, strategy, tickerOverrides, decompositions, freeCash, plannedWithdrawal]);
+    stateRef.current = { accounts, positions, strategy, tickerOverrides, decompositions, freeCash, plannedWithdrawal, reminder };
+  }, [accounts, positions, strategy, tickerOverrides, decompositions, freeCash, plannedWithdrawal, reminder]);
 
   // Skip the very first save so that a schema-validation failure on load can
   // never silently overwrite existing localStorage data with empty defaults.
@@ -82,15 +83,15 @@ export default function App() {
       didMountRef.current = true;
       return;
     }
-    saveState(buildState(accounts, positions, strategy, tickerOverrides, decompositions, freeCash, plannedWithdrawal));
+    saveState(buildState(accounts, positions, strategy, tickerOverrides, decompositions, freeCash, plannedWithdrawal, reminder));
     setLastSavedAt(new Date());
-  }, [accounts, positions, strategy, tickerOverrides, decompositions, freeCash, plannedWithdrawal]);
+  }, [accounts, positions, strategy, tickerOverrides, decompositions, freeCash, plannedWithdrawal, reminder]);
 
   // Backup autosave: write a timestamped snapshot every 5 minutes.
   useEffect(() => {
     const id = setInterval(() => {
       const s = stateRef.current;
-      saveBackup(buildState(s.accounts, s.positions, s.strategy, s.tickerOverrides, s.decompositions, s.freeCash, s.plannedWithdrawal));
+      saveBackup(buildState(s.accounts, s.positions, s.strategy, s.tickerOverrides, s.decompositions, s.freeCash, s.plannedWithdrawal, s.reminder));
     }, 5 * 60 * 1000);
     return () => clearInterval(id);
   }, []);
@@ -122,6 +123,7 @@ export default function App() {
     setDecompositions(s.decompositions ?? {});
     setFreeCash(s.freeCash ?? 0);
     setPlannedWithdrawal(s.plannedWithdrawal ?? 0);
+    setReminder(s.reminder ?? {});
     setIsDemoMode(true);
   }
 
@@ -130,7 +132,7 @@ export default function App() {
   }
 
   function handleSave() {
-    saveJson(buildState(accounts, positions, strategy, tickerOverrides, decompositions, freeCash, plannedWithdrawal));
+    saveJson(buildState(accounts, positions, strategy, tickerOverrides, decompositions, freeCash, plannedWithdrawal, reminder));
   }
 
   async function handleLoadFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -150,6 +152,7 @@ export default function App() {
     setDecompositions(result.decompositions ?? {});
     setFreeCash(result.freeCash ?? 0);
     setPlannedWithdrawal(result.plannedWithdrawal ?? 0);
+    setReminder(result.reminder ?? {});
   }
 
   function handleReset() {
@@ -162,6 +165,7 @@ export default function App() {
     setDecompositions({});
     setFreeCash(0);
     setPlannedWithdrawal(0);
+    setReminder({});
     setActiveTab('accounts');
     setLastSavedAt(null);
     setRestoredFromBackup(null);
@@ -318,7 +322,11 @@ export default function App() {
       {/* Panel */}
       <main className="max-w-5xl mx-auto px-4 py-6">
         {activeTab === 'overview' && (
-          <OverviewPanel onStart={() => setActiveTab('accounts')} />
+          <OverviewPanel
+            onStart={() => setActiveTab('accounts')}
+            reminder={reminder}
+            setReminder={setReminder}
+          />
         )}
         {activeTab === 'accounts' && (
           <AccountsPanel

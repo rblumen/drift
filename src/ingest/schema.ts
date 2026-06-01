@@ -149,6 +149,19 @@ export const fundDecompositionSchema = z.record(
 // The full decompositions map stored in AppState: ticker → FundDecomposition
 export const decompositionsSchema = z.record(z.string(), fundDecompositionSchema);
 
+// Next-rebalance reminder. All fields optional so old saves remain valid.
+//   - nextDueAt: unix ms — the date the user picked for their next rebalance.
+//   - intervalMonths: when present, "Mark as rebalanced" advances nextDueAt by
+//     this many months from today. Absent = one-shot reminder.
+//   - lastRebalancedAt: unix ms when the user last clicked "Mark as rebalanced".
+export const reminderSchema = z.object({
+  nextDueAt:        z.number().int().positive().optional(),
+  intervalMonths:   z.number().int().min(1).max(120).optional(),
+  lastRebalancedAt: z.number().int().positive().optional(),
+});
+
+export type Reminder = z.infer<typeof reminderSchema>;
+
 // Full persisted app state — used for localStorage and JSON file export/import.
 export const appStateSchema = z.object({
   version:        z.literal(1),
@@ -159,6 +172,7 @@ export const appStateSchema = z.object({
   decompositions: decompositionsSchema.optional().default({}),
   freeCash:       z.number().nonnegative().optional().default(0),
   plannedWithdrawal: z.number().nonnegative().optional().default(0),
+  reminder:       reminderSchema.optional().default({}),
 });
 
 export type AppState = z.infer<typeof appStateSchema>;

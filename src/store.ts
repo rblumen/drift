@@ -15,7 +15,7 @@
 
 import type { Account, AssetClass, FundDecomposition, Position, Strategy } from './engine/types';
 import { DEFAULT_STRATEGY } from './engine/strategy';
-import { appStateSchema, type AppState } from './ingest/schema';
+import { appStateSchema, type AppState, type Reminder } from './ingest/schema';
 
 export type { AppState };
 
@@ -35,6 +35,7 @@ export const DEFAULT_APP_STATE: AppState = {
   decompositions:  {},
   freeCash:        0,
   plannedWithdrawal: 0,
+  reminder:        {},
 };
 
 // ─── Internal backup helpers ──────────────────────────────────────────────────
@@ -202,6 +203,7 @@ export function buildState(
   decompositions:  Record<string, FundDecomposition> = {},
   freeCash:        number = 0,
   plannedWithdrawal: number = 0,
+  reminder:        Reminder = {},
 ): AppState {
-  return { version: SCHEMA_VERSION, accounts, positions, strategy, tickerOverrides, decompositions, freeCash, plannedWithdrawal };
+  return { version: SCHEMA_VERSION, accounts, positions, strategy, tickerOverrides, decompositions, freeCash, plannedWithdrawal, reminder };
 }
