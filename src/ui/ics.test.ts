@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { buildReminderIcs, DRIFT_URL } from './ics';
+import {
+  buildReminderIcs,
+  DRIFT_URL,
+  googleCalendarUrl,
+  outlookLiveCalendarUrl,
+  office365CalendarUrl,
+  yahooCalendarUrl,
+} from './ics';
 
 describe('buildReminderIcs', () => {
   it('produces a valid VCALENDAR envelope', () => {
@@ -43,5 +50,43 @@ describe('buildReminderIcs', () => {
     // The default description includes the URL which has no comma/semicolon,
     // but the literal newline must be encoded as \n.
     expect(ics).toMatch(/DESCRIPTION:[^\r\n]*\\n/);
+  });
+});
+
+describe('calendar provider URLs', () => {
+  const date = new Date(2027, 0, 15); // Jan 15, 2027
+
+  it('googleCalendarUrl uses YYYYMMDD/YYYYMMDD dates and includes the Drift URL', () => {
+    const url = googleCalendarUrl(date);
+    const u = new URL(url);
+    expect(u.hostname).toBe('calendar.google.com');
+    expect(u.searchParams.get('action')).toBe('TEMPLATE');
+    expect(u.searchParams.get('dates')).toBe('20270115/20270116');
+    expect(u.searchParams.get('text')).toContain('Drift');
+    expect(u.searchParams.get('details')).toContain(DRIFT_URL);
+  });
+
+  it('outlookLiveCalendarUrl marks the event as all-day and includes ISO dates', () => {
+    const url = outlookLiveCalendarUrl(date);
+    const u = new URL(url);
+    expect(u.hostname).toBe('outlook.live.com');
+    expect(u.searchParams.get('allday')).toBe('true');
+    expect(u.searchParams.get('startdt')).toBe('2027-01-15T00:00:00');
+    expect(u.searchParams.get('enddt')).toBe('2027-01-16T00:00:00');
+    expect(u.searchParams.get('body')).toContain(DRIFT_URL);
+  });
+
+  it('office365CalendarUrl uses the outlook.office.com host', () => {
+    const url = office365CalendarUrl(date);
+    expect(new URL(url).hostname).toBe('outlook.office.com');
+    expect(new URL(url).searchParams.get('allday')).toBe('true');
+  });
+
+  it('yahooCalendarUrl uses dur=allday', () => {
+    const url = yahooCalendarUrl(date);
+    const u = new URL(url);
+    expect(u.hostname).toBe('calendar.yahoo.com');
+    expect(u.searchParams.get('dur')).toBe('allday');
+    expect(u.searchParams.get('st')).toBe('20270115');
   });
 });

@@ -7,6 +7,8 @@ import { PieChart } from './PieChart';
 import type { PieSlice } from './PieChart';
 import { downloadReport } from './exportReport';
 import { HelpBox, HelpDef, HelpSection, HelpTip } from './HelpBox';
+import type { Reminder } from '../ingest/schema';
+import { ReminderPanel, daysUntil } from './ReminderPanel';
 
 interface Props {
   result: RebalanceResult;
@@ -14,6 +16,8 @@ interface Props {
   resolvedTrades: ResolvedTrade[];
   freeCash: number;
   plannedWithdrawal: number;
+  reminder: Reminder;
+  setReminder: (r: Reminder) => void;
 }
 
 // ── Flag banners ──────────────────────────────────────────────────────────────
@@ -344,7 +348,7 @@ function ContributionSummary({ summary }: { summary: RebalanceResult['contributi
 
 // ── Main panel ────────────────────────────────────────────────────────────────
 
-export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plannedWithdrawal }: Props) {
+export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plannedWithdrawal, reminder, setReminder }: Props) {
   const { householdValue, currentWeights, targetWeights, projectedWeights,
           currentValueByAccount, withdrawalByAccount, trades, flags, contributionSummary } = result;
 
@@ -433,8 +437,40 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plann
     );
   }
 
+  // Overdue / upcoming reminder banner — shown when reminder is within 7 days or past due.
+  const reminderDue = reminder.nextDueAt;
+  const reminderDays = reminderDue !== undefined ? daysUntil(Date.now(), reminderDue) : null;
+  const showReminderBanner = reminderDays !== null && reminderDays <= 7;
+
   return (
     <div className="space-y-6">
+      {/* Overdue / upcoming reminder banner */}
+      {showReminderBanner && reminderDue !== undefined && (
+        <div
+          className={`rounded-lg border px-4 py-3 text-sm flex items-start gap-3
+            ${reminderDays! < 0
+              ? 'bg-red-50 border-red-200 text-red-800'
+              : 'bg-amber-50 border-amber-200 text-amber-800'}`}
+          data-testid="reminder-banner"
+        >
+          <span className="text-lg leading-none mt-0.5">⏰</span>
+          <div className="flex-1">
+            <p className="font-medium">
+              {reminderDays! < 0
+                ? `Your rebalance is overdue by ${-reminderDays!} day${reminderDays === -1 ? '' : 's'}.`
+                : reminderDays === 0
+                  ? 'Your rebalance is due today.'
+                  : `Your rebalance is due in ${reminderDays} day${reminderDays === 1 ? '' : 's'}.`}
+            </p>
+            <p className="text-xs mt-0.5 opacity-90">
+              {reminder.lastRebalancedAt
+                ? `Last rebalanced ${Math.max(0, Math.floor((Date.now() - reminder.lastRebalancedAt) / (24 * 60 * 60 * 1000)))} days ago — review the trades below.`
+                : 'Review the trades below and mark as rebalanced when done.'}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-baseline gap-4">
@@ -823,6 +859,14 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plann
           })}
         </div>
       )}
+
+      {/* Next-rebalance reminder — closes out the workflow. */}
+      <div>
+        <h3 className="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">
+          Schedule the next rebalance
+        </h3>
+        <ReminderPanel reminder={reminder} setReminder={setReminder} />
+      </div>
     </div>
   );
 }

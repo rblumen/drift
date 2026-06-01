@@ -1,11 +1,6 @@
-import type { Reminder } from '../ingest/schema';
-import { ReminderPanel, daysUntil } from './ReminderPanel';
-
 interface Props {
   /** Called when the user clicks "Get started" — navigates to the Accounts tab. */
   onStart: () => void;
-  reminder: Reminder;
-  setReminder: (r: Reminder) => void;
 }
 
 const STEPS = [
@@ -167,40 +162,9 @@ const ASSUMPTIONS = [
   },
 ];
 
-export function OverviewPanel({ onStart, reminder, setReminder }: Props) {
-  const due = reminder.nextDueAt;
-  const days = due !== undefined ? daysUntil(Date.now(), due) : null;
-  const showOverdueBanner = days !== null && days <= 7;
-
+export function OverviewPanel({ onStart }: Props) {
   return (
     <div className="max-w-2xl mx-auto space-y-8 py-2">
-
-      {/* Overdue / upcoming reminder banner */}
-      {showOverdueBanner && due !== undefined && (
-        <div
-          className={`rounded-lg border px-4 py-3 text-sm flex items-start gap-3
-            ${days! < 0
-              ? 'bg-red-50 border-red-200 text-red-800'
-              : 'bg-amber-50 border-amber-200 text-amber-800'}`}
-          data-testid="reminder-banner"
-        >
-          <span className="text-lg leading-none mt-0.5">⏰</span>
-          <div className="flex-1">
-            <p className="font-medium">
-              {days! < 0
-                ? `Your rebalance is overdue by ${-days!} day${days === -1 ? '' : 's'}.`
-                : days === 0
-                  ? 'Your rebalance is due today.'
-                  : `Your rebalance is due in ${days} day${days === 1 ? '' : 's'}.`}
-            </p>
-            <p className="text-xs mt-0.5 opacity-90">
-              {reminder.lastRebalancedAt
-                ? `Last rebalanced ${Math.max(0, Math.floor((Date.now() - reminder.lastRebalancedAt) / (24 * 60 * 60 * 1000)))} days ago — time to check drift.`
-                : 'Time to check drift and run a rebalance.'}
-            </p>
-          </div>
-        </div>
-      )}
 
       {/* Hero */}
       <div>
@@ -216,14 +180,6 @@ export function OverviewPanel({ onStart, reminder, setReminder }: Props) {
           This tool produces mechanical calculations from your own inputs — it is{' '}
           <span className="font-medium">not investment advice</span>.
         </p>
-      </div>
-
-      {/* Reminder */}
-      <div>
-        <h3 className="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">
-          Rebalance reminder
-        </h3>
-        <ReminderPanel reminder={reminder} setReminder={setReminder} />
       </div>
 
       {/* Workflow steps */}

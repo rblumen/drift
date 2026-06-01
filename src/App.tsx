@@ -322,11 +322,7 @@ export default function App() {
       {/* Panel */}
       <main className="max-w-5xl mx-auto px-4 py-6">
         {activeTab === 'overview' && (
-          <OverviewPanel
-            onStart={() => setActiveTab('accounts')}
-            reminder={reminder}
-            setReminder={setReminder}
-          />
+          <OverviewPanel onStart={() => setActiveTab('accounts')} />
         )}
         {activeTab === 'accounts' && (
           <AccountsPanel
@@ -372,6 +368,8 @@ export default function App() {
             resolvedTrades={resolvedTrades}
             freeCash={freeCash}
             plannedWithdrawal={plannedWithdrawal}
+            reminder={reminder}
+            setReminder={setReminder}
           />
         )}
       </main>

@@ -1,6 +1,12 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Reminder } from '../ingest/schema';
-import { downloadReminderIcs } from './ics';
+import {
+  downloadReminderIcs,
+  googleCalendarUrl,
+  outlookLiveCalendarUrl,
+  office365CalendarUrl,
+  yahooCalendarUrl,
+} from './ics';
 
 interface Props {
   reminder: Reminder;
@@ -61,6 +67,25 @@ export function ReminderPanel({ reminder, setReminder }: Props) {
   const now = Date.now();
   const due = reminder.nextDueAt;
 
+  // Calendar-provider dropdown state. Closes on outside click and Escape.
+  const [calMenuOpen, setCalMenuOpen] = useState(false);
+  const calMenuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!calMenuOpen) return;
+    const onClick = (e: MouseEvent) => {
+      if (calMenuRef.current && !calMenuRef.current.contains(e.target as Node)) {
+        setCalMenuOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setCalMenuOpen(false); };
+    document.addEventListener('mousedown', onClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [calMenuOpen]);
+
   const status = useMemo(() => {
     if (!due) return null;
     const d = daysUntil(now, due);
@@ -95,9 +120,15 @@ export function ReminderPanel({ reminder, setReminder }: Props) {
     setReminder({});
   }
 
-  function handleExportIcs() {
+  function openCalendarUrl(url: string) {
+    window.open(url, '_blank', 'noopener,noreferrer');
+    setCalMenuOpen(false);
+  }
+
+  function handleDownloadIcs() {
     if (!due) return;
     downloadReminderIcs(new Date(due));
+    setCalMenuOpen(false);
   }
 
   return (
@@ -191,13 +222,64 @@ export function ReminderPanel({ reminder, setReminder }: Props) {
           >
             Mark rebalanced today
           </button>
-          <button
-            onClick={handleExportIcs}
-            title="Download a calendar event you can import into Google, Apple, or Outlook"
-            className="text-xs border border-gray-200 text-gray-700 px-3 py-1.5 rounded hover:bg-gray-50 transition-colors"
-          >
-            ↓ Add to calendar (.ics)
-          </button>
+
+          {/* Add-to-calendar dropdown */}
+          <div className="relative" ref={calMenuRef}>
+            <button
+              type="button"
+              aria-haspopup="menu"
+              aria-expanded={calMenuOpen}
+              onClick={() => setCalMenuOpen(o => !o)}
+              className="text-xs border border-gray-200 text-gray-700 px-3 py-1.5 rounded hover:bg-gray-50 transition-colors flex items-center gap-1"
+            >
+              📅 Add to calendar
+              <span className="text-gray-400" aria-hidden="true">▾</span>
+            </button>
+            {calMenuOpen && (
+              <div
+                role="menu"
+                className="absolute left-0 mt-1 z-20 w-48 bg-white border border-gray-200 rounded shadow-md py-1"
+              >
+                <button
+                  role="menuitem"
+                  onClick={() => openCalendarUrl(googleCalendarUrl(new Date(due)))}
+                  className="block w-full text-left text-xs px-3 py-1.5 text-gray-700 hover:bg-gray-50"
+                >
+                  Google Calendar
+                </button>
+                <button
+                  role="menuitem"
+                  onClick={() => openCalendarUrl(outlookLiveCalendarUrl(new Date(due)))}
+                  className="block w-full text-left text-xs px-3 py-1.5 text-gray-700 hover:bg-gray-50"
+                >
+                  Outlook.com
+                </button>
+                <button
+                  role="menuitem"
+                  onClick={() => openCalendarUrl(office365CalendarUrl(new Date(due)))}
+                  className="block w-full text-left text-xs px-3 py-1.5 text-gray-700 hover:bg-gray-50"
+                >
+                  Office 365
+                </button>
+                <button
+                  role="menuitem"
+                  onClick={() => openCalendarUrl(yahooCalendarUrl(new Date(due)))}
+                  className="block w-full text-left text-xs px-3 py-1.5 text-gray-700 hover:bg-gray-50"
+                >
+                  Yahoo Calendar
+                </button>
+                <div className="border-t border-gray-100 my-1" />
+                <button
+                  role="menuitem"
+                  onClick={handleDownloadIcs}
+                  title="Works with Apple Calendar (macOS/iOS) and any app that imports .ics"
+                  className="block w-full text-left text-xs px-3 py-1.5 text-gray-700 hover:bg-gray-50"
+                >
+                  Apple Calendar / .ics
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

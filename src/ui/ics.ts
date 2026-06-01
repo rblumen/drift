@@ -116,3 +116,82 @@ export function downloadReminderIcs(date: Date): void {
   a.click();
   URL.revokeObjectURL(url);
 }
+
+// ─── Calendar-provider deep links ────────────────────────────────────────────
+//
+// Each builder returns a URL the user can open in a new tab to pre-fill an
+// event-creation form on the provider's web UI. Apple Calendar has no web
+// compose endpoint, so for Apple we fall back to the .ics download (macOS/iOS
+// register .ics with Calendar.app, so opening the file adds the event).
+
+const REMINDER_TITLE = 'Rebalance portfolio (Drift)';
+const REMINDER_BODY  = `Time to check portfolio drift and run a rebalance.\n\nOpen Drift: ${DRIFT_URL}`;
+
+/** Next day after `d`, used as the exclusive end of an all-day event. */
+function nextDay(d: Date): Date {
+  const x = new Date(d);
+  x.setDate(x.getDate() + 1);
+  return x;
+}
+
+/** ISO local date string `YYYY-MM-DD` (no time component). */
+function fmtIsoDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/** Google Calendar event-create URL.
+ *  Docs: https://support.google.com/calendar/answer/41207 (action=TEMPLATE). */
+export function googleCalendarUrl(date: Date): string {
+  const start = fmtDateYMD(date);
+  const end   = fmtDateYMD(nextDay(date));
+  const params = new URLSearchParams({
+    action: 'TEMPLATE',
+    text:   REMINDER_TITLE,
+    dates:  `${start}/${end}`,
+    details: REMINDER_BODY,
+  });
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
+}
+
+/** Outlook.com (personal) compose URL. */
+export function outlookLiveCalendarUrl(date: Date): string {
+  const params = new URLSearchParams({
+    path: '/calendar/action/compose',
+    rru: 'addevent',
+    subject: REMINDER_TITLE,
+    body:    REMINDER_BODY,
+    startdt: `${fmtIsoDate(date)}T00:00:00`,
+    enddt:   `${fmtIsoDate(nextDay(date))}T00:00:00`,
+    allday:  'true',
+  });
+  return `https://outlook.live.com/calendar/0/deeplink/compose?${params.toString()}`;
+}
+
+/** Office 365 / Microsoft 365 (work or school) compose URL. */
+export function office365CalendarUrl(date: Date): string {
+  const params = new URLSearchParams({
+    path: '/calendar/action/compose',
+    rru: 'addevent',
+    subject: REMINDER_TITLE,
+    body:    REMINDER_BODY,
+    startdt: `${fmtIsoDate(date)}T00:00:00`,
+    enddt:   `${fmtIsoDate(nextDay(date))}T00:00:00`,
+    allday:  'true',
+  });
+  return `https://outlook.office.com/calendar/0/deeplink/compose?${params.toString()}`;
+}
+
+/** Yahoo Calendar compose URL. */
+export function yahooCalendarUrl(date: Date): string {
+  const params = new URLSearchParams({
+    v: '60',
+    title: REMINDER_TITLE,
+    desc:  REMINDER_BODY,
+    st:    fmtDateYMD(date),
+    dur:   'allday',
+  });
+  return `https://calendar.yahoo.com/?${params.toString()}`;
+}
