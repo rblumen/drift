@@ -37,7 +37,6 @@ export const accountSchema = z.object({
   acceptsDeposits: z.boolean().optional(),
   depositLimitUsd: z.number().nonnegative().optional(),
   acceptsWithdrawals: z.boolean().optional(),
-  withdrawalLimitUsd: z.number().nonnegative().optional(),
   withdrawalPriority: z.number().nonnegative().optional(),
   rmdDueUsd: z.number().nonnegative().optional(),
 });

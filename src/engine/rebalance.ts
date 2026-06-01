@@ -65,48 +65,35 @@ export function isWithdrawalEligible(a: Account): boolean {
 }
 
 /**
- * Resolve how much each account funds toward a planned withdrawal:
- *   1. Forced RMDs first — mandatory, so they ignore eligibility and
- *      withdrawalLimitUsd (bounded only by the account's sellable value) and
- *      count toward the planned total.
- *   2. The discretionary remainder drains withdrawal-eligible accounts in
- *      ascending withdrawalPriority (concentrate-then-spill via fillOrdered),
- *      each capped at min(sellable − forced, withdrawalLimitUsd).
- * Emits RMD_EXCEEDS_PLANNED when forced RMDs alone exceed the plan, and
- * WITHDRAWAL_SHORTFALL when eligible capacity can't cover the discretionary need.
+ * Resolve how much each account funds toward a withdrawal. The total raised is
+ * Σ RMD + the additional (discretionary) amount — RMDs are always additive, never
+ * a ceiling:
+ *   1. Forced RMDs first — mandatory, so they ignore eligibility (bounded only by
+ *      the account's sellable value).
+ *   2. The additional amount drains withdrawal-eligible accounts (which includes
+ *      "Required" accounts that also carry an RMD) in ascending withdrawalPriority
+ *      via fillOrdered, each capped at its remaining sellable value.
+ * Emits WITHDRAWAL_SHORTFALL when eligible capacity can't cover the additional need.
  */
 function computeWithdrawalAllocations(
   accounts: Account[],
   sellable: Record<string, number>,
-  plannedWithdrawal: number,
+  additionalWithdrawal: number,
 ): { alloc: Record<string, number>; flags: Flag[] } {
   const flags: Flag[] = [];
 
   const forced: Record<string, number> = {};
-  let forcedTotal = 0;
   for (const a of accounts) {
     const rmd = Math.min(a.rmdDueUsd ?? 0, sellable[a.id] ?? 0);
-    if (rmd > EPSILON) { forced[a.id] = rmd; forcedTotal += rmd; }
+    if (rmd > EPSILON) forced[a.id] = rmd;
   }
 
-  const total = Math.max(plannedWithdrawal, forcedTotal);
-  if (forcedTotal > plannedWithdrawal + EPSILON) {
-    flags.push({ kind: 'RMD_EXCEEDS_PLANNED', rmdTotalUsd: forcedTotal, plannedUsd: plannedWithdrawal });
-  }
-
-  const discretionaryNeed = Math.max(0, total - forcedTotal);
-  const byId: Record<string, Account> = {};
-  for (const a of accounts) byId[a.id] = a;
   const order = accounts
     .filter(isWithdrawalEligible)
     .sort((a, b) => withdrawalPriorityOf(a) - withdrawalPriorityOf(b) || a.id.localeCompare(b.id))
     .map(a => a.id);
-  const roomOf = (id: string): number => {
-    const room = (sellable[id] ?? 0) - (forced[id] ?? 0);
-    const cap = byId[id].withdrawalLimitUsd ?? Infinity;
-    return Math.min(Math.max(0, room), cap);
-  };
-  const { alloc: disc, residual } = fillOrdered(order, roomOf, discretionaryNeed);
+  const roomOf = (id: string): number => Math.max(0, (sellable[id] ?? 0) - (forced[id] ?? 0));
+  const { alloc: disc, residual } = fillOrdered(order, roomOf, Math.max(0, additionalWithdrawal));
   if (residual > EPSILON) flags.push({ kind: 'WITHDRAWAL_SHORTFALL', amountUsd: residual });
 
   const alloc: Record<string, number> = {};
@@ -220,51 +207,7 @@ export function rebalance(
   // Per-account dollars withdrawn (RMD + discretionary), surfaced in the result.
   const withdrawalByAccount: Record<string, number> = {};
 
-  // Step 0 — Distribute household free cash to deposit-eligible accounts.
-  // Concentrate-then-spill (backlog #37): deploy the cash into the single
-  // largest-capacity eligible account first, spilling to the next only when that
-  // account's depositLimitUsd cap is reached. This minimizes the number of
-  // accounts touched (PRINCIPLES.md #10/#11) — spreading cash pro-rata would
-  // force every funded account to a net buy without improving the allocation,
-  // since greedyPlace already places each class in its tax-correct account.
-  // Whatever can't be placed (free cash exceeds the sum of all caps) surfaces as
-  // EXCESS_CASH. Locked accounts and accounts with acceptsDeposits === false are
-  // excluded; an account with depositLimitUsd === 0 is treated as closed.
-  if (freeCash > 0) {
-    const baseValue: Record<string, number> = {};
-    for (const acct of accounts) baseValue[acct.id] = acct.newCash ?? 0;
-    for (const pos of positions) baseValue[pos.accountId] = (baseValue[pos.accountId] ?? 0) + pos.marketValue;
-
-    const eligible = accounts.filter(a =>
-      !a.locked &&
-      a.acceptsDeposits !== false &&
-      (a.depositLimitUsd === undefined || a.depositLimitUsd > 0),
-    );
-
-    if (eligible.length === 0) {
-      flags.push({ kind: 'EXCESS_CASH', amountUsd: freeCash });
-    } else {
-      // Largest free capacity first; tie-break by id for determinism. When every
-      // eligible account has zero value (greenfield) the order is by id alone, so
-      // the cash concentrates into the first such account rather than splitting.
-      const capOf: Record<string, number> = {};
-      for (const a of eligible) capOf[a.id] = a.depositLimitUsd ?? Infinity;
-      const order = [...eligible]
-        .sort((a, b) => (baseValue[b.id] ?? 0) - (baseValue[a.id] ?? 0) || a.id.localeCompare(b.id))
-        .map(a => a.id);
-
-      const { alloc, residual } = fillOrdered(order, id => capOf[id], freeCash);
-
-      if (residual > 0) flags.push({ kind: 'EXCESS_CASH', amountUsd: residual });
-      accounts = accounts.map(a =>
-        alloc[a.id] !== undefined
-          ? { ...a, newCash: (a.newCash ?? 0) + alloc[a.id] }
-          : a,
-      );
-    }
-  }
-
-  // Step 0.5 — Drawdown: raise a planned withdrawal (and any forced RMDs) by
+  // Step 0a — Drawdown: raise the withdrawal (Σ RMD + the additional amount) by
   // assigning a NEGATIVE net flow to the chosen accounts. A withdrawal is just a
   // negative newCash — Principle #3 (per-account net = newCash) already supports
   // it, and Step 8.5's net-correction enforces it exactly. The class-level split
@@ -273,6 +216,9 @@ export function rebalance(
   // entirely by which accounts receive the negative newCash (RMD-first, then
   // priority order). sellable = unlocked, mapped, non-decomposed position value
   // (the only holdings the engine can actually trade to raise cash).
+  //
+  // Runs BEFORE the deposit pass so free cash can offset the resulting sells
+  // (minimizing net cash movement — see Step 0b).
   if (inDrawdown) {
     const sellable: Record<string, number> = {};
     for (const a of accounts) sellable[a.id] = 0;
@@ -292,6 +238,54 @@ export function rebalance(
         ? { ...a, newCash: (a.newCash ?? 0) - alloc[a.id] }
         : a,
     );
+  }
+
+  // Step 0b — Distribute household free cash to deposit-eligible accounts.
+  // Concentrate-then-spill (backlog #37): deploy the cash into the single
+  // largest-capacity eligible account first, spilling to the next only when that
+  // account's depositLimitUsd cap is reached. This minimizes the number of
+  // accounts touched (PRINCIPLES.md #10/#11) — spreading cash pro-rata would
+  // force every funded account to a net buy without improving the allocation,
+  // since greedyPlace already places each class in its tax-correct account.
+  //
+  // Deposits and withdrawals are independent passes that net through each
+  // account's newCash (issue #14 review). Capacity ordering adds back any
+  // withdrawal allocation so deposit routing is identical to a no-withdrawal run
+  // — a withdrawing account is still ranked by its real (pre-withdrawal) size.
+  //
+  // Whatever can't be placed (free cash exceeds the sum of all caps) surfaces as
+  // EXCESS_CASH. Locked accounts and accounts with acceptsDeposits === false are
+  // excluded; an account with depositLimitUsd === 0 is treated as closed.
+  if (freeCash > 0) {
+    const baseValue: Record<string, number> = {};
+    for (const acct of accounts) baseValue[acct.id] = (acct.newCash ?? 0) + (withdrawalByAccount[acct.id] ?? 0);
+    for (const pos of positions) baseValue[pos.accountId] = (baseValue[pos.accountId] ?? 0) + pos.marketValue;
+
+    const eligible = accounts.filter(a =>
+      !a.locked &&
+      a.acceptsDeposits !== false &&
+      (a.depositLimitUsd === undefined || a.depositLimitUsd > 0),
+    );
+
+    if (eligible.length === 0) {
+      flags.push({ kind: 'EXCESS_CASH', amountUsd: freeCash });
+    } else {
+      // Largest capacity first; tie-break by id for determinism.
+      const order = [...eligible]
+        .sort((a, b) => (baseValue[b.id] ?? 0) - (baseValue[a.id] ?? 0) || a.id.localeCompare(b.id))
+        .map(a => a.id);
+      const capOf: Record<string, number> = {};
+      for (const a of eligible) capOf[a.id] = a.depositLimitUsd ?? Infinity;
+
+      const { alloc, residual } = fillOrdered(order, id => capOf[id], freeCash);
+
+      if (residual > 0) flags.push({ kind: 'EXCESS_CASH', amountUsd: residual });
+      accounts = accounts.map(a =>
+        alloc[a.id] !== undefined
+          ? { ...a, newCash: (a.newCash ?? 0) + alloc[a.id] }
+          : a,
+      );
+    }
   }
 
   const {

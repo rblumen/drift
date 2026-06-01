@@ -985,19 +985,16 @@ describe('plannedWithdrawal — drawdown', () => {
     expect(near(accountSum(r.trades, 'b'), -20_000, 200)).toBe(true);
   });
 
-  it('caps discretionary draw at withdrawalLimitUsd and spills the remainder', () => {
+  it('withdraws Σ RMD + the additional amount (RMDs are additive, not a ceiling)', () => {
     const accounts: Account[] = [
-      { id: 'a', name: 'A', institution: 'Schwab', type: 'TAXABLE', withdrawalPriority: 10, withdrawalLimitUsd: 20_000 },
-      { id: 'b', name: 'B', institution: 'Schwab', type: 'TAXABLE', withdrawalPriority: 20 },
+      { id: 'schwab', name: 'Schwab', institution: 'Schwab',   type: 'TAXABLE'         },
+      { id: 'ira',    name: 'IRA',    institution: 'Fidelity', type: 'TRADITIONAL_IRA', rmdDueUsd: 20_000 },
     ];
-    const positions: Position[] = [
-      { accountId: 'a', ticker: 'MUNY', marketValue: 100_000 },
-      { accountId: 'b', ticker: 'MUNY', marketValue: 100_000 },
-    ];
-    // a is capped at $20k despite having capacity; b absorbs the remaining $30k.
-    const r = rebalance(accounts, positions, ZERO_TOL_STRATEGY, {}, {}, 0, 50_000);
-    expect(near(accountSum(r.trades, 'a'), -20_000, 200)).toBe(true);
-    expect(near(accountSum(r.trades, 'b'), -30_000, 200)).toBe(true);
+    // $20k RMD (ira) + $30k additional (drains the eligible taxable account) = $50k.
+    const r = rebalance(accounts, POSITIONS, ZERO_TOL_STRATEGY, {}, {}, 0, 30_000);
+    expect(near(accountSum(r.trades, 'ira'),    -20_000, 200)).toBe(true);
+    expect(near(accountSum(r.trades, 'schwab'), -30_000, 200)).toBe(true);
+    expect(r.householdValue).toBeCloseTo(450_000, 0);
   });
 
   it('routes no discretionary withdrawal to a restricted (tax-advantaged) account', () => {
@@ -1007,47 +1004,52 @@ describe('plannedWithdrawal — drawdown', () => {
     expect(near(accountSum(r.trades, 'ira'),    0,       200)).toBe(true);
   });
 
-  it('takes a forced RMD even from a restricted account and counts it toward the total', () => {
+  it('takes a forced RMD even from a restricted account, with no additional amount', () => {
     const accounts: Account[] = [
       { id: 'schwab', name: 'Schwab', institution: 'Schwab',   type: 'TAXABLE'         },
-      { id: 'ira',    name: 'IRA',    institution: 'Fidelity', type: 'TRADITIONAL_IRA', rmdDueUsd: 20_000 },
+      { id: 'ira',    name: 'IRA',    institution: 'Fidelity', type: 'TRADITIONAL_IRA', rmdDueUsd: 25_000 },
     ];
-    // $50k planned: ira's $20k RMD is forced (despite being restricted), the
-    // remaining $30k discretionary comes from the eligible taxable account.
-    const r = rebalance(accounts, POSITIONS, ZERO_TOL_STRATEGY, {}, {}, 0, 50_000);
-    expect(near(accountSum(r.trades, 'ira'),    -20_000, 200)).toBe(true);
-    expect(near(accountSum(r.trades, 'schwab'), -30_000, 200)).toBe(true);
-    expect(r.flags.some(f => f.kind === 'WITHDRAWAL_SHORTFALL')).toBe(false);
-  });
-
-  it('emits RMD_EXCEEDS_PLANNED and withdraws the larger RMD total', () => {
-    const accounts: Account[] = [
-      { id: 'schwab', name: 'Schwab', institution: 'Schwab',   type: 'TAXABLE'         },
-      { id: 'ira',    name: 'IRA',    institution: 'Fidelity', type: 'TRADITIONAL_IRA', rmdDueUsd: 40_000 },
-    ];
-    // Planned $10k < $40k RMD → the $40k RMD is taken; no discretionary draw.
-    const r = rebalance(accounts, POSITIONS, ZERO_TOL_STRATEGY, {}, {}, 0, 10_000);
-    const flag = r.flags.find(f => f.kind === 'RMD_EXCEEDS_PLANNED');
-    expect(flag).toBeDefined();
-    expect(flag?.kind === 'RMD_EXCEEDS_PLANNED' && flag.rmdTotalUsd).toBe(40_000);
-    expect(near(accountSum(r.trades, 'ira'),    -40_000, 200)).toBe(true);
+    // additional = 0, so only the $25k RMD is taken — from the restricted ira.
+    const r = rebalance(accounts, POSITIONS, ZERO_TOL_STRATEGY, {}, {}, 0, 0);
+    expect(near(accountSum(r.trades, 'ira'),    -25_000, 200)).toBe(true);
     expect(near(accountSum(r.trades, 'schwab'), 0,       200)).toBe(true);
   });
 
-  it('emits WITHDRAWAL_SHORTFALL when planned exceeds eligible capacity', () => {
+  it('processes a withdrawal and free-cash deposit independently in the same run', () => {
+    // Deposits and withdrawals are independent passes that net per account.
+    // a (lower id) drains the $30k withdrawal → net −$30k. The $30k of free cash
+    // routes to the largest-capacity account b (concentrate-then-spill) → net +$30k.
     const accounts: Account[] = [
-      { id: 'schwab', name: 'Schwab', institution: 'Schwab', type: 'TAXABLE', withdrawalLimitUsd: 30_000 },
+      { id: 'a', name: 'A', institution: 'Schwab', type: 'TAXABLE' },
+      { id: 'b', name: 'B', institution: 'Schwab', type: 'TAXABLE' },
     ];
     const positions: Position[] = [
-      { accountId: 'schwab', ticker: 'MUNY', marketValue: 100_000 },
+      { accountId: 'a', ticker: 'MUNY', marketValue: 100_000 },
+      { accountId: 'b', ticker: 'MUNY', marketValue: 300_000 },
     ];
-    // The account's withdrawal limit caps it at $30k; $50k planned leaves a $20k
-    // shortfall (the household still holds $70k afterward).
-    const r = rebalance(accounts, positions, ZERO_TOL_STRATEGY, {}, {}, 0, 50_000);
+    const r = rebalance(accounts, positions, ZERO_TOL_STRATEGY, {}, {}, 30_000, 30_000);
+    expect(near(accountSum(r.trades, 'a'), -30_000, 200)).toBe(true);
+    expect(near(accountSum(r.trades, 'b'),  30_000, 200)).toBe(true);
+    expect(r.flags.some(f => f.kind === 'EXCESS_CASH')).toBe(false);
+    // Household value is unchanged: +$30k deposit − $30k withdrawal.
+    expect(r.householdValue).toBeCloseTo(400_000, 0);
+  });
+
+  it('emits WITHDRAWAL_SHORTFALL when the additional amount exceeds eligible capacity', () => {
+    const accounts: Account[] = [
+      { id: 'schwab', name: 'Schwab', institution: 'Schwab', type: 'TAXABLE' },
+    ];
+    const positions: Position[] = [
+      { accountId: 'schwab', ticker: 'MUNY',  marketValue: 30_000, locked: true },
+      { accountId: 'schwab', ticker: 'FZROX', marketValue: 70_000 },
+    ];
+    // Only the $70k FZROX is sellable (MUNY is locked); a $90k additional withdrawal
+    // leaves a $20k shortfall.
+    const r = rebalance(accounts, positions, ZERO_TOL_STRATEGY, {}, {}, 0, 90_000);
     const flag = r.flags.find(f => f.kind === 'WITHDRAWAL_SHORTFALL');
     expect(flag).toBeDefined();
     expect(flag?.kind === 'WITHDRAWAL_SHORTFALL' && near(flag.amountUsd, 20_000, 1)).toBe(true);
-    expect(near(accountSum(r.trades, 'schwab'), -30_000, 200)).toBe(true);
+    expect(near(accountSum(r.trades, 'schwab'), -70_000, 200)).toBe(true);
   });
 
   it('still lands the household on target after a withdrawal (allocation-preserving)', () => {

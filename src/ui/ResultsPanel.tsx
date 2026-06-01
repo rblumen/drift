@@ -117,20 +117,9 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
     return (
       <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
         <strong>Withdrawal not fully funded:</strong>{' '}
-        {fmtUsd(flag.amountUsd)} of the planned withdrawal could not be raised — every
-        withdrawal-eligible account is restricted, locked, or has hit its sellable capacity or
-        withdrawal limit. Mark another account eligible or raise a limit to cover it.
-      </div>
-    );
-  }
-
-  if (flag.kind === 'RMD_EXCEEDS_PLANNED') {
-    return (
-      <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-sm text-blue-800">
-        <strong>RMDs exceed the planned withdrawal:</strong>{' '}
-        required minimum distributions total {fmtUsd(flag.rmdTotalUsd)}, more than the
-        {' '}{fmtUsd(flag.plannedUsd)} planned — the larger RMD total is withdrawn, since RMDs are
-        mandatory.
+        {fmtUsd(flag.amountUsd)} of the additional withdrawal could not be raised — every
+        withdrawal-eligible account is restricted, locked, or has sold all it can. Mark another
+        account Eligible to cover it.
       </div>
     );
   }
@@ -373,7 +362,6 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plann
   const importantFlags = [
     ...flags.filter(f => f.kind === 'EXCESS_CASH'),
     ...flags.filter(f => f.kind === 'WITHDRAWAL_SHORTFALL'),
-    ...flags.filter(f => f.kind === 'RMD_EXCEEDS_PLANNED'),
     ...flags.filter(f => f.kind === 'NO_ELIGIBLE_ACCOUNT'),
     ...flags.filter(f => f.kind === 'PROJECTED_OFF_TARGET'),
     ...flags.filter(f => f.kind === 'REVISIT_PLACEMENT'),
@@ -401,7 +389,9 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plann
   // Per-account drawdown summary for the spending plan, in drain-priority order.
   // withdrawn = cash that leaves the account (RMD + discretionary), which may be
   // met by selling or from idle cash; rmd = the configured RMD portion.
-  const showWithdrawalPlan = plannedWithdrawal > 0 || accounts.some(a => (a.rmdDueUsd ?? 0) > 0);
+  const totalRmd = accounts.reduce((s, a) => s + (a.rmdDueUsd ?? 0), 0);
+  const totalWithdrawal = totalRmd + plannedWithdrawal; // Σ RMD + additional
+  const showWithdrawalPlan = totalWithdrawal > 0;
   const withdrawalRows = accounts
     .filter(a => !a.locked)
     .map(a => ({ account: a, withdrawn: withdrawalByAccount[a.id] ?? 0, rmd: a.rmdDueUsd ?? 0 }))
@@ -519,13 +509,9 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plann
             in the Accounts tab.
           </HelpDef>
           <HelpDef term="WITHDRAWAL_SHORTFALL (amber)">
-            The planned withdrawal could not be fully raised because every withdrawal-eligible account is
-            restricted, locked, or has hit its sellable capacity or withdrawal limit. Mark another account
-            eligible or raise a limit in the Accounts tab.
-          </HelpDef>
-          <HelpDef term="RMD_EXCEEDS_PLANNED (blue)">
-            Required minimum distributions across all accounts total more than the planned withdrawal.
-            RMDs are mandatory, so the larger RMD total is withdrawn instead.
+            The additional withdrawal could not be fully raised because every withdrawal-eligible account
+            is restricted, locked, or has sold all it can. Mark another account Eligible in the Accounts
+            tab to cover it.
           </HelpDef>
         </HelpSection>
 
@@ -602,7 +588,7 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plann
                           : 'bg-green-100 text-green-700'
                       }`}>
                         {!depositsOpen ? 'Closed'
-                          : limited ? `Limited · ${fmtUsd(a.depositLimitUsd!)}`
+                          : limited ? `Open · ${fmtUsd(a.depositLimitUsd!)} cap`
                           : 'Open'}
                       </span>
                     </td>
@@ -619,9 +605,9 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plann
         <div className="overflow-hidden border border-amber-200 rounded-lg">
           <div className="bg-amber-50 px-4 py-2 text-xs font-medium text-amber-900 flex items-center justify-between">
             <span>Spending / withdrawal plan</span>
-            {plannedWithdrawal > 0 && (
+            {totalWithdrawal > 0 && (
               <span className="text-amber-700">
-                {fmtUsd(totalRaised)} raised of {fmtUsd(plannedWithdrawal)} planned
+                {fmtUsd(totalRaised)} raised of {fmtUsd(totalWithdrawal)} planned
               </span>
             )}
           </div>
@@ -636,8 +622,8 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plann
             </thead>
             <tbody className="divide-y divide-gray-100">
               {withdrawalRows.map(({ account: a, withdrawn, rmd }) => {
-                const restricted = !isWithdrawalEligible(a);
-                const limited = !restricted && a.withdrawalLimitUsd != null;
+                const required = rmd > 0;
+                const restricted = !required && !isWithdrawalEligible(a);
                 return (
                   <tr key={a.id} className="hover:bg-gray-50">
                     <td className="px-4 py-2 font-medium text-gray-800">{a.name}</td>
@@ -652,12 +638,10 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plann
                     <td className="px-4 py-2 text-right">
                       <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
                         restricted ? 'bg-red-100 text-red-600'
-                          : limited ? 'bg-amber-100 text-amber-700'
+                          : required ? 'bg-blue-100 text-blue-700'
                           : 'bg-green-100 text-green-700'
                       }`}>
-                        {restricted ? 'Restricted'
-                          : limited ? `Limited · ${fmtUsd(a.withdrawalLimitUsd!)}`
-                          : 'Eligible'}
+                        {restricted ? 'Restricted' : required ? 'Required' : 'Eligible'}
                       </span>
                     </td>
                   </tr>

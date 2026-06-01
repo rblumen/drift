@@ -265,7 +265,6 @@ function buildHtml(result: RebalanceResult, accounts: Account[], resolvedTrades:
   const orderedFlags = [
     ...flags.filter(f => f.kind === 'EXCESS_CASH'),
     ...flags.filter(f => f.kind === 'WITHDRAWAL_SHORTFALL'),
-    ...flags.filter(f => f.kind === 'RMD_EXCEEDS_PLANNED'),
     ...flags.filter(f => f.kind === 'REVISIT_PLACEMENT'),
     ...flags.filter(f => f.kind === 'UNMAPPED_HOLDING'),
     ...flags.filter(f => f.kind === 'TAXABLE_SALE'),
@@ -277,9 +276,7 @@ function buildHtml(result: RebalanceResult, accounts: Account[], resolvedTrades:
     if (f.kind === 'EXCESS_CASH')
       return `<div class="flag flag-warn"><strong>Free cash undeployed:</strong> ${fmtUsd(f.amountUsd)} of household free cash could not be distributed — every eligible account is closed, locked, or has hit its deposit limit.</div>`;
     if (f.kind === 'WITHDRAWAL_SHORTFALL')
-      return `<div class="flag flag-warn"><strong>Withdrawal not fully funded:</strong> ${fmtUsd(f.amountUsd)} of the planned withdrawal could not be raised — every withdrawal-eligible account is restricted, locked, or has hit its sellable capacity or withdrawal limit.</div>`;
-    if (f.kind === 'RMD_EXCEEDS_PLANNED')
-      return `<div class="flag flag-blue"><strong>RMDs exceed the planned withdrawal:</strong> required minimum distributions total ${fmtUsd(f.rmdTotalUsd)}, more than the ${fmtUsd(f.plannedUsd)} planned — the larger RMD total is withdrawn.</div>`;
+      return `<div class="flag flag-warn"><strong>Withdrawal not fully funded:</strong> ${fmtUsd(f.amountUsd)} of the additional withdrawal could not be raised — every withdrawal-eligible account is restricted, locked, or has sold all it can.</div>`;
     if (f.kind === 'REVISIT_PLACEMENT')
       return `<div class="flag flag-orange"><strong>Revisit placement strategy.</strong> Taxable accounts hold ${fmtPct(f.taxableShare)} of household value, exceeding the ${fmtPct(f.fixedIncomeTarget)} fixed-income target. Equities must land in taxable accounts.</div>`;
     if (f.kind === 'UNMAPPED_HOLDING')
@@ -305,7 +302,7 @@ function buildHtml(result: RebalanceResult, accounts: Account[], resolvedTrades:
     const depositBadge = !depositsOpen
       ? `<span class="badge sell">Closed</span>`
       : limited
-      ? `<span class="badge limited">Limited · ${esc(fmtUsd(a.depositLimitUsd!))}</span>`
+      ? `<span class="badge limited">Open · ${esc(fmtUsd(a.depositLimitUsd!))} cap</span>`
       : `<span class="badge buy">Open</span>`;
     return `<tr>
       <td style="font-weight:600;color:#111827">${esc(a.name)}</td>
@@ -335,7 +332,9 @@ function buildHtml(result: RebalanceResult, accounts: Account[], resolvedTrades:
   </div>` : '';
 
   // ── Spending / withdrawal plan ──────────────────────────────────────────────
-  const showWithdrawalPlan = plannedWithdrawal > 0 || accounts.some(a => (a.rmdDueUsd ?? 0) > 0);
+  const totalRmd = accounts.reduce((s, a) => s + (a.rmdDueUsd ?? 0), 0);
+  const totalWithdrawal = totalRmd + plannedWithdrawal; // Σ RMD + additional
+  const showWithdrawalPlan = totalWithdrawal > 0;
   const wdRowData = accounts.filter(a => !a.locked)
     .map(a => ({ account: a, withdrawn: withdrawalByAccount[a.id] ?? 0, rmd: a.rmdDueUsd ?? 0 }))
     .filter(r => r.withdrawn > 0.5 || r.rmd > 0)
@@ -343,12 +342,12 @@ function buildHtml(result: RebalanceResult, accounts: Account[], resolvedTrades:
       || x.account.name.localeCompare(y.account.name));
   const totalRaised = wdRowData.reduce((s, r) => s + r.withdrawn, 0);
   const wdRows = wdRowData.map(({ account: a, withdrawn, rmd }) => {
-    const restricted = !isWithdrawalEligible(a);
-    const limited = !restricted && a.withdrawalLimitUsd != null;
+    const required = rmd > 0;
+    const restricted = !required && !isWithdrawalEligible(a);
     const badge = restricted
       ? `<span class="badge sell">Restricted</span>`
-      : limited
-      ? `<span class="badge limited">Limited · ${esc(fmtUsd(a.withdrawalLimitUsd!))}</span>`
+      : required
+      ? `<span class="badge limited">Required</span>`
       : `<span class="badge buy">Eligible</span>`;
     return `<tr>
       <td style="font-weight:600;color:#111827">${esc(a.name)}</td>
@@ -362,7 +361,7 @@ function buildHtml(result: RebalanceResult, accounts: Account[], resolvedTrades:
   <div style="border:1px solid #fde68a;border-radius:8px;overflow:hidden;margin-bottom:16px">
     <div style="background:#fffbeb;padding:8px 16px;font-size:12px;font-weight:600;color:#92400e;display:flex;justify-content:space-between;align-items:center">
       <span>Spending / withdrawal plan</span>
-      ${plannedWithdrawal > 0 ? `<span style="color:#b45309">${esc(fmtUsd(totalRaised))} raised of ${esc(fmtUsd(plannedWithdrawal))} planned</span>` : ''}
+      <span style="color:#b45309">${esc(fmtUsd(totalRaised))} raised of ${esc(fmtUsd(totalWithdrawal))} planned</span>
     </div>
     <table>
       <thead><tr>
