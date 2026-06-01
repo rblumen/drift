@@ -5,3 +5,4 @@ dist
 /private/
 *.local.json
 *.html
+html/
