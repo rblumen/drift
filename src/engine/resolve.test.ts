@@ -167,6 +167,41 @@ describe('ambiguous resolution — multiple tickers cover the same class', () =>
   });
 });
 
+// ─── blended fund — explicit decomposition (issue #40) ──────────────────────
+
+describe('blended fund — decomposed ticker (#40)', () => {
+  it('merges per-sub-class sells targeting the same blended-fund ticker', () => {
+    const decomp = { US_LARGE_CAP: 0.60, DEVELOPED_INTL: 0.30, FIXED_INCOME: 0.10 };
+    const trades: Trade[] = [
+      { accountId: 'k401', assetClass: 'US_LARGE_CAP',  deltaUsd: -6_000, inTaxableAccount: false, forceTicker: 'FDKLX' },
+      { accountId: 'k401', assetClass: 'DEVELOPED_INTL', deltaUsd: -3_000, inTaxableAccount: false, forceTicker: 'FDKLX' },
+      { accountId: 'k401', assetClass: 'FIXED_INCOME',  deltaUsd: -1_000, inTaxableAccount: false, forceTicker: 'FDKLX' },
+    ];
+    const positions: Position[] = [
+      { accountId: 'k401', ticker: 'FDKLX', marketValue: 100_000 },
+    ];
+    const result = resolveTradeVehicles(trades, positions, { FDKLX: decomp }, classify);
+    expect(result).toHaveLength(1);
+    expect(result[0].ticker).toBe('FDKLX');
+    expect(result[0].deltaUsd).toBeCloseTo(-10_000, 0);
+    expect(result[0].mergedFrom).toHaveLength(3);
+  });
+
+  it('excludeTickers strips a candidate ticker from resolution', () => {
+    const decomp = { US_LARGE_CAP: 0.60, DEVELOPED_INTL: 0.30, FIXED_INCOME: 0.10 };
+    // Compensating buy that must NOT route back to the blended fund being sold.
+    const trades: Trade[] = [
+      { accountId: 'k401', assetClass: 'US_LARGE_CAP', deltaUsd: 5_000, inTaxableAccount: false, excludeTickers: ['FDKLX'] },
+    ];
+    const positions: Position[] = [
+      { accountId: 'k401', ticker: 'FDKLX', marketValue: 100_000 },
+      { accountId: 'k401', ticker: 'FXAIX', marketValue:  20_000 },
+    ];
+    const [r] = resolveTradeVehicles(trades, positions, { FDKLX: decomp }, classify);
+    expect(r.ticker).toBe('FXAIX');
+  });
+});
+
 // ─── multi-account trades ────────────────────────────────────────────────────
 
 describe('multi-account — each account resolved independently', () => {

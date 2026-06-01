@@ -124,6 +124,32 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
     );
   }
 
+  if (flag.kind === 'BLENDED_FUND_SOLD') {
+    return (
+      <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-sm text-blue-700">
+        <strong>Blended fund sold:</strong>{' '}
+        {fmtUsd(flag.amountUsd)} of <code className="font-mono">{flag.ticker}</code> in{' '}
+        <em>{acctName(flag.accountId)}</em> sold proportionally to fix the household allocation.
+        The engine sells blended funds when drift demands but does not buy them back, so repeated
+        rebalances will trend your allocation away from this position. Lock the position if you'd
+        rather preserve it.
+      </div>
+    );
+  }
+
+  if (flag.kind === 'BLENDED_FUND_OVERSELL') {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
+        <strong>Blended fund over-sell:</strong>{' '}
+        Selling <code className="font-mono">{flag.ticker}</code> in{' '}
+        <em>{acctName(flag.accountId)}</em> forced an extra {fmtUsd(flag.amountUsd)} of{' '}
+        {AC_LABEL[flag.assetClass]} to be sold, and the account's menu had no non-blended ticker
+        to buy it back. The household allocation will drift in {AC_LABEL[flag.assetClass]} until
+        you add an eligible ticker to the account or accept the residual drift.
+      </div>
+    );
+  }
+
   return null;
 }
 
@@ -368,6 +394,8 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plann
     ...flags.filter(f => f.kind === 'UNMAPPED_HOLDING'),
     ...flags.filter(f => f.kind === 'TAXABLE_REBALANCE_AVOIDABLE'),
     ...flags.filter(f => f.kind === 'TAXABLE_SALE'),
+    ...flags.filter(f => f.kind === 'BLENDED_FUND_OVERSELL'),
+    ...flags.filter(f => f.kind === 'BLENDED_FUND_SOLD'),
     ...flags.filter(f => f.kind === 'PLACEMENT_SPILLOVER'),
   ];
 
@@ -512,6 +540,17 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plann
             The additional withdrawal could not be fully raised because every withdrawal-eligible account
             is restricted, locked, or has sold all it can. Mark another account Eligible in the Accounts
             tab to cover it.
+          </HelpDef>
+          <HelpDef term="BLENDED_FUND_SOLD (blue)">
+            The engine sold part of a blended fund (TDF, balanced fund) this run to fix the household
+            allocation. It does not have a symmetric "buy a blended fund" mechanism, so repeated
+            rebalances will gradually trend your allocation away from this position. Lock the position
+            in the Accounts tab if you'd rather preserve it.
+          </HelpDef>
+          <HelpDef term="BLENDED_FUND_OVERSELL (red)">
+            A blended fund's proportional sale over-sold a sub-class beyond what the engine wanted,
+            and the account's menu had no non-blended ticker to buy that sub-class back. Add an
+            eligible ticker to the account or accept the residual drift.
           </HelpDef>
         </HelpSection>
 

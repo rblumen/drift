@@ -1925,3 +1925,284 @@ describe('tax-advantaged-first rebalancing', () => {
     expect(taxableSold(on.flags)).toBeLessThanOrEqual(taxableSold(off.flags) + 1e-6);
   });
 });
+
+// ─── Blended-fund composite sells (issue #40) ────────────────────────────────
+//
+// A blended fund (TDF, balanced fund) is a single position whose composition is
+// fixed — selling N% of it sells N% of every sub-class proportionally. Before
+// #40 the engine treated all decomposed positions as frozen; now they are
+// sellable as a whole, with Step 8.7 enforcing the proportionality constraint
+// and routing compensating buys to keep per-account net invariants intact.
+
+describe('blended-fund sells — issue #40', () => {
+  // 60% US large cap, 30% INTL developed, 10% fixed income.
+  const TDF_DECOMP = {
+    US_LARGE_CAP:   0.60,
+    DEVELOPED_INTL: 0.30,
+    FIXED_INCOME:   0.10,
+  };
+  const TDF: Record<string, typeof TDF_DECOMP> = { FDKLX: TDF_DECOMP };
+
+  // No-frills strategy: only large-cap, INTL, and FI. No targets to over-spec.
+  const SIMPLE_STRAT: Strategy = {
+    targets: {
+      US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.60, US_MID_CAP: 0, US_SMALL_CAP: 0,
+      DEVELOPED_INTL:  0.30, EMERGING_INTL: 0,
+      FIXED_INCOME:    0.10, ALTERNATIVES: 0, CASH: 0,
+    },
+    placement: {
+      FIXED_INCOME:    ['TAXABLE'],
+      ALTERNATIVES:    ['TAX_ADVANTAGED'],
+      EMERGING_INTL:   ['TAX_ADVANTAGED', 'TAXABLE'],
+      DEVELOPED_INTL:  ['TAX_ADVANTAGED', 'TAXABLE'],
+      US_TOTAL_MARKET: ['TAX_ADVANTAGED', 'TAXABLE'],
+      US_LARGE_CAP:    ['TAX_ADVANTAGED', 'TAXABLE'],
+      US_MID_CAP:      ['TAX_ADVANTAGED', 'TAXABLE'],
+      US_SMALL_CAP:    ['TAX_ADVANTAGED', 'TAXABLE'],
+      CASH:            ['TAXABLE', 'TAX_ADVANTAGED'],
+    },
+    toleranceAbs: 0,
+    minTradeUsd:  0,
+  };
+
+  describe('drawdown — TDF-only 401k funds an RMD', () => {
+    // A 401k holding only FDKLX. An RMD is due. The engine must sell FDKLX
+    // proportionally to raise the cash — pre-#40 this was impossible because
+    // decomposed funds were excluded from sellable.
+    const accts: Account[] = [
+      { id: 'k401', name: '401k', institution: 'Empower', type: 'FOUR_OH_ONE_K', rmdDueUsd: 10_000 },
+    ];
+    const positions: Position[] = [
+      { accountId: 'k401', ticker: 'FDKLX', marketValue: 100_000 },
+    ];
+
+    it('raises the RMD via a proportional sale of the blended fund', () => {
+      const r = rebalance(accts, positions, SIMPLE_STRAT, {}, TDF, 0, 0);
+      expect(near(r.withdrawalByAccount['k401'] ?? 0, 10_000, 200)).toBe(true);
+      expect(near(accountSum(r.trades, 'k401'), -10_000, 200)).toBe(true);
+    });
+
+    it('emits sells across every sub-class of the fund, all forced to its ticker', () => {
+      const r = rebalance(accts, positions, SIMPLE_STRAT, {}, TDF, 0, 0);
+      const sells = r.trades.filter(t => t.accountId === 'k401' && t.deltaUsd < 0);
+      const subClasses = new Set(sells.map(t => t.assetClass));
+      expect(subClasses.has('US_LARGE_CAP')).toBe(true);
+      expect(subClasses.has('DEVELOPED_INTL')).toBe(true);
+      expect(subClasses.has('FIXED_INCOME')).toBe(true);
+      // Every sell ought to be pinned to the blended fund.
+      for (const s of sells) expect(s.forceTicker).toBe('FDKLX');
+    });
+
+    it('per-sub-class sell amounts respect the 60/30/10 composition', () => {
+      const r = rebalance(accts, positions, SIMPLE_STRAT, {}, TDF, 0, 0);
+      const usSell = r.trades
+        .filter(t => t.accountId === 'k401' && t.assetClass === 'US_LARGE_CAP' && t.deltaUsd < 0)
+        .reduce((s, t) => s + -t.deltaUsd, 0);
+      const intlSell = r.trades
+        .filter(t => t.accountId === 'k401' && t.assetClass === 'DEVELOPED_INTL' && t.deltaUsd < 0)
+        .reduce((s, t) => s + -t.deltaUsd, 0);
+      const fiSell = r.trades
+        .filter(t => t.accountId === 'k401' && t.assetClass === 'FIXED_INCOME' && t.deltaUsd < 0)
+        .reduce((s, t) => s + -t.deltaUsd, 0);
+      const total = usSell + intlSell + fiSell;
+      expect(usSell / total).toBeCloseTo(0.60, 2);
+      expect(intlSell / total).toBeCloseTo(0.30, 2);
+      expect(fiSell / total).toBeCloseTo(0.10, 2);
+    });
+  });
+
+  describe('drift within tolerance — blended fund untouched', () => {
+    // Household is already at target (FDKLX's 60/30/10 split lines up exactly
+    // with the strategy). No drift, no trades, no fund disturbance — the
+    // tolerance band naturally protects the fund when there's nothing to fix.
+    const accts: Account[] = [
+      { id: 'k401', name: '401k', institution: 'Empower', type: 'FOUR_OH_ONE_K' },
+    ];
+    const positions: Position[] = [
+      { accountId: 'k401', ticker: 'FDKLX', marketValue: 100_000 },
+    ];
+    const STRAT_WITH_TOL: Strategy = { ...SIMPLE_STRAT, toleranceAbs: 0.05 };
+
+    it('does not touch the fund when drift is within tolerance', () => {
+      const r = rebalance(accts, positions, STRAT_WITH_TOL, {}, TDF, 0, 0);
+      expect(r.trades.filter(t => t.forceTicker === 'FDKLX')).toHaveLength(0);
+      expect(r.flags.some(f => f.kind === 'BLENDED_FUND_OVERSELL')).toBe(false);
+    });
+  });
+
+  describe('large drift — engine sells the fund to fix the allocation', () => {
+    // 401k holds only FDKLX (60/30/10) but the strategy targets 80/15/5 — the
+    // user's TDF doesn't fit. The only path to the target is to sell the fund
+    // and reallocate. Without #40 the engine silently refused; now it acts.
+    // (The 401k menu carries non-blended tickers so the engine can route the
+    // compensating sub-class buys.)
+    const accts: Account[] = [
+      { id: 'k401', name: '401k', institution: 'Empower', type: 'FOUR_OH_ONE_K',
+        availableTickers: ['FDKLX', 'FXAIX', 'VXUS', 'BND'] },
+    ];
+    const positions: Position[] = [
+      { accountId: 'k401', ticker: 'FDKLX', marketValue: 100_000 },
+    ];
+    const AGGRESSIVE: Strategy = {
+      ...SIMPLE_STRAT,
+      targets: {
+        US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.80, US_MID_CAP: 0, US_SMALL_CAP: 0,
+        DEVELOPED_INTL:  0.15, EMERGING_INTL: 0,
+        FIXED_INCOME:    0.05, ALTERNATIVES: 0, CASH: 0,
+      },
+      toleranceAbs: 0.05,
+    };
+
+    it('emits forced sells against the blended fund when drift exceeds tolerance', () => {
+      const r = rebalance(accts, positions, AGGRESSIVE, {}, TDF, 0, 0);
+      const fundSells = r.trades.filter(t => t.forceTicker === 'FDKLX' && t.deltaUsd < 0);
+      expect(fundSells.length).toBeGreaterThan(0);
+    });
+
+    it('per-account net delta remains zero (Principle #3) — compensating buys balance', () => {
+      const r = rebalance(accts, positions, AGGRESSIVE, {}, TDF, 0, 0);
+      expect(near(accountSum(r.trades, 'k401'), 0, 5)).toBe(true);
+    });
+  });
+
+  describe('drawdown over-sell with in-place compensation', () => {
+    // 401k holds FDKLX plus FXAIX as a non-blended FI offset isn't possible
+    // (no MUNY here) — the FI sub-class can only be raised by selling FDKLX.
+    // availableTickers includes FXAIX/VXUS so the equity/INTL over-sells get
+    // compensated in-place by buys against those tickers.
+    const accts: Account[] = [
+      { id: 'k401', name: '401k', institution: 'Empower', type: 'FOUR_OH_ONE_K',
+        rmdDueUsd: 2_000,
+        availableTickers: ['FDKLX', 'FXAIX', 'VXUS'] },
+    ];
+    const positions: Position[] = [
+      { accountId: 'k401', ticker: 'FDKLX', marketValue: 100_000 },
+    ];
+
+    it('preserves per-account net trade delta = newCash − withdrawal (Principle #3)', () => {
+      const r = rebalance(accts, positions, SIMPLE_STRAT, {}, TDF, 0, 0);
+      // expected net per account = -RMD = -$2k
+      expect(near(accountSum(r.trades, 'k401'), -2_000, 5)).toBe(true);
+    });
+
+    it('pairs every FDKLX-forced over-sell with a compensating buy', () => {
+      const r = rebalance(accts, positions, SIMPLE_STRAT, {}, TDF, 0, 0);
+      for (const ac of ['US_LARGE_CAP', 'DEVELOPED_INTL'] as const) {
+        const sellFromFund = r.trades
+          .filter(t => t.accountId === 'k401' && t.assetClass === ac && t.forceTicker === 'FDKLX')
+          .reduce((s, t) => s + -t.deltaUsd, 0);
+        const compensatingBuy = r.trades
+          .filter(t => t.accountId === 'k401' && t.assetClass === ac && (t.excludeTickers ?? []).includes('FDKLX'))
+          .reduce((s, t) => s + t.deltaUsd, 0);
+        // The forced sell on a non-binding sub-class always exceeds the engine's
+        // residual demand (which is 0 here — engine wasn't trying to sell US_LC).
+        // The full forced amount should be compensated by a matching buy.
+        expect(near(compensatingBuy, sellFromFund, 5)).toBe(true);
+      }
+    });
+
+    it('does not emit BLENDED_FUND_OVERSELL when compensation succeeds', () => {
+      const r = rebalance(accts, positions, SIMPLE_STRAT, {}, TDF, 0, 0);
+      expect(r.flags.some(f => f.kind === 'BLENDED_FUND_OVERSELL')).toBe(false);
+    });
+  });
+
+  describe('drawdown over-sell without compensation path — flag emitted', () => {
+    // 401k holds FDKLX (60/30/10) plus a standalone FXAIX (US_LARGE_CAP) lot.
+    // The mixed-position composition skews the engine's per-class sell demand
+    // away from the fund's composition: most of the US_LC over-target sits in
+    // FXAIX, so when the RMD-driven FDKLX sale happens, INTL and FI get
+    // over-sold relative to the engine's intent. The 401k menu restricts to
+    // FDKLX only (allowedAssetClasses limits effectiveAllowed), so no
+    // non-blended ticker exists to compensate the over-sells.
+    const accts: Account[] = [
+      { id: 'k401', name: '401k', institution: 'Empower', type: 'FOUR_OH_ONE_K',
+        rmdDueUsd: 2_000,
+        allowedAssetClasses: [] },
+    ];
+    const positions: Position[] = [
+      { accountId: 'k401', ticker: 'FDKLX', marketValue: 100_000 },
+      { accountId: 'k401', ticker: 'FXAIX', marketValue:  20_000 },
+    ];
+
+    it('emits BLENDED_FUND_OVERSELL when an over-sold class has no buy-back path', () => {
+      const r = rebalance(accts, positions, SIMPLE_STRAT, {}, TDF, 0, 0);
+      const oversells = r.flags.filter(f => f.kind === 'BLENDED_FUND_OVERSELL');
+      expect(oversells.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('locked blended fund stays frozen even in drawdown', () => {
+    const accts: Account[] = [
+      { id: 'k401', name: '401k', institution: 'Empower', type: 'FOUR_OH_ONE_K', rmdDueUsd: 5_000 },
+      { id: 'schwab', name: 'Schwab', institution: 'Schwab', type: 'TAXABLE' },
+    ];
+    const positions: Position[] = [
+      { accountId: 'k401',   ticker: 'FDKLX', marketValue: 100_000, locked: true },
+      { accountId: 'schwab', ticker: 'MUNY',  marketValue: 50_000 },
+    ];
+
+    it('locked blended fund is never sold, even for an RMD', () => {
+      const r = rebalance(accts, positions, SIMPLE_STRAT, {}, TDF, 0, 0);
+      const fundTrades = r.trades.filter(t => t.accountId === 'k401' && t.forceTicker === 'FDKLX');
+      expect(fundTrades).toHaveLength(0);
+    });
+  });
+
+  describe('BLENDED_FUND_SOLD disclosure', () => {
+    // Whenever the engine touches a blended fund, it surfaces a one-per-fund
+    // informational flag carrying the total fund-level sale amount. Users see
+    // this so they know the engine sells but doesn't buy blended funds —
+    // repeated rebalances will trend them out of the position over time.
+    const accts: Account[] = [
+      { id: 'k401', name: '401k', institution: 'Empower', type: 'FOUR_OH_ONE_K',
+        availableTickers: ['FDKLX', 'FXAIX', 'VXUS', 'BND'] },
+    ];
+    const positions: Position[] = [
+      { accountId: 'k401', ticker: 'FDKLX', marketValue: 100_000 },
+    ];
+    const AGGRESSIVE: Strategy = {
+      ...SIMPLE_STRAT,
+      targets: {
+        US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.80, US_MID_CAP: 0, US_SMALL_CAP: 0,
+        DEVELOPED_INTL:  0.15, EMERGING_INTL: 0,
+        FIXED_INCOME:    0.05, ALTERNATIVES: 0, CASH: 0,
+      },
+      toleranceAbs: 0.05,
+    };
+
+    it('emits exactly one BLENDED_FUND_SOLD flag per touched fund', () => {
+      const r = rebalance(accts, positions, AGGRESSIVE, {}, TDF, 0, 0);
+      const sold = r.flags.filter(f => f.kind === 'BLENDED_FUND_SOLD');
+      expect(sold).toHaveLength(1);
+      expect(sold[0].kind === 'BLENDED_FUND_SOLD' && sold[0].ticker).toBe('FDKLX');
+      expect(sold[0].kind === 'BLENDED_FUND_SOLD' && sold[0].accountId).toBe('k401');
+      expect(sold[0].kind === 'BLENDED_FUND_SOLD' && sold[0].amountUsd).toBeGreaterThan(0);
+    });
+
+    it('does not emit BLENDED_FUND_SOLD when the fund is untouched', () => {
+      const STRAT_WITH_TOL: Strategy = { ...SIMPLE_STRAT, toleranceAbs: 0.05 };
+      const onTargetAccts: Account[] = [{ id: 'k401', name: '401k', institution: 'Empower', type: 'FOUR_OH_ONE_K' }];
+      const r = rebalance(onTargetAccts, positions, STRAT_WITH_TOL, {}, TDF, 0, 0);
+      expect(r.flags.some(f => f.kind === 'BLENDED_FUND_SOLD')).toBe(false);
+    });
+  });
+
+  describe('blended fund in taxable — TAXABLE_SALE flags per sub-class', () => {
+    const accts: Account[] = [
+      { id: 'schwab', name: 'Schwab', institution: 'Schwab', type: 'TAXABLE', rmdDueUsd: 0 },
+    ];
+    const positions: Position[] = [
+      { accountId: 'schwab', ticker: 'FDKLX', marketValue: 100_000 },
+    ];
+
+    it('emits TAXABLE_SALE per sub-class with proportional amounts', () => {
+      const r = rebalance(accts, positions, SIMPLE_STRAT, {}, TDF, 0, 5_000);
+      const ts = r.flags.filter(f => f.kind === 'TAXABLE_SALE');
+      const subClasses = new Set(ts.map(f => f.kind === 'TAXABLE_SALE' ? f.assetClass : null));
+      expect(subClasses.has('US_LARGE_CAP')).toBe(true);
+      expect(subClasses.has('DEVELOPED_INTL')).toBe(true);
+      expect(subClasses.has('FIXED_INCOME')).toBe(true);
+    });
+  });
+});

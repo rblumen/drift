@@ -268,6 +268,8 @@ function buildHtml(result: RebalanceResult, accounts: Account[], resolvedTrades:
     ...flags.filter(f => f.kind === 'REVISIT_PLACEMENT'),
     ...flags.filter(f => f.kind === 'UNMAPPED_HOLDING'),
     ...flags.filter(f => f.kind === 'TAXABLE_SALE'),
+    ...flags.filter(f => f.kind === 'BLENDED_FUND_OVERSELL'),
+    ...flags.filter(f => f.kind === 'BLENDED_FUND_SOLD'),
     ...flags.filter(f => f.kind === 'PLACEMENT_SPILLOVER'),
     ...flags.filter(f => f.kind === 'NO_ELIGIBLE_ACCOUNT'),
   ];
@@ -283,6 +285,10 @@ function buildHtml(result: RebalanceResult, accounts: Account[], resolvedTrades:
       return `<div class="flag flag-warn"><strong>Unmapped holding:</strong> Ticker <code>${esc(f.ticker)}</code> has no asset class — excluded from rebalance. Assign it in the Classify tab.</div>`;
     if (f.kind === 'TAXABLE_SALE')
       return `<div class="flag flag-warn"><strong>Taxable sale:</strong> Selling ${fmtUsd(f.amountUsd)} of ${esc(AC_LABEL[f.assetClass])} in <em>${esc(acctName(f.accountId))}</em> may trigger a capital gain. Review before executing.</div>`;
+    if (f.kind === 'BLENDED_FUND_SOLD')
+      return `<div class="flag flag-blue"><strong>Blended fund sold:</strong> ${fmtUsd(f.amountUsd)} of <code>${esc(f.ticker)}</code> in <em>${esc(acctName(f.accountId))}</em> sold proportionally to fix the household allocation. The engine sells blended funds when drift demands but does not buy them back, so repeated rebalances will trend your allocation away from this position.</div>`;
+    if (f.kind === 'BLENDED_FUND_OVERSELL')
+      return `<div class="flag flag-red"><strong>Blended fund over-sell:</strong> Selling <code>${esc(f.ticker)}</code> in <em>${esc(acctName(f.accountId))}</em> forced an extra ${fmtUsd(f.amountUsd)} of ${esc(AC_LABEL[f.assetClass])} to be sold, with no non-blended ticker available to buy it back.</div>`;
     if (f.kind === 'PLACEMENT_SPILLOVER')
       return `<div class="flag flag-blue"><strong>Placement spillover:</strong> ${fmtUsd(f.amountUsd)} of ${esc(AC_LABEL[f.assetClass])} placed in a ${esc(f.bucket.toLowerCase().replace('_', '-'))} account (preferred bucket full).</div>`;
     if (f.kind === 'NO_ELIGIBLE_ACCOUNT')

@@ -6,15 +6,16 @@ import type { ClassifyFn } from './classify';
 const TOTAL_MARKET_EXPANSION: AssetClass[] = ['US_LARGE_CAP', 'US_MID_CAP', 'US_SMALL_CAP'];
 
 // Returns every asset class a ticker covers, accounting for US_TOTAL_MARKET
-// expansion and explicit decompositions. Decomposed positions are always locked
-// in rollup (they can't be traded as sub-components), so we skip them here —
-// no trades will exist for them and they'd only create false ambiguity.
+// expansion and explicit decompositions. Blended funds (issue #40) return their
+// decomposition's sub-classes so per-class sell trades merge into one resolved
+// trade against the blended-fund ticker — same merge path as US_TOTAL_MARKET.
 function coveredClasses(
   ticker: string,
   classify: ClassifyFn,
   decompositions: Record<string, FundDecomposition>,
 ): AssetClass[] {
-  if (decompositions[ticker.toUpperCase()]) return []; // always frozen — skip
+  const decomp = decompositions[ticker.toUpperCase()];
+  if (decomp) return Object.keys(decomp) as AssetClass[];
   const ac = classify(ticker);
   if (ac === null) return [];
   return ac === 'US_TOTAL_MARKET' ? TOTAL_MARKET_EXPANSION : [ac];
@@ -69,7 +70,21 @@ export function resolveTradeVehicles(
     const unresolvable: Trade[] = [];
 
     for (const trade of accountTrades) {
-      const tickers = classTickers.get(trade.assetClass) ?? [];
+      // Honor blended-fund routing hints (#40). forceTicker pins the trade to a
+      // specific ticker (used for sub-class sells that must execute via a
+      // specific blended fund). excludeTickers strips candidates (used on the
+      // buy-back side so compensation doesn't loop back to the blended fund).
+      if (trade.forceTicker) {
+        const t = trade.forceTicker;
+        if (!tickerTrades.has(t)) tickerTrades.set(t, []);
+        tickerTrades.get(t)!.push(trade);
+        continue;
+      }
+      let tickers = classTickers.get(trade.assetClass) ?? [];
+      if (trade.excludeTickers && trade.excludeTickers.length > 0) {
+        const ex = new Set(trade.excludeTickers);
+        tickers = tickers.filter(t => !ex.has(t));
+      }
       if (tickers.length === 1) {
         if (!tickerTrades.has(tickers[0])) tickerTrades.set(tickers[0], []);
         tickerTrades.get(tickers[0])!.push(trade);

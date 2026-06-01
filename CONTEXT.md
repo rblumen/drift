@@ -83,7 +83,7 @@ src/
 ├── App.tsx
 └── data/
     ├── assetclass-map.json      # seed ticker → AssetClass (committed; no real data)
-    ├── targetDateFunds.ts       # TDF decomposition map; auto-splits TDF holdings by asset class
+    ├── targetDateFunds.ts       # TDF-specific detection (glide-path estimates for blended-fund decomposition)
     ├── sample-portfolio.json    # synthetic fixture for demo mode (?demo URL param)
     └── fixtures/                # synthetic CSV exports (schwab, fidelity, empower samples)
 ```

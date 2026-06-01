@@ -27,6 +27,13 @@ export interface RollupResult {
   // Market value of individually-locked positions, keyed by account then class.
   // Does NOT include account-level locking (handled in rebalance).
   lockedValueByAccount: Record<string, Record<AssetClass, number>>;
+  // Per-(account, class) value contributed by non-locked blended funds (issue #40).
+  // Blended-fund value lives in BOTH this map AND lockedValueByAccount so callers
+  // that don't know about #40 still see immovability. rebalance.ts subtracts this
+  // back out of lockedValueByAccount before computing free capacity, treating
+  // blended-fund value as tradeable, and Step 8.7 synthesizes the proportional
+  // sells with composition-preserving compensation.
+  blendedValueByAccount: Record<string, Record<AssetClass, number>>;
   unmappedTickers: string[];
 }
 
@@ -39,6 +46,7 @@ export function rollup(
   const currentValue = zeroByClass();
   const currentValueByAccount: Record<string, Record<AssetClass, number>> = {};
   const lockedValueByAccount: Record<string, Record<AssetClass, number>> = {};
+  const blendedValueByAccount: Record<string, Record<AssetClass, number>> = {};
   const accountValues: Record<string, number> = {};
   const seenUnmapped = new Set<string>();
   const unmappedTickers: string[] = [];
@@ -46,20 +54,26 @@ export function rollup(
   for (const acct of accounts) {
     currentValueByAccount[acct.id] = zeroByClass();
     lockedValueByAccount[acct.id]  = zeroByClass();
+    blendedValueByAccount[acct.id] = zeroByClass();
     accountValues[acct.id] = acct.newCash ?? 0;
   }
 
   for (const pos of positions) {
-    // Check for decomposition first (target date funds, etc.).
+    // Check for decomposition first (blended funds: TDFs, balanced funds, etc.).
     const decomp = decompositions[pos.ticker.toUpperCase()];
     if (decomp) {
-      // Split value across asset classes; always treat as frozen.
+      // Split value across asset classes. The position is added to both
+      // lockedValueByAccount and blendedValueByAccount (issue #40): rebalance.ts
+      // lifts the lock by subtracting blendedValueByAccount, exposing the fund
+      // to Step 8.7's composition-preserving sell synthesis. pos.locked = true
+      // suppresses the blendedValueByAccount entry, restoring hard immovability.
       accountValues[pos.accountId] = (accountValues[pos.accountId] ?? 0) + pos.marketValue;
       for (const [ac, weight] of Object.entries(decomp) as [AssetClass, number][]) {
         const portion = pos.marketValue * weight;
         currentValue[ac] += portion;
         currentValueByAccount[pos.accountId][ac] += portion;
-        lockedValueByAccount[pos.accountId][ac] += portion; // always frozen — can't trade sub-components
+        lockedValueByAccount[pos.accountId][ac] += portion;
+        if (!pos.locked) blendedValueByAccount[pos.accountId][ac] += portion;
       }
       continue; // skip the classify path
     }
@@ -84,8 +98,8 @@ export function rollup(
   }
 
   // Post-process: redistribute any US_TOTAL_MARKET value into cap sub-classes.
-  // This handles all sources uniformly: direct classifications, TDF decompositions
-  // that emit US_TOTAL_MARKET, and user custom decompositions.
+  // This handles all sources uniformly: direct classifications, blended-fund
+  // decompositions that emit US_TOTAL_MARKET, and user custom decompositions.
   const utmTotal = currentValue.US_TOTAL_MARKET;
   if (utmTotal > 0) {
     for (const [subClass, weight] of Object.entries(RUSSELL_CAP_SPLIT) as [AssetClass, number][]) {
@@ -109,6 +123,14 @@ export function rollup(
         }
         lockedValueByAccount[acctId].US_TOTAL_MARKET = 0;
       }
+
+      const utmBlended = blendedValueByAccount[acctId].US_TOTAL_MARKET;
+      if (utmBlended > 0) {
+        for (const [subClass, weight] of Object.entries(RUSSELL_CAP_SPLIT) as [AssetClass, number][]) {
+          blendedValueByAccount[acctId][subClass] += utmBlended * weight;
+        }
+        blendedValueByAccount[acctId].US_TOTAL_MARKET = 0;
+      }
     }
   }
 
@@ -116,6 +138,6 @@ export function rollup(
 
   return {
     householdValue, currentValue, currentValueByAccount,
-    accountValues, lockedValueByAccount, unmappedTickers,
+    accountValues, lockedValueByAccount, blendedValueByAccount, unmappedTickers,
   };
 }
