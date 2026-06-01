@@ -272,6 +272,16 @@ function synthesizeBlendedFundSells(
       r = Math.min(1, r);
       if (r * B.marketValue < strategy.minTradeUsd) continue;
 
+      // Fund-level sale total — surfaced as an informational flag so the user
+      // sees that this run touched a blended-fund position. The engine has no
+      // symmetric buy mechanism for blended funds, so repeated rebalances will
+      // trend the allocation away from this position; the flag makes that
+      // asymmetry visible at the moment of impact.
+      flags.push({
+        kind: 'BLENDED_FUND_SOLD',
+        accountId: A.id, ticker: B.ticker, amountUsd: r * B.marketValue,
+      });
+
       // Emit forced sells and compensating buys per sub-class.
       for (const ac of subClasses) {
         const w = decomp[ac] ?? 0;

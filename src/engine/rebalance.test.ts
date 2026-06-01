@@ -2149,6 +2149,45 @@ describe('blended-fund sells — issue #40', () => {
     });
   });
 
+  describe('BLENDED_FUND_SOLD disclosure', () => {
+    // Whenever the engine touches a blended fund, it surfaces a one-per-fund
+    // informational flag carrying the total fund-level sale amount. Users see
+    // this so they know the engine sells but doesn't buy blended funds —
+    // repeated rebalances will trend them out of the position over time.
+    const accts: Account[] = [
+      { id: 'k401', name: '401k', institution: 'Empower', type: 'FOUR_OH_ONE_K',
+        availableTickers: ['FDKLX', 'FXAIX', 'VXUS', 'BND'] },
+    ];
+    const positions: Position[] = [
+      { accountId: 'k401', ticker: 'FDKLX', marketValue: 100_000 },
+    ];
+    const AGGRESSIVE: Strategy = {
+      ...SIMPLE_STRAT,
+      targets: {
+        US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.80, US_MID_CAP: 0, US_SMALL_CAP: 0,
+        DEVELOPED_INTL:  0.15, EMERGING_INTL: 0,
+        FIXED_INCOME:    0.05, ALTERNATIVES: 0, CASH: 0,
+      },
+      toleranceAbs: 0.05,
+    };
+
+    it('emits exactly one BLENDED_FUND_SOLD flag per touched fund', () => {
+      const r = rebalance(accts, positions, AGGRESSIVE, {}, TDF, 0, 0);
+      const sold = r.flags.filter(f => f.kind === 'BLENDED_FUND_SOLD');
+      expect(sold).toHaveLength(1);
+      expect(sold[0].kind === 'BLENDED_FUND_SOLD' && sold[0].ticker).toBe('FDKLX');
+      expect(sold[0].kind === 'BLENDED_FUND_SOLD' && sold[0].accountId).toBe('k401');
+      expect(sold[0].kind === 'BLENDED_FUND_SOLD' && sold[0].amountUsd).toBeGreaterThan(0);
+    });
+
+    it('does not emit BLENDED_FUND_SOLD when the fund is untouched', () => {
+      const STRAT_WITH_TOL: Strategy = { ...SIMPLE_STRAT, toleranceAbs: 0.05 };
+      const onTargetAccts: Account[] = [{ id: 'k401', name: '401k', institution: 'Empower', type: 'FOUR_OH_ONE_K' }];
+      const r = rebalance(onTargetAccts, positions, STRAT_WITH_TOL, {}, TDF, 0, 0);
+      expect(r.flags.some(f => f.kind === 'BLENDED_FUND_SOLD')).toBe(false);
+    });
+  });
+
   describe('blended fund in taxable — TAXABLE_SALE flags per sub-class', () => {
     const accts: Account[] = [
       { id: 'schwab', name: 'Schwab', institution: 'Schwab', type: 'TAXABLE', rmdDueUsd: 0 },

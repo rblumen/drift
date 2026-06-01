@@ -311,6 +311,12 @@ export function ClassifyPanel({
             the fund (with compensating buys in other tickers) only when the household drift demands it.
             Use the position-level lock if you want a specific blended-fund holding excluded entirely.
           </p>
+          <p className="mt-2 text-amber-700">
+            <strong>Asymmetry to be aware of:</strong> the engine will <em>sell</em> a blended fund when
+            drift demands but has no symmetric mechanism to <em>buy</em> one back. Over repeated rebalances
+            your allocation will gradually trend away from any blended fund the engine has touched.
+            If you'd rather preserve a specific blended-fund holding, lock the position.
+          </p>
         </HelpSection>
       </HelpBox>
 

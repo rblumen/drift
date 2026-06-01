@@ -194,4 +194,10 @@ export type Flag =
    *  tried to compensate by routing a buy elsewhere; this flag fires when no
    *  eligible destination existed for the over-sold portion, so the household
    *  allocation drifts. amountUsd is the uncompensated over-sell. */
-  | { kind: 'BLENDED_FUND_OVERSELL'; accountId: string; ticker: string; assetClass: AssetClass; amountUsd: number };
+  | { kind: 'BLENDED_FUND_OVERSELL'; accountId: string; ticker: string; assetClass: AssetClass; amountUsd: number }
+  /** Blended funds (#40): informational disclosure that the engine sold part of
+   *  a blended fund this run. The engine has no symmetric buy mechanism for
+   *  blended funds, so repeated rebalances will trend the allocation away from
+   *  this position over time. Use position-level locking if you want a specific
+   *  blended-fund holding preserved. amountUsd is the fund-level sale total. */
+  | { kind: 'BLENDED_FUND_SOLD'; accountId: string; ticker: string; amountUsd: number };
