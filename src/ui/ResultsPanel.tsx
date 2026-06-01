@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Account, AssetClass, Flag, RebalanceResult, ResolvedTrade } from '../engine/types';
 import { ALL_ASSET_CLASSES } from '../engine/types';
+import { withdrawalPriorityOf, isWithdrawalEligible } from '../engine/rebalance';
 import { AC_COLOR, AC_LABEL, ACCT_TYPE_LABEL, fmtUsd, fmtPct, fmtDelta } from './fmt';
 import { PieChart } from './PieChart';
 import type { PieSlice } from './PieChart';
@@ -12,6 +13,7 @@ interface Props {
   accounts: Account[];
   resolvedTrades: ResolvedTrade[];
   freeCash: number;
+  plannedWithdrawal: number;
 }
 
 // ── Flag banners ──────────────────────────────────────────────────────────────
@@ -107,6 +109,17 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
         {fmtUsd(flag.amountUsd)} of household free cash could not be distributed — every eligible
         account is closed, locked, or has hit its deposit limit. Open deposits or raise a limit on
         at least one account to deploy it.
+      </div>
+    );
+  }
+
+  if (flag.kind === 'WITHDRAWAL_SHORTFALL') {
+    return (
+      <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
+        <strong>Withdrawal not fully funded:</strong>{' '}
+        {fmtUsd(flag.amountUsd)} of the additional withdrawal could not be raised — every
+        withdrawal-eligible account is restricted, locked, or has sold all it can. Mark another
+        account Eligible to cover it.
       </div>
     );
   }
@@ -297,7 +310,7 @@ function ConcentricDonutChart({
 // ── Contribution-first funding breakdown ──────────────────────────────────────
 
 function ContributionSummary({ summary }: { summary: RebalanceResult['contributionSummary'] }) {
-  const { newCashDeployed, sellsUsd } = summary;
+  const { newCashDeployed, sellsUsd, withdrawalRaised } = summary;
   // Nothing meaningful to show when there are no trades.
   if (newCashDeployed <= 0 && sellsUsd <= 0) return null;
 
@@ -314,6 +327,12 @@ function ContributionSummary({ summary }: { summary: RebalanceResult['contributi
           <div className="text-lg font-semibold text-amber-800 tabular-nums">{fmtUsd(sellsUsd)}</div>
         </div>
       </div>
+      {withdrawalRaised > 0 && (
+        <p className="text-xs text-amber-700">
+          Net cash raised by this drawdown: <strong>{fmtUsd(withdrawalRaised)}</strong> (sales in
+          excess of buys), taken RMDs-first then in account drain-priority order.
+        </p>
+      )}
       <p className="text-xs text-gray-500">
         New contributions are directed to underweight classes first, avoiding sales where possible.
         Taking dividends and capital-gain distributions in cash (not auto-reinvested) and directing
@@ -325,9 +344,9 @@ function ContributionSummary({ summary }: { summary: RebalanceResult['contributi
 
 // ── Main panel ────────────────────────────────────────────────────────────────
 
-export function ResultsPanel({ result, accounts, resolvedTrades, freeCash }: Props) {
+export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plannedWithdrawal }: Props) {
   const { householdValue, currentWeights, targetWeights, projectedWeights,
-          currentValueByAccount, trades, flags, contributionSummary } = result;
+          currentValueByAccount, withdrawalByAccount, trades, flags, contributionSummary } = result;
 
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
@@ -342,6 +361,7 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash }: Pro
   // Separate flags by priority
   const importantFlags = [
     ...flags.filter(f => f.kind === 'EXCESS_CASH'),
+    ...flags.filter(f => f.kind === 'WITHDRAWAL_SHORTFALL'),
     ...flags.filter(f => f.kind === 'NO_ELIGIBLE_ACCOUNT'),
     ...flags.filter(f => f.kind === 'PROJECTED_OFF_TARGET'),
     ...flags.filter(f => f.kind === 'REVISIT_PLACEMENT'),
@@ -365,6 +385,20 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash }: Pro
     })
     .filter(r => r.ownCash > 0 || freeCash > 0);
   const showCashSummary = freeCash > 0 || accounts.some(a => a.newCash);
+
+  // Per-account drawdown summary for the spending plan, in drain-priority order.
+  // withdrawn = cash that leaves the account (RMD + discretionary), which may be
+  // met by selling or from idle cash; rmd = the configured RMD portion.
+  const totalRmd = accounts.reduce((s, a) => s + (a.rmdDueUsd ?? 0), 0);
+  const totalWithdrawal = totalRmd + plannedWithdrawal; // Σ RMD + additional
+  const showWithdrawalPlan = totalWithdrawal > 0;
+  const withdrawalRows = accounts
+    .filter(a => !a.locked)
+    .map(a => ({ account: a, withdrawn: withdrawalByAccount[a.id] ?? 0, rmd: a.rmdDueUsd ?? 0 }))
+    .filter(r => r.withdrawn > 0.5 || r.rmd > 0)
+    .sort((x, y) => withdrawalPriorityOf(x.account) - withdrawalPriorityOf(y.account)
+      || x.account.name.localeCompare(y.account.name));
+  const totalRaised = withdrawalRows.reduce((s, r) => s + r.withdrawn, 0);
 
   // Group trades by account; include any account that has trades OR existing positions.
   // Accounts are ordered as they appear in the accounts array.
@@ -410,7 +444,7 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash }: Pro
           </span>
         </div>
         <button
-          onClick={() => downloadReport(result, accounts, resolvedTrades, freeCash)}
+          onClick={() => downloadReport(result, accounts, resolvedTrades, freeCash, plannedWithdrawal)}
           title="Download interactive HTML report with trade checklist"
           className="text-xs text-gray-500 hover:text-gray-800 border border-gray-200 rounded px-2 py-1 hover:bg-gray-50 transition-colors shrink-0"
         >
@@ -473,6 +507,11 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash }: Pro
             Household free cash could not be fully distributed because every eligible account is closed,
             locked, or has hit its deposit limit. Open deposits or raise a limit on at least one account
             in the Accounts tab.
+          </HelpDef>
+          <HelpDef term="WITHDRAWAL_SHORTFALL (amber)">
+            The additional withdrawal could not be fully raised because every withdrawal-eligible account
+            is restricted, locked, or has sold all it can. Mark another account Eligible in the Accounts
+            tab to cover it.
           </HelpDef>
         </HelpSection>
 
@@ -549,8 +588,60 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash }: Pro
                           : 'bg-green-100 text-green-700'
                       }`}>
                         {!depositsOpen ? 'Closed'
-                          : limited ? `Limited · ${fmtUsd(a.depositLimitUsd!)}`
+                          : limited ? `Open · ${fmtUsd(a.depositLimitUsd!)} cap`
                           : 'Open'}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Spending / withdrawal plan */}
+      {showWithdrawalPlan && (
+        <div className="overflow-hidden border border-amber-200 rounded-lg">
+          <div className="bg-amber-50 px-4 py-2 text-xs font-medium text-amber-900 flex items-center justify-between">
+            <span>Spending / withdrawal plan</span>
+            {totalWithdrawal > 0 && (
+              <span className="text-amber-700">
+                {fmtUsd(totalRaised)} raised of {fmtUsd(totalWithdrawal)} planned
+              </span>
+            )}
+          </div>
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wide">
+              <tr>
+                <th className="px-4 py-2 text-left">Account</th>
+                <th className="px-4 py-2 text-right">RMD due</th>
+                <th className="px-4 py-2 text-right">Withdrawn</th>
+                <th className="px-4 py-2 text-right">Withdrawals</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {withdrawalRows.map(({ account: a, withdrawn, rmd }) => {
+                const required = rmd > 0;
+                const restricted = !required && !isWithdrawalEligible(a);
+                return (
+                  <tr key={a.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-2 font-medium text-gray-800">{a.name}</td>
+                    <td className="px-4 py-2 text-right tabular-nums text-gray-600">
+                      {rmd > 0 ? <span className="text-blue-700">{fmtUsd(rmd)}</span> : '—'}
+                    </td>
+                    <td className="px-4 py-2 text-right tabular-nums font-medium">
+                      {withdrawn > 0.5
+                        ? <span className="text-amber-700">−{fmtUsd(withdrawn)}</span>
+                        : <span className="text-gray-400">—</span>}
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                        restricted ? 'bg-red-100 text-red-600'
+                          : required ? 'bg-blue-100 text-blue-700'
+                          : 'bg-green-100 text-green-700'
+                      }`}>
+                        {restricted ? 'Restricted' : required ? 'Required' : 'Eligible'}
                       </span>
                     </td>
                   </tr>

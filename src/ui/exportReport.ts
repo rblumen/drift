@@ -16,6 +16,7 @@
 
 import type { Account, AssetClass, RebalanceResult, ResolvedTrade } from '../engine/types';
 import { ALL_ASSET_CLASSES } from '../engine/types';
+import { withdrawalPriorityOf, isWithdrawalEligible } from '../engine/rebalance';
 import { AC_COLOR, AC_LABEL, ACCT_TYPE_LABEL, fmtUsd, fmtPct, fmtDelta } from './fmt';
 
 function esc(s: string): string {
@@ -244,10 +245,10 @@ function script(reportId: string): string {
 
 // ── Main builder ──────────────────────────────────────────────────────────────
 
-function buildHtml(result: RebalanceResult, accounts: Account[], resolvedTrades: ResolvedTrade[], freeCash: number, now: Date): string {
+function buildHtml(result: RebalanceResult, accounts: Account[], resolvedTrades: ResolvedTrade[], freeCash: number, plannedWithdrawal: number, now: Date): string {
   const {
     householdValue, currentWeights, targetWeights, projectedWeights,
-    currentValueByAccount, trades, flags,
+    currentValueByAccount, withdrawalByAccount, trades, flags,
   } = result;
 
   const dateStr = now.toLocaleDateString('en-US', {
@@ -263,6 +264,7 @@ function buildHtml(result: RebalanceResult, accounts: Account[], resolvedTrades:
 
   const orderedFlags = [
     ...flags.filter(f => f.kind === 'EXCESS_CASH'),
+    ...flags.filter(f => f.kind === 'WITHDRAWAL_SHORTFALL'),
     ...flags.filter(f => f.kind === 'REVISIT_PLACEMENT'),
     ...flags.filter(f => f.kind === 'UNMAPPED_HOLDING'),
     ...flags.filter(f => f.kind === 'TAXABLE_SALE'),
@@ -272,7 +274,9 @@ function buildHtml(result: RebalanceResult, accounts: Account[], resolvedTrades:
 
   const flagsHtml = orderedFlags.map(f => {
     if (f.kind === 'EXCESS_CASH')
-      return `<div class="flag flag-warn"><strong>Free cash undeployed:</strong> ${fmtUsd(f.amountUsd)} of household free cash could not be distributed — all accounts have deposits closed or are locked.</div>`;
+      return `<div class="flag flag-warn"><strong>Free cash undeployed:</strong> ${fmtUsd(f.amountUsd)} of household free cash could not be distributed — every eligible account is closed, locked, or has hit its deposit limit.</div>`;
+    if (f.kind === 'WITHDRAWAL_SHORTFALL')
+      return `<div class="flag flag-warn"><strong>Withdrawal not fully funded:</strong> ${fmtUsd(f.amountUsd)} of the additional withdrawal could not be raised — every withdrawal-eligible account is restricted, locked, or has sold all it can.</div>`;
     if (f.kind === 'REVISIT_PLACEMENT')
       return `<div class="flag flag-orange"><strong>Revisit placement strategy.</strong> Taxable accounts hold ${fmtPct(f.taxableShare)} of household value, exceeding the ${fmtPct(f.fixedIncomeTarget)} fixed-income target. Equities must land in taxable accounts.</div>`;
     if (f.kind === 'UNMAPPED_HOLDING')
@@ -298,7 +302,7 @@ function buildHtml(result: RebalanceResult, accounts: Account[], resolvedTrades:
     const depositBadge = !depositsOpen
       ? `<span class="badge sell">Closed</span>`
       : limited
-      ? `<span class="badge limited">Limited · ${esc(fmtUsd(a.depositLimitUsd!))}</span>`
+      ? `<span class="badge limited">Open · ${esc(fmtUsd(a.depositLimitUsd!))} cap</span>`
       : `<span class="badge buy">Open</span>`;
     return `<tr>
       <td style="font-weight:600;color:#111827">${esc(a.name)}</td>
@@ -324,6 +328,49 @@ function buildHtml(result: RebalanceResult, accounts: Account[], resolvedTrades:
         <th class="num">Deposits</th>
       </tr></thead>
       <tbody>${cashRows}</tbody>
+    </table>
+  </div>` : '';
+
+  // ── Spending / withdrawal plan ──────────────────────────────────────────────
+  const totalRmd = accounts.reduce((s, a) => s + (a.rmdDueUsd ?? 0), 0);
+  const totalWithdrawal = totalRmd + plannedWithdrawal; // Σ RMD + additional
+  const showWithdrawalPlan = totalWithdrawal > 0;
+  const wdRowData = accounts.filter(a => !a.locked)
+    .map(a => ({ account: a, withdrawn: withdrawalByAccount[a.id] ?? 0, rmd: a.rmdDueUsd ?? 0 }))
+    .filter(r => r.withdrawn > 0.5 || r.rmd > 0)
+    .sort((x, y) => withdrawalPriorityOf(x.account) - withdrawalPriorityOf(y.account)
+      || x.account.name.localeCompare(y.account.name));
+  const totalRaised = wdRowData.reduce((s, r) => s + r.withdrawn, 0);
+  const wdRows = wdRowData.map(({ account: a, withdrawn, rmd }) => {
+    const required = rmd > 0;
+    const restricted = !required && !isWithdrawalEligible(a);
+    const badge = restricted
+      ? `<span class="badge sell">Restricted</span>`
+      : required
+      ? `<span class="badge limited">Required</span>`
+      : `<span class="badge buy">Eligible</span>`;
+    return `<tr>
+      <td style="font-weight:600;color:#111827">${esc(a.name)}</td>
+      <td class="num" style="color:${rmd > 0 ? '#1d4ed8' : '#9ca3af'}">${rmd > 0 ? esc(fmtUsd(rmd)) : '—'}</td>
+      <td class="num" style="color:${withdrawn > 0.5 ? '#b45309' : '#9ca3af'}">${withdrawn > 0.5 ? '−' + esc(fmtUsd(withdrawn)) : '—'}</td>
+      <td class="num">${badge}</td>
+    </tr>`;
+  }).join('');
+
+  const withdrawalSection = showWithdrawalPlan ? `
+  <div style="border:1px solid #fde68a;border-radius:8px;overflow:hidden;margin-bottom:16px">
+    <div style="background:#fffbeb;padding:8px 16px;font-size:12px;font-weight:600;color:#92400e;display:flex;justify-content:space-between;align-items:center">
+      <span>Spending / withdrawal plan</span>
+      <span style="color:#b45309">${esc(fmtUsd(totalRaised))} raised of ${esc(fmtUsd(totalWithdrawal))} planned</span>
+    </div>
+    <table>
+      <thead><tr>
+        <th>Account</th>
+        <th class="num">RMD due</th>
+        <th class="num">Withdrawn</th>
+        <th class="num">Withdrawals</th>
+      </tr></thead>
+      <tbody>${wdRows}</tbody>
     </table>
   </div>` : '';
 
@@ -501,6 +548,9 @@ function buildHtml(result: RebalanceResult, accounts: Account[], resolvedTrades:
   <!-- Cash deployment -->
   ${cashSection}
 
+  <!-- Spending / withdrawal plan -->
+  ${withdrawalSection}
+
   <!-- Allocation table -->
   ${allocSection}
 
@@ -520,9 +570,9 @@ ${script(reportId)}
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-export function downloadReport(result: RebalanceResult, accounts: Account[], resolvedTrades: ResolvedTrade[], freeCash: number): void {
+export function downloadReport(result: RebalanceResult, accounts: Account[], resolvedTrades: ResolvedTrade[], freeCash: number, plannedWithdrawal: number): void {
   const now  = new Date();
-  const html = buildHtml(result, accounts, resolvedTrades, freeCash, now);
+  const html = buildHtml(result, accounts, resolvedTrades, freeCash, plannedWithdrawal, now);
   const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');

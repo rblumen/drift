@@ -66,6 +66,20 @@ export interface Account {
    *  free-cash distribution. A static "remaining capacity" figure the user maintains;
    *  there is no calendar/year awareness. */
   depositLimitUsd?: number;
+  /** Withdrawal-side mirror of acceptsDeposits (issue #14). When false, the
+   *  account is Restricted: no *additional* (discretionary) drawdown sells are
+   *  routed here. When undefined the engine derives a default from the account
+   *  type — taxable is eligible, tax-advantaged is restricted (early-withdrawal
+   *  penalties). RMDs (rmdDueUsd) are still taken regardless of this flag. */
+  acceptsWithdrawals?: boolean;
+  /** Drain order for the additional (discretionary) drawdown — lower is drained
+   *  first. Seeded from the account type (taxable → traditional → Roth) but
+   *  user-editable to deviate. */
+  withdrawalPriority?: number;
+  /** Required Minimum Distribution due this year, entered manually (no age model).
+   *  Taken first, before any additional drawdown, regardless of eligibility; added
+   *  on top of the additional amount to form the total withdrawal. */
+  rmdDueUsd?: number;
 }
 
 export interface Position {
@@ -126,6 +140,11 @@ export interface RebalanceResult {
   projectedWeights: Record<AssetClass, number>;
   /** Per-account current value by asset class (before trades). Excludes unmapped positions. */
   currentValueByAccount: Record<string, Record<AssetClass, number>>;
+  /** Per-account dollars withdrawn to fund a planned withdrawal / RMD (issue #14).
+   *  This is the cash that leaves each account — RMD plus discretionary draw — which
+   *  may be met by selling or from idle cash, so it is not the same as net sells.
+   *  Empty when not in drawdown mode. */
+  withdrawalByAccount: Record<string, number>;
   trades: Trade[];
   flags: Flag[];
   /** Contribution-first funding breakdown of the recommended trades.
@@ -137,6 +156,9 @@ export interface RebalanceResult {
     buysUsd: number;
     /** Total dollars sold across all accounts. */
     sellsUsd: number;
+    /** Cash raised by a net drawdown (sells in excess of buys). 0 unless a planned
+     *  withdrawal or RMD is being funded (issue #14). Mirror of newCashDeployed. */
+    withdrawalRaised: number;
   };
 }
 
@@ -154,4 +176,8 @@ export type Flag =
   /** Emitted when an OOT class's post-trade projected weight still exceeds toleranceAbs
    *  from its target. Indicates a hard constraint (locked positions above target,
    *  no eligible account, or minTradeUsd too large) that the engine could not overcome. */
-  | { kind: 'PROJECTED_OFF_TARGET'; assetClass: AssetClass; projectedWeight: number; targetWeight: number };
+  | { kind: 'PROJECTED_OFF_TARGET'; assetClass: AssetClass; projectedWeight: number; targetWeight: number }
+  /** Drawdown (#14): the additional withdrawal could not be fully funded — every
+   *  withdrawal-eligible account is restricted, locked, or has hit its sellable
+   *  capacity. amountUsd is the un-raisable remainder. */
+  | { kind: 'WITHDRAWAL_SHORTFALL'; amountUsd: number };
