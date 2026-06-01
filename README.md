@@ -31,9 +31,12 @@ npm run dev      # http://localhost:5173
 ### Other commands
 
 ```bash
-npm test         # Vitest unit tests (engine + ingest)
+npm test         # Vitest unit tests (engine + ingest), single run
+npm run test:ui  # same tests in a live browser dashboard (watch mode)
 npm run build    # production build → dist/
 ```
+
+`npm run test:ui` starts a Vitest server and prints a local URL (e.g. `http://localhost:51204/__vitest__/`) — open it to browse and re-run tests visually. It stays running in watch mode and re-runs on file changes; press `q` in the terminal to quit. Keep the terminal open while you use it: if the server stops, the browser tab shows **"Disconnected."** Run it from your own terminal so it stays alive.
 
 ---
 
