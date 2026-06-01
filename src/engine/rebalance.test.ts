@@ -2011,28 +2011,57 @@ describe('blended-fund sells — issue #40', () => {
     });
   });
 
-  describe('normal rebalance leaves the blended fund intact', () => {
-    // 401k holds $50k of FDKLX plus $55k of FXAIX (US_LARGE_CAP). Schwab is
-    // overweight FI. The engine should rebalance via MUNY + FXAIX without
-    // touching the TDF — its value is treated as immovable outside drawdown.
+  describe('drift within tolerance — blended fund untouched', () => {
+    // Household is already at target (FDKLX's 60/30/10 split lines up exactly
+    // with the strategy). No drift, no trades, no fund disturbance — the
+    // tolerance band naturally protects the fund when there's nothing to fix.
     const accts: Account[] = [
-      { id: 'k401',   name: '401k',  institution: 'Empower', type: 'FOUR_OH_ONE_K' },
-      { id: 'schwab', name: 'Schwab', institution: 'Schwab',  type: 'TAXABLE'       },
+      { id: 'k401', name: '401k', institution: 'Empower', type: 'FOUR_OH_ONE_K' },
     ];
     const positions: Position[] = [
-      { accountId: 'k401',   ticker: 'FDKLX', marketValue: 50_000 },
-      { accountId: 'k401',   ticker: 'FXAIX', marketValue: 55_000 },
-      { accountId: 'schwab', ticker: 'MUNY',  marketValue: 40_000 },
+      { accountId: 'k401', ticker: 'FDKLX', marketValue: 100_000 },
     ];
+    const STRAT_WITH_TOL: Strategy = { ...SIMPLE_STRAT, toleranceAbs: 0.05 };
 
-    it('does not pin any sell to FDKLX', () => {
-      const r = rebalance(accts, positions, SIMPLE_STRAT, {}, TDF, 0, 0);
+    it('does not touch the fund when drift is within tolerance', () => {
+      const r = rebalance(accts, positions, STRAT_WITH_TOL, {}, TDF, 0, 0);
       expect(r.trades.filter(t => t.forceTicker === 'FDKLX')).toHaveLength(0);
+      expect(r.flags.some(f => f.kind === 'BLENDED_FUND_OVERSELL')).toBe(false);
+    });
+  });
+
+  describe('large drift — engine sells the fund to fix the allocation', () => {
+    // 401k holds only FDKLX (60/30/10) but the strategy targets 80/15/5 — the
+    // user's TDF doesn't fit. The only path to the target is to sell the fund
+    // and reallocate. Without #40 the engine silently refused; now it acts.
+    // (The 401k menu carries non-blended tickers so the engine can route the
+    // compensating sub-class buys.)
+    const accts: Account[] = [
+      { id: 'k401', name: '401k', institution: 'Empower', type: 'FOUR_OH_ONE_K',
+        availableTickers: ['FDKLX', 'FXAIX', 'VXUS', 'BND'] },
+    ];
+    const positions: Position[] = [
+      { accountId: 'k401', ticker: 'FDKLX', marketValue: 100_000 },
+    ];
+    const AGGRESSIVE: Strategy = {
+      ...SIMPLE_STRAT,
+      targets: {
+        US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.80, US_MID_CAP: 0, US_SMALL_CAP: 0,
+        DEVELOPED_INTL:  0.15, EMERGING_INTL: 0,
+        FIXED_INCOME:    0.05, ALTERNATIVES: 0, CASH: 0,
+      },
+      toleranceAbs: 0.05,
+    };
+
+    it('emits forced sells against the blended fund when drift exceeds tolerance', () => {
+      const r = rebalance(accts, positions, AGGRESSIVE, {}, TDF, 0, 0);
+      const fundSells = r.trades.filter(t => t.forceTicker === 'FDKLX' && t.deltaUsd < 0);
+      expect(fundSells.length).toBeGreaterThan(0);
     });
 
-    it('emits no BLENDED_FUND_OVERSELL flag', () => {
-      const r = rebalance(accts, positions, SIMPLE_STRAT, {}, TDF, 0, 0);
-      expect(r.flags.some(f => f.kind === 'BLENDED_FUND_OVERSELL')).toBe(false);
+    it('per-account net delta remains zero (Principle #3) — compensating buys balance', () => {
+      const r = rebalance(accts, positions, AGGRESSIVE, {}, TDF, 0, 0);
+      expect(near(accountSum(r.trades, 'k401'), 0, 5)).toBe(true);
     });
   });
 

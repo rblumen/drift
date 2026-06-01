@@ -28,11 +28,11 @@ export interface RollupResult {
   // Does NOT include account-level locking (handled in rebalance).
   lockedValueByAccount: Record<string, Record<AssetClass, number>>;
   // Per-(account, class) value contributed by non-locked blended funds (issue #40).
-  // Blended-fund value lives in BOTH this map AND lockedValueByAccount: by default
-  // the engine treats it as immovable (so normal rebalance won't tear a TDF apart
-  // to chase a small placement preference), but drawdown mode in rebalance.ts
-  // promotes it to sellable by subtracting this map from lockedValueByAccount —
-  // Step 8.7 then synthesizes the proportional sells.
+  // Blended-fund value lives in BOTH this map AND lockedValueByAccount so callers
+  // that don't know about #40 still see immovability. rebalance.ts subtracts this
+  // back out of lockedValueByAccount before computing free capacity, treating
+  // blended-fund value as tradeable, and Step 8.7 synthesizes the proportional
+  // sells with composition-preserving compensation.
   blendedValueByAccount: Record<string, Record<AssetClass, number>>;
   unmappedTickers: string[];
 }
@@ -62,11 +62,11 @@ export function rollup(
     // Check for decomposition first (blended funds: TDFs, balanced funds, etc.).
     const decomp = decompositions[pos.ticker.toUpperCase()];
     if (decomp) {
-      // Split value across asset classes. Default behavior treats the position
-      // as locked so normal rebalancing won't tear it apart to satisfy a small
-      // placement preference. Drawdown mode (issue #40) lifts that lock by
-      // subtracting blendedValueByAccount from frozen capacity, letting Step 8.7
-      // synthesize a proportional sale.
+      // Split value across asset classes. The position is added to both
+      // lockedValueByAccount and blendedValueByAccount (issue #40): rebalance.ts
+      // lifts the lock by subtracting blendedValueByAccount, exposing the fund
+      // to Step 8.7's composition-preserving sell synthesis. pos.locked = true
+      // suppresses the blendedValueByAccount entry, restoring hard immovability.
       accountValues[pos.accountId] = (accountValues[pos.accountId] ?? 0) + pos.marketValue;
       for (const [ac, weight] of Object.entries(decomp) as [AssetClass, number][]) {
         const portion = pos.marketValue * weight;

@@ -289,7 +289,7 @@ export function ClassifyPanel({
         <HelpSection title="Classification sources">
           <HelpDef term="Built-in map">Common ETFs and mutual funds (VTI, FZROX, MUNY, etc.) are pre-mapped. No action needed.</HelpDef>
           <HelpDef term="Your overrides">Assignments you make here are saved and take precedence over the built-in map.</HelpDef>
-          <HelpDef term="Decomposed">For blended funds — target-date funds, balanced funds, etc. — you can define the percentage split across multiple asset classes. The engine keeps the composition fixed during normal rebalancing and sells the fund proportionally when funding a withdrawal or RMD.</HelpDef>
+          <HelpDef term="Decomposed">For blended funds — target-date funds, balanced funds, etc. — you can define the percentage split across multiple asset classes. The engine keeps the composition fixed but treats the fund as sellable as a whole: when the household drift requires it, the fund is sold proportionally and replacement positions are bought in the same account.</HelpDef>
         </HelpSection>
 
         <HelpSection title="US Total Market — the Russell split">
@@ -306,9 +306,10 @@ export function ClassifyPanel({
             The app auto-detects common Fidelity Freedom and Vanguard Target Retirement tickers and suggests
             a decomposition based on the fund's current glide-path allocation.
             You can accept the estimate or edit the percentages to match the fund's actual fact sheet.
-            Blended funds are treated as immovable during normal rebalancing — the engine won't tear one apart
-            to chase a small placement preference. When a withdrawal or RMD requires it, the fund is sold
-            proportionally as a whole.
+            Blended funds participate in rebalancing as a single unit — the engine prefers non-blended
+            positions when those can absorb the needed change, and falls back to a proportional sale of
+            the fund (with compensating buys in other tickers) only when the household drift demands it.
+            Use the position-level lock if you want a specific blended-fund holding excluded entirely.
           </p>
         </HelpSection>
       </HelpBox>

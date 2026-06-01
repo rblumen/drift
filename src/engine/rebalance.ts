@@ -453,18 +453,20 @@ export function rebalance(
     accountValues, lockedValueByAccount, blendedValueByAccount, unmappedTickers,
   } = rollup(accounts, positions, classify, decompositions);
 
-  // Drawdown unlocks blended-fund value (issue #40) so it can fund withdrawals.
-  // We subtract it from the per-slot locked total before computing free capacity;
-  // Step 8.7 later enforces the composition constraint when synthesizing the
-  // actual sells. Outside drawdown the lock stays so normal rebalancing won't
-  // tear a TDF apart to satisfy a small placement preference.
+  // Blended-fund value (issue #40) is always tradeable as a whole. rollup adds
+  // it to lockedValueByAccount so callers that don't know about #40 still see
+  // immovability; we subtract it back out here so the engine's free-capacity
+  // math sees the value as available. The 5/25 tolerance band + non-blended-
+  // first attribution in Step 8.7 prevent gratuitous liquidation when the drift
+  // doesn't actually demand it. pos.locked = true is the per-position escape
+  // hatch for "don't touch this specific holding."
   const effectiveLocked: Record<string, Record<AssetClass, number>> = {};
   for (const acct of accounts) {
     effectiveLocked[acct.id] = zeroByClass();
     for (const ac of ALL_ASSET_CLASSES) {
       const locked = lockedValueByAccount[acct.id][ac] ?? 0;
       const blended = blendedValueByAccount[acct.id][ac] ?? 0;
-      effectiveLocked[acct.id][ac] = inDrawdown ? Math.max(0, locked - blended) : locked;
+      effectiveLocked[acct.id][ac] = Math.max(0, locked - blended);
     }
   }
 
@@ -854,10 +856,13 @@ export function rebalance(
   // N% of every sub-class proportionally. Sub-class trades that route to a blended
   // fund must therefore reflect that constraint, or the user can't execute them.
   //
-  // Scope: only runs in drawdown mode. Outside drawdown the blended fund stays
-  // locked (see effectiveLocked above), so the engine never generates sells against
-  // it in the first place — and the user keeps their TDF intact instead of having
-  // it torn apart for a small placement preference.
+  // Runs on every rebalance. The 5/25 tolerance band gates "should we act at all?"
+  // and the non-blended-first attribution below gates "do we need to touch the
+  // fund?" — so the fund only gets liquidated when the household drift exceeds
+  // tolerance AND non-blended positions can't absorb the required sell. This
+  // covers the realistic scenario where a user holds a large blended position
+  // that no longer fits their target strategy and the only way to fix the
+  // allocation is to sell it.
   //
   // For each non-locked account A with non-locked blended funds in it:
   //   1. Attribute existing sell demand per sub-class to non-blended positions first
@@ -871,12 +876,10 @@ export function rebalance(
   //      buy-back routes to another ticker in A. Net per-account delta is preserved.
   //   5. If A's effectiveAllowed excludes the over-sold class, no in-place buy-back
   //      is possible — emit BLENDED_FUND_OVERSELL and let the over-sell stand.
-  if (inDrawdown) {
-    flags.push(...synthesizeBlendedFundSells(
-      accounts, positions, decompositions, trades,
-      unlockedCurrent, effectiveAllowed, strategy,
-    ));
-  }
+  flags.push(...synthesizeBlendedFundSells(
+    accounts, positions, decompositions, trades,
+    unlockedCurrent, effectiveAllowed, strategy,
+  ));
 
   // Generate TAXABLE_SALE flags from the corrected trade list.
   for (const trade of trades) {

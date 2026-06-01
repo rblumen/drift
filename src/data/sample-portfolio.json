@@ -22,7 +22,7 @@
     "  Account restriction  Empower 401k has no ALTERNATIVES in its fund menu",
     "  Concentrate          Roth IRA is first-priority for ALTERNATIVES placement",
     "  Ticker override      RSP (Invesco Equal Weight S&P 500) → US_LARGE_CAP",
-    "  Blended fund         FDKLX (Fidelity Freedom Index 2060): 54% US equity / 37% Intl / 9% FI — sellable as a whole for withdrawals",
+    "  Blended fund         FDKLX (Fidelity Freedom Index 2060): 54% US equity / 37% Intl / 9% FI — composition fixed, sold proportionally when drift demands",
     "  New cash             $15k IRA rollover contribution ready to deploy",
     "  Household free cash  $10k year-end bonus distributed proportionally to deposit-eligible accounts",
     "  Deposits closed      Roth IRA annual contribution limit already reached — excluded from free cash"
@@ -128,7 +128,7 @@
       "marketValue": 27000, "price": 10.85
     },
     {
-      "_note": "Blended fund (target-date) — decomposed in 'decompositions' below. Engine treats it as immovable during normal rebalancing and sells it proportionally for withdrawals/RMDs.",
+      "_note": "Blended fund (target-date) — decomposed in 'decompositions' below. Engine treats the composition as fixed but the total as tradeable: sold proportionally when household drift requires it, with compensating buys routed to non-blended tickers.",
       "accountId": "empower-401k",   "ticker": "FDKLX", "description": "Fidelity Freedom Index 2060",
       "marketValue": 5000, "price": 24.80
     },
