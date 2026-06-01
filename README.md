@@ -38,6 +38,17 @@ npm run build    # production build → dist/
 
 `npm run test:ui` starts a Vitest server and prints a local URL (e.g. `http://localhost:51204/__vitest__/`) — open it to browse and re-run tests visually. It stays running in watch mode and re-runs on file changes; press `q` in the terminal to quit. Keep the terminal open while you use it: if the server stops, the browser tab shows **"Disconnected."** Run it from your own terminal so it stays alive.
 
+### Static HTML report
+
+To generate a self-contained report you can save or share (a snapshot, not a live server), use Vitest's HTML reporter:
+
+```bash
+npx vitest run --reporter=html    # writes the report to html/
+npx vite preview --outDir html    # open it in a browser
+```
+
+This produces a static `html/` folder — no watch mode, no live connection, so it never shows "Disconnected." The folder is git-ignored. Regenerate it any time by re-running the first command.
+
 ---
 
 ## Five-step workflow
