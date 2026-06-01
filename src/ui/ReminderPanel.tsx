@@ -132,9 +132,12 @@ export function ReminderPanel({ reminder, setReminder }: Props) {
   }
 
   return (
-    <div className="border border-gray-200 rounded-lg px-4 py-3 bg-white">
+    <div className="border border-sky-200 rounded-lg px-4 py-3 bg-sky-50">
       <div className="flex items-center justify-between mb-2">
-        <p className="text-sm font-medium text-gray-800">Next rebalance reminder</p>
+        <p className="text-sm font-semibold text-sky-900 flex items-center gap-1.5">
+          <span aria-hidden="true">⏰</span>
+          Next rebalance reminder
+        </p>
         {due && (
           <button
             onClick={handleClear}
@@ -193,7 +196,7 @@ export function ReminderPanel({ reminder, setReminder }: Props) {
             className={`text-xs px-2 py-1 rounded border transition-colors
               ${reminder.intervalMonths === p.months && due
                 ? 'border-indigo-300 bg-indigo-50 text-indigo-700'
-                : 'border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'}`}
+                : 'border-sky-200 bg-white text-gray-600 hover:border-sky-300 hover:bg-white'}`}
           >
             {p.label}
           </button>
@@ -209,7 +212,7 @@ export function ReminderPanel({ reminder, setReminder }: Props) {
           value={due ? toDateInputValue(due) : ''}
           min={toDateInputValue(now)}
           onChange={e => handleDateChange(e.target.value)}
-          className="text-xs border border-gray-200 rounded px-2 py-1 text-gray-700"
+          className="text-xs border border-sky-200 bg-white rounded px-2 py-1 text-gray-700"
         />
       </div>
 
@@ -230,7 +233,7 @@ export function ReminderPanel({ reminder, setReminder }: Props) {
               aria-haspopup="menu"
               aria-expanded={calMenuOpen}
               onClick={() => setCalMenuOpen(o => !o)}
-              className="text-xs border border-gray-200 text-gray-700 px-3 py-1.5 rounded hover:bg-gray-50 transition-colors flex items-center gap-1"
+              className="text-xs border border-sky-200 bg-white text-gray-700 px-3 py-1.5 rounded hover:border-sky-300 transition-colors flex items-center gap-1"
             >
               📅 Add to calendar
               <span className="text-gray-400" aria-hidden="true">▾</span>
