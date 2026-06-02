@@ -1,20 +1,8 @@
 import type { Account, Position, AssetClass, FundDecomposition } from './types';
 import { ALL_ASSET_CLASSES } from './types';
 import type { ClassifyFn } from './classify';
+import { CLASS_HIERARCHY } from './hierarchy';
 import { zeroByClass } from './utils';
-
-/**
- * Russell index cap-class weights used to redistribute US_TOTAL_MARKET holdings.
- *   US_LARGE_CAP  0.67  (Russell 1000 ex-Midcap, ~mega/large blend)
- *   US_MID_CAP    0.25  (Russell Midcap = bottom 800 of Russell 1000)
- *   US_SMALL_CAP  0.08  (Russell 2000)
- * Source: Russell US Index construction methodology.
- */
-export const RUSSELL_CAP_SPLIT = {
-  US_LARGE_CAP: 0.67,
-  US_MID_CAP:   0.25,
-  US_SMALL_CAP: 0.08,
-} as const;
 
 export interface RollupResult {
   // Only mapped positions + newCash. Unmapped positions are excluded so they
@@ -97,39 +85,39 @@ export function rollup(
     }
   }
 
-  // Post-process: redistribute any US_TOTAL_MARKET value into cap sub-classes.
-  // This handles all sources uniformly: direct classifications, blended-fund
-  // decompositions that emit US_TOTAL_MARKET, and user custom decompositions.
-  const utmTotal = currentValue.US_TOTAL_MARKET;
-  if (utmTotal > 0) {
-    for (const [subClass, weight] of Object.entries(RUSSELL_CAP_SPLIT) as [AssetClass, number][]) {
-      currentValue[subClass] += utmTotal * weight;
+  // Post-process: redistribute parent-class value into child classes for every
+  // relationship defined in CLASS_HIERARCHY. Applies uniformly to all sources
+  // (direct classifications, blended-fund decompositions, user decompositions).
+  //
+  // All four tracking maps must be updated together — see the four-map propagation
+  // invariant in docs/plan-36-asset-class-hierarchy.md.
+  for (const [parent, group] of Object.entries(CLASS_HIERARCHY)) {
+    const ac = parent as AssetClass;
+    const { children, defaultWeights } = group!;
+
+    const total = currentValue[ac];
+    if (total > 0) {
+      for (const child of children) currentValue[child] += total * (defaultWeights[child] ?? 0);
+      currentValue[ac] = 0;
     }
-    currentValue.US_TOTAL_MARKET = 0;
 
     for (const acctId of Object.keys(currentValueByAccount)) {
-      const utmAcct = currentValueByAccount[acctId].US_TOTAL_MARKET;
-      if (utmAcct > 0) {
-        for (const [subClass, weight] of Object.entries(RUSSELL_CAP_SPLIT) as [AssetClass, number][]) {
-          currentValueByAccount[acctId][subClass] += utmAcct * weight;
-        }
-        currentValueByAccount[acctId].US_TOTAL_MARKET = 0;
+      const cv = currentValueByAccount[acctId][ac];
+      if (cv > 0) {
+        for (const child of children) currentValueByAccount[acctId][child] += cv * (defaultWeights[child] ?? 0);
+        currentValueByAccount[acctId][ac] = 0;
       }
 
-      const utmLocked = lockedValueByAccount[acctId].US_TOTAL_MARKET;
-      if (utmLocked > 0) {
-        for (const [subClass, weight] of Object.entries(RUSSELL_CAP_SPLIT) as [AssetClass, number][]) {
-          lockedValueByAccount[acctId][subClass] += utmLocked * weight;
-        }
-        lockedValueByAccount[acctId].US_TOTAL_MARKET = 0;
+      const lv = lockedValueByAccount[acctId][ac];
+      if (lv > 0) {
+        for (const child of children) lockedValueByAccount[acctId][child] += lv * (defaultWeights[child] ?? 0);
+        lockedValueByAccount[acctId][ac] = 0;
       }
 
-      const utmBlended = blendedValueByAccount[acctId].US_TOTAL_MARKET;
-      if (utmBlended > 0) {
-        for (const [subClass, weight] of Object.entries(RUSSELL_CAP_SPLIT) as [AssetClass, number][]) {
-          blendedValueByAccount[acctId][subClass] += utmBlended * weight;
-        }
-        blendedValueByAccount[acctId].US_TOTAL_MARKET = 0;
+      const bv = blendedValueByAccount[acctId][ac];
+      if (bv > 0) {
+        for (const child of children) blendedValueByAccount[acctId][child] += bv * (defaultWeights[child] ?? 0);
+        blendedValueByAccount[acctId][ac] = 0;
       }
     }
   }

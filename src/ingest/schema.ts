@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { Position, Account, Strategy } from '../engine/types';
+import { CLASS_HIERARCHY } from '../engine/hierarchy';
 
 const ACCOUNT_TYPES = [
   'TAXABLE', 'TRADITIONAL_IRA', 'ROTH_IRA', 'FOUR_OH_ONE_K',
@@ -11,7 +12,7 @@ const PLACEMENT_BUCKETS = ['TAXABLE', 'TAX_ADVANTAGED', 'EDUCATION'] as const;
 const ASSET_CLASSES = [
   'US_TOTAL_MARKET', 'US_LARGE_CAP', 'US_MID_CAP', 'US_SMALL_CAP',
   'DEVELOPED_INTL', 'EMERGING_INTL',
-  'FIXED_INCOME', 'ALTERNATIVES', 'CASH',
+  'FIXED_INCOME', 'ALTERNATIVES', 'CRYPTO', 'PRECIOUS_METALS', 'CASH',
 ] as const;
 
 export const positionSchema = z.object({
@@ -45,20 +46,22 @@ export const accountSchema = z.object({
 });
 
 const targetsSchema = z.object({
-  US_TOTAL_MARKET: z.number().min(0).max(1),
-  US_LARGE_CAP:    z.number().min(0).max(1).optional().default(0),
-  US_MID_CAP:      z.number().min(0).max(1).optional().default(0),
-  US_SMALL_CAP:    z.number().min(0).max(1).optional().default(0),
-  DEVELOPED_INTL:  z.number().min(0).max(1),
-  EMERGING_INTL:   z.number().min(0).max(1),
-  FIXED_INCOME:    z.number().min(0).max(1),
-  ALTERNATIVES:    z.number().min(0).max(1),
-  CASH:            z.number().min(0).max(1),
+  US_TOTAL_MARKET:  z.number().min(0).max(1),
+  US_LARGE_CAP:     z.number().min(0).max(1).optional().default(0),
+  US_MID_CAP:       z.number().min(0).max(1).optional().default(0),
+  US_SMALL_CAP:     z.number().min(0).max(1).optional().default(0),
+  DEVELOPED_INTL:   z.number().min(0).max(1),
+  EMERGING_INTL:    z.number().min(0).max(1),
+  FIXED_INCOME:     z.number().min(0).max(1),
+  ALTERNATIVES:     z.number().min(0).max(1),
+  CRYPTO:           z.number().min(0).max(1).optional().default(0),
+  PRECIOUS_METALS:  z.number().min(0).max(1).optional().default(0),
+  CASH:             z.number().min(0).max(1),
 }).refine(
   t => {
     const sum = t.US_TOTAL_MARKET + (t.US_LARGE_CAP ?? 0) + (t.US_MID_CAP ?? 0) + (t.US_SMALL_CAP ?? 0)
               + t.DEVELOPED_INTL + t.EMERGING_INTL
-              + t.FIXED_INCOME + t.ALTERNATIVES + t.CASH;
+              + t.FIXED_INCOME + t.ALTERNATIVES + (t.CRYPTO ?? 0) + (t.PRECIOUS_METALS ?? 0) + t.CASH;
     return Math.abs(sum - 1.0) <= 0.001;
   },
   { message: 'Target weights must sum to 1.0 (±0.001)' },
@@ -66,38 +69,52 @@ const targetsSchema = z.object({
 
 // Default placement for any asset class missing from an old saved strategy.
 const DEFAULT_PLACEMENT: Record<string, string[]> = {
-  US_TOTAL_MARKET: ['TAX_ADVANTAGED', 'TAXABLE'],
-  US_LARGE_CAP:    ['TAX_ADVANTAGED', 'TAXABLE'],
-  US_MID_CAP:      ['TAX_ADVANTAGED', 'TAXABLE'],
-  US_SMALL_CAP:    ['TAX_ADVANTAGED', 'TAXABLE'],
-  DEVELOPED_INTL:  ['TAX_ADVANTAGED', 'TAXABLE'],
-  EMERGING_INTL:   ['TAX_ADVANTAGED', 'TAXABLE'],
-  FIXED_INCOME:    ['TAXABLE'],
-  ALTERNATIVES:    ['TAX_ADVANTAGED'],
-  CASH:            ['TAXABLE', 'TAX_ADVANTAGED'],
+  US_TOTAL_MARKET:  ['TAX_ADVANTAGED', 'TAXABLE'],
+  US_LARGE_CAP:     ['TAX_ADVANTAGED', 'TAXABLE'],
+  US_MID_CAP:       ['TAX_ADVANTAGED', 'TAXABLE'],
+  US_SMALL_CAP:     ['TAX_ADVANTAGED', 'TAXABLE'],
+  DEVELOPED_INTL:   ['TAX_ADVANTAGED', 'TAXABLE'],
+  EMERGING_INTL:    ['TAX_ADVANTAGED', 'TAXABLE'],
+  FIXED_INCOME:     ['TAXABLE'],
+  ALTERNATIVES:     ['TAX_ADVANTAGED'],
+  CRYPTO:           ['TAX_ADVANTAGED'],
+  PRECIOUS_METALS:  ['TAX_ADVANTAGED'],
+  CASH:             ['TAXABLE', 'TAX_ADVANTAGED'],
 };
 
 // Migration: upgrades old saves when new asset classes are added.
-//   1. Targets: US_TOTAL_MARKET → cap sub-class split (Russell weights).
-//      Condition: US_TOTAL_MARKET > 0.001 AND sub-classes sum to < 0.001.
+//   1. Targets: for each parent class in CLASS_HIERARCHY, if the parent has a
+//      non-trivial target (> 0.001) and all children sum to < 0.001, split the
+//      parent target into children using defaultWeights.
+//      Condition guards against re-splitting saves that already have child targets.
 //   2. Placement: any asset class missing from placement gets a default entry,
 //      so StrategyPanel never sees an undefined bucket array.
 const migrateStrategyTargets = (raw: unknown): unknown => {
   if (typeof raw !== 'object' || raw === null) return raw;
   let r = raw as Record<string, unknown>;
 
-  // 1. Targets migration.
+  // 1. Targets migration — generic over all parent classes.
   const targets = r['targets'];
   if (typeof targets === 'object' && targets !== null) {
-    const t = targets as Record<string, number>;
-    const utm = t['US_TOTAL_MARKET'] ?? 0;
-    const subSum = (t['US_LARGE_CAP'] ?? 0) + (t['US_MID_CAP'] ?? 0) + (t['US_SMALL_CAP'] ?? 0);
-    if (utm > 0.001 && subSum < 0.001) {
-      const lc = Math.round(utm * 0.67 * 1000) / 1000;
-      const mc = Math.round(utm * 0.25 * 1000) / 1000;
-      const sc = Math.round((utm - lc - mc) * 1000) / 1000;
-      r = { ...r, targets: { ...t, US_TOTAL_MARKET: 0, US_LARGE_CAP: lc, US_MID_CAP: mc, US_SMALL_CAP: sc } };
+    let t = targets as Record<string, number>;
+    for (const [parent, group] of Object.entries(CLASS_HIERARCHY)) {
+      const parentVal = t[parent] ?? 0;
+      const childSum = group!.children.reduce((s, c) => s + (t[c] ?? 0), 0);
+      if (parentVal > 0.001 && childSum < 0.001) {
+        const { children, defaultWeights } = group!;
+        const splits: Record<string, number> = {};
+        let allocated = 0;
+        for (let i = 0; i < children.length - 1; i++) {
+          const w = defaultWeights[children[i]] ?? 0;
+          splits[children[i]] = Math.round(parentVal * w * 1000) / 1000;
+          allocated += splits[children[i]];
+        }
+        // Last child absorbs rounding remainder so total stays exact.
+        splits[children[children.length - 1]] = Math.round((parentVal - allocated) * 1000) / 1000;
+        t = { ...t, [parent]: 0, ...splits };
+      }
     }
+    r = { ...r, targets: t };
   }
 
   // 2. Placement migration: fill in defaults for any missing asset class.
