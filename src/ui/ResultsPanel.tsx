@@ -5,6 +5,7 @@ import { withdrawalPriorityOf, isWithdrawalEligible } from '../engine/rebalance'
 import { AC_COLOR, AC_LABEL, ACCT_TYPE_LABEL, fmtUsd, fmtPct, fmtDelta } from './fmt';
 import { PieChart } from './PieChart';
 import type { PieSlice } from './PieChart';
+import { AllocationPlot } from './AllocationPlot';
 import { downloadReport } from './exportReport';
 import { HelpBox, HelpDef, HelpSection, HelpTip } from './HelpBox';
 import type { Reminder } from '../ingest/schema';
@@ -529,6 +530,14 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plann
           <HelpDef term="Drift">Current minus Target. Amber = over target; Blue = under target; Green = within tolerance.</HelpDef>
           <HelpDef term="After trades">Projected allocation once the recommended trades are executed. Should closely match the target. Deviations larger than the tolerance band indicate a hard constraint — check the flags above (e.g. "No eligible account" means no account can hold that class; locked positions that exceed the target for a class cannot be reduced).</HelpDef>
           <HelpDef term="Classes within tolerance">Shown in the table but generate no trades. The tolerance band (±5% by default) suppresses small drift to avoid over-trading.</HelpDef>
+          <HelpDef term="Aggressiveness × diversification plot">
+            A 2D snapshot of the household allocation in two dimensions: <em>aggressiveness</em>
+            (share in equities &amp; alternatives) on the vertical axis and <em>diversification</em>
+            (how evenly the allocation is spread across asset classes, a normalized inverse
+            Herfindahl) on the horizontal axis. The white circle is your current allocation, the
+            blue circle is where it lands after the recommended trades, and the dashed green
+            target shows where the strategy is steering you.
+          </HelpDef>
         </HelpSection>
 
         <HelpSection title="Recommended trades">
@@ -746,12 +755,21 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plann
               const afterSlices  = buildPieSlices(projectedByClass);
               const hasBoth = beforeSlices.length > 0 && afterSlices.length > 0;
               return (
-                <div className={hasBoth ? 'grid grid-cols-2 gap-6' : ''}>
-                  {beforeSlices.length > 0 && (
-                    <PieChart title="Before" slices={beforeSlices} size={88} />
-                  )}
-                  {afterSlices.length > 0 && (
-                    <PieChart title="After trades" slices={afterSlices} size={88} />
+                <div className="space-y-4">
+                  <div className={hasBoth ? 'grid grid-cols-2 gap-6' : ''}>
+                    {beforeSlices.length > 0 && (
+                      <PieChart title="Before" slices={beforeSlices} size={88} />
+                    )}
+                    {afterSlices.length > 0 && (
+                      <PieChart title="After trades" slices={afterSlices} size={88} />
+                    )}
+                  </div>
+                  {hasBoth && (
+                    <AllocationPlot
+                      currentWeights={currentWeights}
+                      targetWeights={targetWeights}
+                      projectedWeights={projectedWeights}
+                    />
                   )}
                 </div>
               );
