@@ -3,7 +3,7 @@ import type { Strategy, AssetClass, PlacementBucket } from '../engine/types';
 import { ALL_ASSET_CLASSES } from '../engine/types';
 import { DEFAULT_STRATEGY } from '../engine/strategy';
 import { RUSSELL_CAP_SPLIT } from '../engine/rollup';
-import { AC_COLOR, AC_LABEL, BUCKET_LABEL } from './fmt';
+import { AC_COLOR, AC_LABEL, BUCKET_LABEL, fmtPct } from './fmt';
 import { WeightPie } from './WeightPie';
 import type { WeightSlice } from './WeightPie';
 import { HelpBox, HelpDef, HelpSection, HelpTip } from './HelpBox';
@@ -52,6 +52,9 @@ interface Props {
   strategy: Strategy;
   setStrategy: (s: Strategy) => void;
   currentWeights: Record<AssetClass, number>;
+  /** Tax-adjusted current weights (issue #7). Present only when the engine ran
+   *  with strategy.taxAdjustment.enabled = true on the last rebalance. */
+  taCurrentWeights?: Record<AssetClass, number>;
 }
 
 /** Derive normalised proportions from the current cap-sub weights (values in percent). Falls back to Russell if all zero. */
@@ -70,13 +73,76 @@ function splitComposite(totalPct: number, split: CapSplit): Record<'US_LARGE_CAP
 }
 
 /**
+ * Two-row 100%-normalized stacked bar comparing nominal vs after-tax allocation
+ * by asset class. Both bars take the full width; segment widths show each
+ * class's share of its respective total. Per-segment tooltip surfaces both
+ * percentages and the delta in percentage points.
+ */
+function AllocationCompareBars({
+  nominal, taxAdjusted,
+}: { nominal: Record<AssetClass, number>; taxAdjusted: Record<AssetClass, number> }) {
+  // Classes appearing in either view, in the canonical asset-class order so
+  // the segments line up visually between the two bars.
+  const classes = ALL_ASSET_CLASSES.filter(ac => (nominal[ac] ?? 0) > 0.0005 || (taxAdjusted[ac] ?? 0) > 0.0005);
+  if (classes.length === 0) return null;
+
+  const renderBar = (label: string, weights: Record<AssetClass, number>) => {
+    const total = classes.reduce((s, ac) => s + (weights[ac] ?? 0), 0);
+    if (total <= 0) return null;
+    return (
+      <div className="flex items-center gap-3">
+        <span className="text-xs text-gray-600 w-20 shrink-0 text-right">{label}</span>
+        <div className="flex-1 h-5 bg-gray-100 rounded overflow-hidden flex">
+          {classes.map(ac => {
+            const share = (weights[ac] ?? 0) / total;
+            if (share <= 0) return null;
+            const nomPct = nominal[ac] ?? 0;
+            const taPct  = taxAdjusted[ac] ?? 0;
+            const delta  = taPct - nomPct;
+            const sign   = delta >= 0 ? '+' : '';
+            return (
+              <div
+                key={ac}
+                className="h-full"
+                style={{ width: `${share * 100}%`, backgroundColor: AC_COLOR[ac] }}
+                title={`${AC_LABEL[ac]} — nominal ${fmtPct(nomPct)} · after-tax ${fmtPct(taPct)} (${sign}${(delta * 100).toFixed(1)}pp)`}
+              />
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-1.5">
+      {renderBar('Nominal', nominal)}
+      {renderBar('After-tax', taxAdjusted)}
+      <div className="flex flex-wrap gap-x-4 gap-y-1 pt-2 pl-[5.75rem]">
+        {classes.map(ac => (
+          <div key={ac} className="flex items-center gap-1.5 text-xs text-gray-500">
+            <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: AC_COLOR[ac] }} />
+            {AC_LABEL[ac]}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
  * Tax-adjusted allocation control (issue #7). When enabled, the engine values
  * each account at its after-tax worth and rebalances against that view — so a
  * 60/40 target refers to after-tax wealth rather than nominal market value.
  */
 function TaxAdjustmentControl({
-  strategy, setStrategy,
-}: { strategy: Strategy; setStrategy: (s: Strategy) => void }) {
+  strategy, setStrategy, currentWeights, taCurrentWeights,
+}: {
+  strategy: Strategy;
+  setStrategy: (s: Strategy) => void;
+  currentWeights: Record<AssetClass, number>;
+  taCurrentWeights?: Record<AssetClass, number>;
+}) {
   const enabled = strategy.taxAdjustment?.enabled === true;
   const eff = strategy.taxAdjustment?.effectiveRateAtRetirement ?? 0.15;
   const ltcg = strategy.taxAdjustment?.marginalRateLTCG ?? 0.15;
@@ -173,11 +239,24 @@ function TaxAdjustmentControl({
           </div>
         </div>
       )}
+
+      {enabled && taCurrentWeights && (
+        <div className="max-w-2xl pl-4 border-l-2 border-indigo-100 pt-1">
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">
+            Composition: nominal vs after-tax
+          </p>
+          <AllocationCompareBars nominal={currentWeights} taxAdjusted={taCurrentWeights} />
+          <p className="text-xs text-gray-400 mt-3">
+            Hover a segment to see the per-class shift. Differences appear when tax-advantaged
+            balances or low-basis taxable positions reweight the after-tax mix.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
 
-export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentWeights }: Props) {
+export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentWeights, taCurrentWeights }: Props) {
   // Linked by default when US_TOTAL_MARKET has no standalone target (the normal case).
   const [usEquityLinked, setUsEquityLinked] = useState<boolean>(
     (strategy.targets.US_TOTAL_MARKET ?? 0) < 0.001,
@@ -859,7 +938,12 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentW
         </div>
 
         {/* Tax-adjusted allocation (issue #7) */}
-        <TaxAdjustmentControl strategy={strategy} setStrategy={setStrategy} />
+        <TaxAdjustmentControl
+          strategy={strategy}
+          setStrategy={setStrategy}
+          currentWeights={_currentWeights}
+          taCurrentWeights={taCurrentWeights}
+        />
       </div>
     </div>
   );

@@ -359,6 +359,7 @@ export default function App() {
             strategy={strategy}
             setStrategy={setStrategy}
             currentWeights={result.currentWeights}
+            taCurrentWeights={result.taxAdjusted?.currentWeights}
           />
         )}
         {activeTab === 'results' && (
