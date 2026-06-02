@@ -7,6 +7,7 @@ export interface ColumnMap {
   marketValue:  string;   // CSV column name for the current market value
   description?: string;   // optional column for the holding description
   price?:       string;   // optional column for per-share price
+  costBasis?:   string;   // optional column for aggregate cost basis (issue #7)
 }
 
 export interface CsvParseResult {
@@ -56,6 +57,7 @@ export function parseCsv(
     const marketValue = parseMoney(row[columnMap.marketValue]);
     const price       = columnMap.price ? parseMoney(row[columnMap.price]) : undefined;
     const description = columnMap.description ? row[columnMap.description]?.trim() : undefined;
+    const costBasis   = columnMap.costBasis ? parseMoney(row[columnMap.costBasis]) : undefined;
 
     // Skip subtotal/footer rows: no ticker, placeholder '--', NaN value, $0 or
     // negative (pending activity), or a ticker that contains a space (e.g.
@@ -69,6 +71,9 @@ export function parseCsv(
       description,
       marketValue,
       price: price && !isNaN(price) && price > 0 ? price : undefined,
+      // Accept zero as a real value (fully appreciated position with $0 basis).
+      // Skip undefined/NaN/negative.
+      costBasis: costBasis !== undefined && !isNaN(costBasis) && costBasis >= 0 ? costBasis : undefined,
     });
 
     if (result.success) {

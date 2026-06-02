@@ -93,6 +93,14 @@ export interface Position {
   locked?: boolean;
   /** Set when a field on this position was hand-edited after import. Display-only. */
   edited?: boolean;
+  /** Aggregate cost basis for this holding, in dollars. Only meaningful for
+   *  positions in TAXABLE accounts; ignored elsewhere. Used by the tax-adjusted
+   *  allocation feature (issue #7) to value the position at
+   *  `marketValue − marginalRateLTCG × max(0, marketValue − costBasis)`.
+   *  When undefined for a taxable position with tax adjustment enabled, the
+   *  engine falls back to `B = V` (no haircut, conservative) and emits
+   *  MISSING_COST_BASIS so the user can fill it in. */
+  costBasis?: number;
 }
 
 export interface Strategy {
@@ -113,6 +121,26 @@ export interface Strategy {
    *  recommending any taxable-account sale. Set false to disable the redirect and
    *  surface TAXABLE_REBALANCE_AVOIDABLE flags showing the gains that could be saved. */
   preferTaxAdvantagedRebalance?: boolean;
+  /** Tax-adjusted allocation mode (issue #7). When enabled, account balances are
+   *  scaled to their after-tax values before drift detection and target sizing,
+   *  so a "60/40" allocation refers to 60/40 of *after-tax* wealth rather than
+   *  nominal market value. Trades are emitted in nominal dollars (what the user
+   *  actually transacts), but their sizing reflects the tax-adjusted targets.
+   *  Per-account-type treatment:
+   *    Roth / HSA / 529:  100% of face value (assumes qualified withdrawals).
+   *    Traditional / 401k: V × (1 − effectiveRateAtRetirement).
+   *    Taxable: V − marginalRateLTCG × max(0, V − costBasis), per position.
+   *  See PRINCIPLES.md and engine/taxAdjust.ts. */
+  taxAdjustment?: {
+    enabled: boolean;
+    /** Expected effective tax rate in retirement (not today's marginal), used to
+     *  haircut Traditional / 401k balances. Typically lower than working-age
+     *  marginal because the full balance is drawn across multiple brackets. */
+    effectiveRateAtRetirement: number;
+    /** Long-term capital gains rate applied to unrealized gains in taxable
+     *  accounts. Federal LTCG only — state tax and NIIT are out of scope (v1). */
+    marginalRateLTCG: number;
+  };
 }
 
 export interface Trade {
@@ -146,6 +174,15 @@ export interface RebalanceResult {
   currentWeights: Record<AssetClass, number>;
   targetWeights: Record<AssetClass, number>;
   projectedWeights: Record<AssetClass, number>;
+  /** Tax-adjusted parallel view (issue #7). Populated when
+   *  strategy.taxAdjustment.enabled. Undefined otherwise so callers that don't
+   *  care about the feature can ignore it entirely. All weights and values are
+   *  expressed in after-tax dollars; trades themselves remain nominal. */
+  taxAdjusted?: {
+    householdValue: number;
+    currentWeights: Record<AssetClass, number>;
+    projectedWeights: Record<AssetClass, number>;
+  };
   /** Per-account current value by asset class (before trades). Excludes unmapped positions. */
   currentValueByAccount: Record<string, Record<AssetClass, number>>;
   /** Per-account dollars withdrawn to fund a planned withdrawal / RMD (issue #14).
@@ -200,4 +237,9 @@ export type Flag =
    *  blended funds, so repeated rebalances will trend the allocation away from
    *  this position over time. Use position-level locking if you want a specific
    *  blended-fund holding preserved. amountUsd is the fund-level sale total. */
-  | { kind: 'BLENDED_FUND_SOLD'; accountId: string; ticker: string; amountUsd: number };
+  | { kind: 'BLENDED_FUND_SOLD'; accountId: string; ticker: string; amountUsd: number }
+  /** Tax adjustment (#7): a taxable-account position is missing costBasis while
+   *  tax-adjusted allocation is enabled. The engine fell back to B = V (no
+   *  haircut, conservative) for this position. Filling in basis will produce a
+   *  more accurate after-tax view and may shift the recommended trades. */
+  | { kind: 'MISSING_COST_BASIS'; accountId: string; ticker: string };

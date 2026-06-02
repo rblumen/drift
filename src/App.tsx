@@ -359,6 +359,11 @@ export default function App() {
             strategy={strategy}
             setStrategy={setStrategy}
             currentWeights={result.currentWeights}
+            // When tax adjustment is on, result.projectedWeights is the nominal
+            // allocation the engine drives toward to satisfy strategy.targets
+            // in after-tax terms — i.e. the "tax-adjusted target" expressed in
+            // nominal weights.
+            taxAdjustedTargetWeights={result.taxAdjusted ? result.projectedWeights : undefined}
           />
         )}
         {activeTab === 'results' && (

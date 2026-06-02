@@ -702,6 +702,33 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
                               }}
                             />
                           </td>
+                          {/* Cost basis (taxable accounts only — feeds tax-adjusted allocation, issue #7) */}
+                          <td className="px-2 py-2 text-right tabular-nums text-gray-500 w-28">
+                            {account.type === 'TAXABLE' ? (
+                              <EditableCell
+                                value={p.costBasis != null ? String(p.costBasis) : ''}
+                                type="number"
+                                align="right"
+                                display={v => {
+                                  if (!v) return <span className="text-gray-300" title="Cost basis (taxable only) — fills tax-adjusted allocation">—</span>;
+                                  const n = parseFloat(v);
+                                  return isNaN(n) ? '—' : fmtUsd(n);
+                                }}
+                                onCommit={v => {
+                                  const trimmed = v.trim();
+                                  if (!trimmed) {
+                                    updatePositionByIdx(posIdx, { costBasis: undefined }, true);
+                                    return;
+                                  }
+                                  const n = parseFloat(trimmed);
+                                  if (isNaN(n) || n < 0) return;
+                                  updatePositionByIdx(posIdx, { costBasis: n }, true);
+                                }}
+                              />
+                            ) : (
+                              <span className="text-gray-200">—</span>
+                            )}
+                          </td>
                           {/* Lock toggle */}
                           <td className="px-2 py-2 text-center w-8">
                             <button

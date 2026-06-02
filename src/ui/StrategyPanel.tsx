@@ -3,7 +3,7 @@ import type { Strategy, AssetClass, PlacementBucket } from '../engine/types';
 import { ALL_ASSET_CLASSES } from '../engine/types';
 import { DEFAULT_STRATEGY } from '../engine/strategy';
 import { RUSSELL_CAP_SPLIT } from '../engine/rollup';
-import { AC_COLOR, AC_LABEL, BUCKET_LABEL } from './fmt';
+import { AC_COLOR, AC_LABEL, BUCKET_LABEL, fmtPct } from './fmt';
 import { WeightPie } from './WeightPie';
 import type { WeightSlice } from './WeightPie';
 import { HelpBox, HelpDef, HelpSection, HelpTip } from './HelpBox';
@@ -52,6 +52,12 @@ interface Props {
   strategy: Strategy;
   setStrategy: (s: Strategy) => void;
   currentWeights: Record<AssetClass, number>;
+  /** Nominal weights the engine drives toward when tax adjustment is enabled —
+   *  i.e. the nominal allocation required to satisfy strategy.targets in
+   *  after-tax dollars (issue #7). When TA is off this is approximately equal
+   *  to strategy.targets; when TA is on it diverges by the per-class taf at
+   *  placement (Trad/401k haircut shifts equities up in the nominal mix). */
+  taxAdjustedTargetWeights?: Record<AssetClass, number>;
 }
 
 /** Derive normalised proportions from the current cap-sub weights (values in percent). Falls back to Russell if all zero. */
@@ -69,7 +75,194 @@ function splitComposite(totalPct: number, split: CapSplit): Record<'US_LARGE_CAP
   return { US_LARGE_CAP: lc.toFixed(1), US_MID_CAP: mc.toFixed(1), US_SMALL_CAP: sc.toFixed(1) };
 }
 
-export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentWeights }: Props) {
+/**
+ * Two-row 100%-normalized stacked bar comparing the user's target composition
+ * interpreted **pre-tax** vs **tax-adjusted** (issue #7). The pre-tax bar is
+ * the strategy targets as stated; the tax-adjusted bar is the nominal weights
+ * required to achieve those same targets in after-tax dollars — equities held
+ * in Traditional/401k get haircut, so hitting an after-tax target needs more
+ * nominal $ in those classes than the stated percentage suggests.
+ */
+function AllocationCompareBars({
+  preTax, taxAdjusted,
+}: { preTax: Record<AssetClass, number>; taxAdjusted: Record<AssetClass, number> }) {
+  // Classes appearing in either view, in the canonical asset-class order so
+  // the segments line up visually between the two bars.
+  const classes = ALL_ASSET_CLASSES.filter(ac => (preTax[ac] ?? 0) > 0.0005 || (taxAdjusted[ac] ?? 0) > 0.0005);
+  if (classes.length === 0) return null;
+
+  const renderBar = (label: string, weights: Record<AssetClass, number>) => {
+    const total = classes.reduce((s, ac) => s + (weights[ac] ?? 0), 0);
+    if (total <= 0) return null;
+    return (
+      <div className="flex items-center gap-3">
+        <span className="text-xs text-gray-600 w-24 shrink-0 text-right">{label}</span>
+        <div className="flex-1 h-5 bg-gray-100 rounded overflow-hidden flex">
+          {classes.map(ac => {
+            const share = (weights[ac] ?? 0) / total;
+            if (share <= 0) return null;
+            const prePct = preTax[ac] ?? 0;
+            const taPct  = taxAdjusted[ac] ?? 0;
+            const delta  = taPct - prePct;
+            const sign   = delta >= 0 ? '+' : '';
+            return (
+              <div
+                key={ac}
+                className="h-full"
+                style={{ width: `${share * 100}%`, backgroundColor: AC_COLOR[ac] }}
+                title={`${AC_LABEL[ac]} — pre-tax ${fmtPct(prePct)} · tax-adjusted ${fmtPct(taPct)} (${sign}${(delta * 100).toFixed(1)}pp)`}
+              />
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-1.5">
+      {renderBar('Pre-tax', preTax)}
+      {renderBar('Tax-adjusted', taxAdjusted)}
+      <div className="flex flex-wrap gap-x-4 gap-y-1 pt-2 pl-[6.75rem]">
+        {classes.map(ac => (
+          <div key={ac} className="flex items-center gap-1.5 text-xs text-gray-500">
+            <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: AC_COLOR[ac] }} />
+            {AC_LABEL[ac]}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Tax-adjusted allocation control (issue #7). When enabled, the engine values
+ * each account at its after-tax worth and rebalances against that view — so a
+ * 60/40 target refers to after-tax wealth rather than nominal market value.
+ */
+function TaxAdjustmentControl({
+  strategy, setStrategy, taxAdjustedTargetWeights,
+}: {
+  strategy: Strategy;
+  setStrategy: (s: Strategy) => void;
+  taxAdjustedTargetWeights?: Record<AssetClass, number>;
+}) {
+  const enabled = strategy.taxAdjustment?.enabled === true;
+  const eff = strategy.taxAdjustment?.effectiveRateAtRetirement ?? 0.15;
+  const ltcg = strategy.taxAdjustment?.marginalRateLTCG ?? 0.15;
+
+  // Local string state so users can clear/edit the inputs without losing focus.
+  const [effStr, setEffStr] = useState(String((eff * 100).toFixed(1)));
+  const [ltcgStr, setLtcgStr] = useState(String((ltcg * 100).toFixed(1)));
+  useEffect(() => { setEffStr(String((eff * 100).toFixed(1))); }, [eff]);
+  useEffect(() => { setLtcgStr(String((ltcg * 100).toFixed(1))); }, [ltcg]);
+
+  function commit(next: { enabled?: boolean; effPct?: string; ltcgPct?: string }) {
+    const ta = {
+      enabled: next.enabled ?? enabled,
+      effectiveRateAtRetirement: Math.max(0, Math.min(1, (parseFloat(next.effPct ?? effStr) || 0) / 100)),
+      marginalRateLTCG:          Math.max(0, Math.min(1, (parseFloat(next.ltcgPct ?? ltcgStr) || 0) / 100)),
+    };
+    setStrategy({ ...strategy, taxAdjustment: ta });
+  }
+
+  return (
+    <div className="border-t border-gray-100 pt-3 space-y-3">
+      <div className="flex items-start justify-between gap-4 max-w-2xl">
+        <div>
+          <div className="text-sm text-gray-700">Tax-adjusted allocation</div>
+          <p className="text-xs text-gray-400 mt-0.5 max-w-md">
+            Value each account at its after-tax worth before computing drift and
+            target sizes. Roth, HSA, and 529 count at face value; Traditional/401k
+            are haircut by your expected effective rate at retirement; taxable
+            positions are haircut by the LTCG on their unrealized gain (cost basis
+            required per position).
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={enabled}
+          onClick={() => commit({ enabled: !enabled })}
+          className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+            enabled ? 'bg-indigo-600' : 'bg-gray-300'
+          }`}
+        >
+          <span
+            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+              enabled ? 'translate-x-6' : 'translate-x-1'
+            }`}
+          />
+        </button>
+      </div>
+
+      {enabled && (
+        <div className="grid grid-cols-2 gap-4 max-w-2xl pl-4 border-l-2 border-indigo-100">
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">
+              Effective rate at retirement (Trad / 401k)
+            </label>
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                step="0.5"
+                min="0"
+                max="100"
+                value={effStr}
+                onChange={e => setEffStr(e.target.value)}
+                onBlur={() => commit({ effPct: effStr })}
+                className="w-20 border rounded px-2 py-1.5 text-sm text-right"
+              />
+              <span className="text-gray-400 text-xs">%</span>
+            </div>
+            <p className="text-xs text-gray-400 mt-1">
+              Your expected effective tax rate in retirement (typically lower than
+              your current marginal — withdrawals fill multiple brackets).
+            </p>
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">
+              Long-term capital gains rate (Taxable)
+            </label>
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                step="0.5"
+                min="0"
+                max="100"
+                value={ltcgStr}
+                onChange={e => setLtcgStr(e.target.value)}
+                onBlur={() => commit({ ltcgPct: ltcgStr })}
+                className="w-20 border rounded px-2 py-1.5 text-sm text-right"
+              />
+              <span className="text-gray-400 text-xs">%</span>
+            </div>
+            <p className="text-xs text-gray-400 mt-1">
+              Federal LTCG. State tax and NIIT are out of scope.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {enabled && taxAdjustedTargetWeights && (
+        <div className="max-w-2xl pl-4 border-l-2 border-indigo-100 pt-1">
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">
+            Target composition: pre-tax vs tax-adjusted
+          </p>
+          <AllocationCompareBars preTax={strategy.targets} taxAdjusted={taxAdjustedTargetWeights} />
+          <p className="text-xs text-gray-400 mt-3">
+            Both bars show your target. The top bar is the target as stated. The bottom bar is
+            the nominal allocation required to achieve that same target in <em>after-tax</em>
+            dollars — equities held in Traditional / 401k get haircut by the effective retirement
+            rate, so you need a larger nominal share of them to hit an after-tax target.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentWeights, taxAdjustedTargetWeights }: Props) {
   // Linked by default when US_TOTAL_MARKET has no standalone target (the normal case).
   const [usEquityLinked, setUsEquityLinked] = useState<boolean>(
     (strategy.targets.US_TOTAL_MARKET ?? 0) < 0.001,
@@ -749,6 +942,13 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentW
             />
           </button>
         </div>
+
+        {/* Tax-adjusted allocation (issue #7) */}
+        <TaxAdjustmentControl
+          strategy={strategy}
+          setStrategy={setStrategy}
+          taxAdjustedTargetWeights={taxAdjustedTargetWeights}
+        />
       </div>
     </div>
   );

@@ -22,6 +22,9 @@ export const positionSchema = z.object({
   price: z.number().positive().optional(),
   locked: z.boolean().optional(),
   edited: z.boolean().optional(),
+  // Aggregate cost basis, in dollars. Only meaningful for positions in TAXABLE
+  // accounts (see Position docstring in engine/types.ts).
+  costBasis: z.number().nonnegative().optional(),
 });
 
 export const accountSchema = z.object({
@@ -118,6 +121,11 @@ export const strategySchema = z.preprocess(migrateStrategyTargets, z.object({
   toleranceRel: z.number().min(0).max(1).optional(),
   minTradeUsd:  z.number().nonnegative(),
   preferTaxAdvantagedRebalance: z.boolean().optional(),
+  taxAdjustment: z.object({
+    enabled: z.boolean(),
+    effectiveRateAtRetirement: z.number().min(0).max(1),
+    marginalRateLTCG:          z.number().min(0).max(1),
+  }).optional(),
 }));
 
 export const portfolioSchema = z.object({

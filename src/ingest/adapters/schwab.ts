@@ -15,6 +15,7 @@ const SCHWAB_COLUMNS = {
   marketValue: 'Mkt Val (Market Value)',
   description: 'Description',
   price:       'Price',
+  costBasis:   'Cost Basis',
 } as const;
 
 const SCHWAB_SKIP_ROWS = 1;

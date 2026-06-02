@@ -155,17 +155,31 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
     );
   }
 
+  if (flag.kind === 'MISSING_COST_BASIS') {
+    return (
+      <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
+        <strong>Missing cost basis:</strong>{' '}
+        <code className="font-mono">{flag.ticker}</code> in{' '}
+        <em>{acctName(flag.accountId)}</em> has no cost basis recorded. Tax-adjusted
+        allocation is using <em>basis = market value</em> (no haircut) for this position, which
+        understates the tax drag. Add the cost basis in the Import tab for a more accurate view.
+      </div>
+    );
+  }
+
   return null;
 }
 
 // ── Household allocation table row ────────────────────────────────────────────
 
 function AllocationRow({
-  ac, current, target, projected,
+  ac, current, target, projected, taCurrent, taProjected,
 }: {
   ac: AssetClass; current: number; target: number; projected: number;
+  taCurrent?: number; taProjected?: number;
 }) {
   const drift = current - target;
+  const showTA = taCurrent !== undefined && taProjected !== undefined;
 
   return (
     <tr className="border-t border-gray-100">
@@ -178,6 +192,12 @@ function AllocationRow({
         </span>
       </td>
       <td className="px-4 py-3 text-right tabular-nums text-gray-500">{fmtPct(projected)}</td>
+      {showTA && (
+        <>
+          <td className="px-4 py-3 text-right tabular-nums text-indigo-700 border-l border-gray-100">{fmtPct(taCurrent!)}</td>
+          <td className="px-4 py-3 text-right tabular-nums text-indigo-500">{fmtPct(taProjected!)}</td>
+        </>
+      )}
     </tr>
   );
 }
@@ -402,6 +422,7 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plann
     ...flags.filter(f => f.kind === 'BLENDED_FUND_OVERSELL'),
     ...flags.filter(f => f.kind === 'BLENDED_FUND_SOLD'),
     ...flags.filter(f => f.kind === 'PLACEMENT_SPILLOVER'),
+    ...flags.filter(f => f.kind === 'MISSING_COST_BASIS'),
   ];
 
   // Compute per-account cash deployment summary for the free cash banner.
@@ -506,6 +527,11 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plann
           <h2 className="text-lg font-semibold text-gray-800">Results</h2>
           <span className="text-sm text-gray-500">
             Household value: <strong className="text-gray-800">{fmtUsd(householdValue)}</strong>
+            {result.taxAdjusted && (
+              <span className="ml-3 text-indigo-700">
+                After tax: <strong>{fmtUsd(result.taxAdjusted.householdValue)}</strong>
+              </span>
+            )}
           </span>
         </div>
         <button
@@ -745,23 +771,32 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plann
         <div className="overflow-hidden border border-gray-200 rounded-lg">
           <div className="p-4 border-b border-gray-100">
             {(() => {
+              // When tax adjustment is enabled, the pies show after-tax composition
+              // (the lens the engine is targeting). The titles include "(after-tax)"
+              // so the user knows what they're looking at. Nominal mode uses nominal.
+              const pieCurrentWeights = result.taxAdjusted?.currentWeights ?? currentWeights;
+              const pieProjectedWeights = result.taxAdjusted?.projectedWeights ?? projectedWeights;
+              const pieTotal = result.taxAdjusted?.householdValue ?? householdValue;
+              const ta = result.taxAdjusted !== undefined;
               const currentByClass = Object.fromEntries(
-                ALL_ASSET_CLASSES.map(ac => [ac, (currentWeights[ac] ?? 0) * householdValue])
+                ALL_ASSET_CLASSES.map(ac => [ac, (pieCurrentWeights[ac] ?? 0) * pieTotal])
               ) as Record<AssetClass, number>;
               const projectedByClass = Object.fromEntries(
-                ALL_ASSET_CLASSES.map(ac => [ac, (projectedWeights[ac] ?? 0) * householdValue])
+                ALL_ASSET_CLASSES.map(ac => [ac, (pieProjectedWeights[ac] ?? 0) * pieTotal])
               ) as Record<AssetClass, number>;
               const beforeSlices = buildPieSlices(currentByClass);
               const afterSlices  = buildPieSlices(projectedByClass);
               const hasBoth = beforeSlices.length > 0 && afterSlices.length > 0;
+              const beforeTitle = ta ? 'Before (after-tax)' : 'Before';
+              const afterTitle  = ta ? 'After trades (after-tax)' : 'After trades';
               return (
                 <div className="space-y-4">
                   <div className={hasBoth ? 'grid grid-cols-2 gap-6' : ''}>
                     {beforeSlices.length > 0 && (
-                      <PieChart title="Before" slices={beforeSlices} size={88} />
+                      <PieChart title={beforeTitle} slices={beforeSlices} size={88} />
                     )}
                     {afterSlices.length > 0 && (
-                      <PieChart title="After trades" slices={afterSlices} size={88} />
+                      <PieChart title={afterTitle} slices={afterSlices} size={88} />
                     )}
                   </div>
                   {hasBoth && (
@@ -801,6 +836,21 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plann
                     </HelpTip>
                   </span>
                 </th>
+                {result.taxAdjusted && (
+                  <>
+                    <th className="px-4 py-3 text-right border-l border-gray-200 text-indigo-700">
+                      <span className="inline-flex items-center justify-end gap-0.5">
+                        After-tax current
+                        <HelpTip dir="left">
+                          Current allocation expressed in after-tax dollars. Trad/401k positions
+                          are haircut by your effective retirement rate; taxable positions by the
+                          LTCG on their unrealized gain.
+                        </HelpTip>
+                      </span>
+                    </th>
+                    <th className="px-4 py-3 text-right text-indigo-500">After-tax projected</th>
+                  </>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -811,6 +861,8 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plann
                   current={currentWeights[ac]}
                   target={targetWeights[ac]}
                   projected={projectedWeights[ac]}
+                  taCurrent={result.taxAdjusted?.currentWeights[ac]}
+                  taProjected={result.taxAdjusted?.projectedWeights[ac]}
                 />
               ))}
             </tbody>
