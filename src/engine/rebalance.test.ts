@@ -1,10 +1,10 @@
-import { describe, it, expect } from 'vitest';
+﻿import { describe, it, expect } from 'vitest';
 import type { Account, Position, AssetClass, Strategy } from './types';
 import { ALL_ASSET_CLASSES } from './types';
 import { DEFAULT_STRATEGY } from './strategy';
 import { rebalance } from './rebalance';
 
-// ─── helpers ────────────────────────────────────────────────────────────────
+// â”€â”€â”€ helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function tradeFor(
   trades: ReturnType<typeof rebalance>['trades'],
@@ -18,10 +18,10 @@ function accountSum(trades: ReturnType<typeof rebalance>['trades'], accountId: s
   return trades.filter(t => t.accountId === accountId).reduce((s, t) => s + t.deltaUsd, 0);
 }
 
-// Within $1 — rounding from proportional splits; anything tighter is noise.
+// Within $1 â€” rounding from proportional splits; anything tighter is noise.
 const near = (a: number, b: number, tol = 1) => Math.abs(a - b) <= tol;
 
-// ─── shared fixtures ────────────────────────────────────────────────────────
+// â”€â”€â”€ shared fixtures â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 // Greenfield accounts: value comes entirely from newCash, no existing positions.
 const BASE_ACCOUNTS: Account[] = [
@@ -32,7 +32,7 @@ const BASE_ACCOUNTS: Account[] = [
 
 const NO_POSITIONS: Position[] = [];
 
-// Positions that exactly match the §9 target location — used for tolerance tests.
+// Positions that exactly match the Â§9 target location â€” used for tolerance tests.
 const ON_TARGET_POSITIONS: Position[] = [
   { accountId: 'schwab', ticker: 'MUNY',  marketValue: 200_000 },
   { accountId: 'ira',    ticker: 'GLD',   marketValue:   9_375 },
@@ -47,14 +47,14 @@ const ON_TARGET_POSITIONS: Position[] = [
 
 const ACCOUNTS_NO_CASH: Account[] = BASE_ACCOUNTS.map(a => ({ ...a, newCash: undefined }));
 
-// Zero-tolerance strategy: disables the ±5% suppression band so all asset classes
+// Zero-tolerance strategy: disables the Â±5% suppression band so all asset classes
 // participate in placement. Needed for greenfield tests where small-target classes
 // (ALTERNATIVES 2.5%, EMERGING_INTL 3%) would otherwise fall inside the default 5% band.
 const ZERO_TOL_STRATEGY = { ...DEFAULT_STRATEGY, toleranceAbs: 0 };
 
-// ─── §9 base case: $200k taxable · $300k IRA · $500k 401k → $1M ─────────────
+// â”€â”€â”€ Â§9 base case: $200k taxable Â· $300k IRA Â· $500k 401k â†’ $1M â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-describe('base case — §9 worked example (greenfield $1M)', () => {
+describe('base case â€” Â§9 worked example (greenfield $1M)', () => {
   // Use ZERO_TOL_STRATEGY: ALTERNATIVES (2.5%) and EMERGING_INTL (3%) sit inside
   // the default 5% band, so they'd be suppressed with the default strategy. These
   // tests validate placement math, not tolerance behavior.
@@ -101,10 +101,10 @@ describe('base case — §9 worked example (greenfield $1M)', () => {
   });
 });
 
-// ─── §9 spillover case: $300k taxable · $300k IRA · $400k 401k → $1M ────────
+// â”€â”€â”€ Â§9 spillover case: $300k taxable Â· $300k IRA Â· $400k 401k â†’ $1M â”€â”€â”€â”€â”€â”€â”€â”€
 // Taxable now exceeds the FI sleeve, so equities must land there.
 
-describe('spillover case — taxable > FI target', () => {
+describe('spillover case â€” taxable > FI target', () => {
   const ACCOUNTS_300K_TAXABLE: Account[] = [
     { id: 'schwab', name: 'Schwab Brokerage',   institution: 'Schwab',   type: 'TAXABLE',         newCash: 300_000 },
     { id: 'ira',    name: 'Fidelity Trad IRA',   institution: 'Fidelity', type: 'TRADITIONAL_IRA', newCash: 300_000 },
@@ -120,9 +120,9 @@ describe('spillover case — taxable > FI target', () => {
   });
 
   it('some equity class spills into TAXABLE bucket', () => {
-    // After Russell redistribution, US equity is placed as LC → MC → SC.
+    // After Russell redistribution, US equity is placed as LC â†’ MC â†’ SC.
     // LC ($385k) fills first and fits entirely in the $475k of remaining TA capacity.
-    // MC ($144k) then partially spills, followed by SC ($46k) — total ~$100k into taxable.
+    // MC ($144k) then partially spills, followed by SC ($46k) â€” total ~$100k into taxable.
     const r = rebalance(ACCOUNTS_300K_TAXABLE, NO_POSITIONS, ZERO_TOL_STRATEGY);
     expect(
       r.flags.some(f => f.kind === 'PLACEMENT_SPILLOVER' && f.bucket === 'TAXABLE'),
@@ -153,10 +153,10 @@ describe('spillover case — taxable > FI target', () => {
   });
 });
 
-// ─── constrained 401k menu ───────────────────────────────────────────────────
-// 401k only has index-fund elections — no ALTERNATIVES ticker.
+// â”€â”€â”€ constrained 401k menu â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// 401k only has index-fund elections â€” no ALTERNATIVES ticker.
 
-describe('constrained 401k — no ALTERNATIVES in fund menu', () => {
+describe('constrained 401k â€” no ALTERNATIVES in fund menu', () => {
   const CONSTRAINED_ACCOUNTS: Account[] = [
     { id: 'schwab', name: 'Schwab Brokerage', institution: 'Schwab',   type: 'TAXABLE',         newCash: 200_000 },
     { id: 'ira',    name: 'Fidelity Trad IRA', institution: 'Fidelity', type: 'TRADITIONAL_IRA', newCash: 300_000 },
@@ -189,9 +189,9 @@ describe('constrained 401k — no ALTERNATIVES in fund menu', () => {
   });
 });
 
-// ─── tolerance suppression ───────────────────────────────────────────────────
+// â”€â”€â”€ tolerance suppression â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-describe('tolerance — portfolio exactly at target', () => {
+describe('tolerance â€” portfolio exactly at target', () => {
   it('returns no trades', () => {
     const r = rebalance(ACCOUNTS_NO_CASH, ON_TARGET_POSITIONS, DEFAULT_STRATEGY);
     expect(r.trades).toHaveLength(0);
@@ -199,22 +199,21 @@ describe('tolerance — portfolio exactly at target', () => {
 
   it('emits WITHIN_TOLERANCE for every asset class', () => {
     const r = rebalance(ACCOUNTS_NO_CASH, ON_TARGET_POSITIONS, DEFAULT_STRATEGY);
-    // ALL_ASSET_CLASSES now has 9 entries (added US_LARGE_CAP, US_MID_CAP, US_SMALL_CAP).
-    expect(r.flags.filter(f => f.kind === 'WITHIN_TOLERANCE')).toHaveLength(9);
+    expect(r.flags.filter(f => f.kind === 'WITHIN_TOLERANCE')).toHaveLength(ALL_ASSET_CLASSES.length);
   });
 });
 
-// ─── 5/25 rule — relative tolerance band (issue #2) ──────────────────────────
+// â”€â”€â”€ 5/25 rule â€” relative tolerance band (issue #2) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //
 // Bogleheads / Swedroe rule: a class is out of tolerance when its drift exceeds
-// either of two bands — the *tighter* wins:
-//   • absolute: ±toleranceAbs  (e.g. ±5pp)
-//   • relative: ±toleranceRel × target  (e.g. 25% of target)
+// either of two bands â€” the *tighter* wins:
+//   â€¢ absolute: Â±toleranceAbs  (e.g. Â±5pp)
+//   â€¢ relative: Â±toleranceRel Ã— target  (e.g. 25% of target)
 //
 // For small sleeves the relative band fires first; for large sleeves the absolute
 // band fires first.
 
-describe('5/25 rule — relative tolerance band', () => {
+describe('5/25 rule â€” relative tolerance band', () => {
   // Two accounts, $1M household, simple two-class strategy.
   const TWO_ACCT: Account[] = [
     { id: 'ira',  name: 'IRA',  institution: 'Fidelity', type: 'TRADITIONAL_IRA' },
@@ -222,13 +221,13 @@ describe('5/25 rule — relative tolerance band', () => {
   ];
 
   // Target 90% LC / 10% FI. With toleranceAbs=0.05 and toleranceRel=0.25:
-  //   LC eff tol = min(0.05, 0.25×0.90) = 0.05  (absolute wins)
-  //   FI eff tol = min(0.05, 0.25×0.10) = 0.025 (relative wins — tighter)
+  //   LC eff tol = min(0.05, 0.25Ã—0.90) = 0.05  (absolute wins)
+  //   FI eff tol = min(0.05, 0.25Ã—0.10) = 0.025 (relative wins â€” tighter)
   const LC90_FI10 = {
     ...DEFAULT_STRATEGY,
     targets: {
       US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.90, US_MID_CAP: 0, US_SMALL_CAP: 0,
-      DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0.10, ALTERNATIVES: 0, CASH: 0,
+      DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0.10, ALTERNATIVES: 0, CRYPTO: 0, PRECIOUS_METALS: 0, CASH: 0,
     },
     toleranceAbs: 0.05,
     toleranceRel: 0.25,
@@ -236,7 +235,7 @@ describe('5/25 rule — relative tolerance band', () => {
   };
 
   it('relative band fires first for a small-target class (3pp drift on a 10% target)', () => {
-    // FI = 7% (drift 3pp). Absolute (5pp) passes; relative (2.5pp) fails → OOT.
+    // FI = 7% (drift 3pp). Absolute (5pp) passes; relative (2.5pp) fails â†’ OOT.
     const positions: Position[] = [
       { accountId: 'ira', ticker: 'FXAIX', marketValue: 930_000 },  // LC = 93%
       { accountId: 'tax', ticker: 'MUNY',  marketValue:  70_000 },  // FI = 7%
@@ -249,7 +248,7 @@ describe('5/25 rule — relative tolerance band', () => {
   });
 
   it('relative band passes when drift stays within 25% of target', () => {
-    // FI = 8% (drift 2pp). Relative band = 2.5pp → still within.
+    // FI = 8% (drift 2pp). Relative band = 2.5pp â†’ still within.
     const positions: Position[] = [
       { accountId: 'ira', ticker: 'FXAIX', marketValue: 920_000 },
       { accountId: 'tax', ticker: 'MUNY',  marketValue:  80_000 },
@@ -261,13 +260,13 @@ describe('5/25 rule — relative tolerance band', () => {
 
   it('absolute band dominates for a large-target class (4pp drift on a 90% target)', () => {
     // LC = 86% (drift 4pp). Absolute (5pp) passes; relative (22.5pp) would not
-    // fire either — but it's the absolute band that determines suppression here.
+    // fire either â€” but it's the absolute band that determines suppression here.
     const positions: Position[] = [
       { accountId: 'ira', ticker: 'FXAIX', marketValue: 860_000 },
       { accountId: 'tax', ticker: 'MUNY',  marketValue: 140_000 },  // FI = 14% (drift 4pp)
     ];
     const r = rebalance(TWO_ACCT, positions, LC90_FI10);
-    // Both classes are out of tolerance — LC by absolute band, FI by relative band.
+    // Both classes are out of tolerance â€” LC by absolute band, FI by relative band.
     // The point of this test: LC is the larger sleeve and is within absolute band.
     // But because they're paired in a single portfolio, FI's 4pp drift (>2.5pp relative)
     // makes it OOT. LC's 4pp drift (<5pp absolute) is the absolute-dominant case.
@@ -277,7 +276,7 @@ describe('5/25 rule — relative tolerance band', () => {
 
   it('disabling relative band (toleranceRel=1) reverts to absolute-only behaviour', () => {
     // FI = 7% (drift 3pp). With toleranceRel=1, eff = min(0.05, 0.10) = 0.05.
-    // Drift (3pp) < 5pp → within tolerance, no trades for FI.
+    // Drift (3pp) < 5pp â†’ within tolerance, no trades for FI.
     const positions: Position[] = [
       { accountId: 'ira', ticker: 'FXAIX', marketValue: 930_000 },
       { accountId: 'tax', ticker: 'MUNY',  marketValue:  70_000 },
@@ -288,7 +287,7 @@ describe('5/25 rule — relative tolerance band', () => {
   });
 
   it('legacy strategy without toleranceRel defaults to 0.25', () => {
-    // Same drift as the first test (FI = 7% on a 10% target → 3pp drift). With the
+    // Same drift as the first test (FI = 7% on a 10% target â†’ 3pp drift). With the
     // default toleranceRel of 0.25 implicit, the relative band (2.5pp) fires.
     const legacyStrategy = { ...LC90_FI10 };
     delete (legacyStrategy as { toleranceRel?: number }).toleranceRel;
@@ -302,7 +301,7 @@ describe('5/25 rule — relative tolerance band', () => {
   });
 });
 
-// ─── UNMAPPED_HOLDING ────────────────────────────────────────────────────────
+// â”€â”€â”€ UNMAPPED_HOLDING â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 describe('UNMAPPED_HOLDING flag', () => {
   it('emits one flag per unrecognized ticker', () => {
@@ -329,7 +328,7 @@ describe('UNMAPPED_HOLDING flag', () => {
   });
 });
 
-// ─── minTradeUsd suppression ─────────────────────────────────────────────────
+// â”€â”€â”€ minTradeUsd suppression â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 describe('minTradeUsd suppression', () => {
   it('suppresses all trades when minTradeUsd exceeds every delta', () => {
@@ -345,16 +344,16 @@ describe('minTradeUsd suppression', () => {
   });
 });
 
-// ─── zero-net-balance invariant ──────────────────────────────────────────────
-// With the tolerance-locking fix, Σ trade deltas per account must equal newCash
+// â”€â”€â”€ zero-net-balance invariant â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// With the tolerance-locking fix, Î£ trade deltas per account must equal newCash
 // (i.e. sells and buys within an account cancel out, leaving only cash deployment).
 
-describe('zero-net-balance invariant — tolerance with partial drift', () => {
-  // Positions that are CLOSE to §9 targets but not exact; some classes
+describe('zero-net-balance invariant â€” tolerance with partial drift', () => {
+  // Positions that are CLOSE to Â§9 targets but not exact; some classes
   // are within the default 5% band, some are out of tolerance. The old code
   // would generate non-zero net deltas per account; the fixed code must not.
   const DRIFTED_POSITIONS: Position[] = [
-    // schwab: $210k FI (target $200k — $10k over, within 5% of $1M = $50k band)
+    // schwab: $210k FI (target $200k â€” $10k over, within 5% of $1M = $50k band)
     { accountId: 'schwab', ticker: 'MUNY',  marketValue: 210_000 },
     // IRA: slightly off across multiple classes
     { accountId: 'ira',    ticker: 'FZROX', marketValue: 170_000 },  // US: short
@@ -386,7 +385,7 @@ describe('zero-net-balance invariant — tolerance with partial drift', () => {
   });
 });
 
-// ─── locked accounts ─────────────────────────────────────────────────────────
+// â”€â”€â”€ locked accounts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 describe('locked accounts', () => {
   const LOCKED_IRA_ACCOUNTS: Account[] = [
@@ -427,14 +426,14 @@ describe('locked accounts', () => {
   });
 
   it('net trade delta per non-locked account = newCash only', () => {
-    // greenfield: all new cash → each account's net delta should equal its newCash
+    // greenfield: all new cash â†’ each account's net delta should equal its newCash
     const r = rebalance(LOCKED_IRA_ACCOUNTS, NO_POSITIONS, ZERO_TOL_STRATEGY);
     expect(near(accountSum(r.trades, 'schwab'), 200_000)).toBe(true);
     expect(near(accountSum(r.trades, 'k401'),   500_000)).toBe(true);
   });
 });
 
-// ─── locked positions ────────────────────────────────────────────────────────
+// â”€â”€â”€ locked positions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 describe('locked positions', () => {
   // On-target portfolio except FZROX in 401k is locked.
@@ -448,16 +447,16 @@ describe('locked positions', () => {
     { accountId: 'k401',   ticker: 'GLD',   marketValue:  15_625 },
     { accountId: 'k401',   ticker: 'VWO',   marketValue:  18_750 },
     { accountId: 'k401',   ticker: 'VXUS',  marketValue: 106_250 },
-    // FSKAX locked — should never appear in a sell trade
+    // FSKAX locked â€” should never appear in a sell trade
     { accountId: 'k401',   ticker: 'FSKAX', marketValue: 259_375, locked: true },
-    // Extra cash overweight in US — needs to be rebalanced elsewhere
+    // Extra cash overweight in US â€” needs to be rebalanced elsewhere
     { accountId: 'k401',   ticker: 'FSKAX', marketValue: 100_000 },
   ];
 
   it('locked position still counted in currentWeights (via cap sub-classes)', () => {
     const r = rebalance(LOCKED_POS_ACCOUNTS, BASE_LOCKED_POSITIONS, ZERO_TOL_STRATEGY);
     // US_TOTAL_MARKET is redistributed to LC/MC/SC via RUSSELL_CAP_SPLIT.
-    // Total US equity: 259375 + 100000 (k401) + 215625 (ira) = 575000 → ~57.5% combined.
+    // Total US equity: 259375 + 100000 (k401) + 215625 (ira) = 575000 â†’ ~57.5% combined.
     const usEquityWeight =
       r.currentWeights.US_LARGE_CAP +
       r.currentWeights.US_MID_CAP  +
@@ -467,8 +466,8 @@ describe('locked positions', () => {
 
   it('no trade reduces cap sub-class beyond the unlocked portion', () => {
     const r = rebalance(LOCKED_POS_ACCOUNTS, BASE_LOCKED_POSITIONS, ZERO_TOL_STRATEGY);
-    // k401 FSKAX: $259k locked + $100k unlocked → redistributed via Russell weights.
-    // Unlocked cap capacity: LC ≈ $67k, MC ≈ $25k, SC ≈ $8k.
+    // k401 FSKAX: $259k locked + $100k unlocked â†’ redistributed via Russell weights.
+    // Unlocked cap capacity: LC â‰ˆ $67k, MC â‰ˆ $25k, SC â‰ˆ $8k.
     const lcSell = r.trades.find(t => t.accountId === 'k401' && t.assetClass === 'US_LARGE_CAP');
     if (lcSell && lcSell.deltaUsd < 0) {
       expect(Math.abs(lcSell.deltaUsd)).toBeLessThanOrEqual(100_000 * 0.67 + 1);
@@ -511,8 +510,8 @@ describe('locked positions', () => {
       { id: 'ira',    name: 'IRA',    institution: 'Fidelity', type: 'TRADITIONAL_IRA', locked: true },
       { id: 'k401',   name: '401k',   institution: 'Empower',  type: 'FOUR_OH_ONE_K',   newCash: 500_000 },
     ];
-    // IRA holds $100k of INTL (locked account — immovable). Household = $800k.
-    // DEVELOPED_INTL target = 17% → $136k total; $100k already locked in IRA.
+    // IRA holds $100k of INTL (locked account â€” immovable). Household = $800k.
+    // DEVELOPED_INTL target = 17% â†’ $136k total; $100k already locked in IRA.
     // Trades should only buy $36k of INTL, not $136k.
     const positions: Position[] = [
       { accountId: 'ira', ticker: 'FZILX', marketValue: 100_000 },
@@ -521,21 +520,21 @@ describe('locked positions', () => {
       ...ZERO_TOL_STRATEGY,
       targets: {
         US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.5, US_MID_CAP: 0, US_SMALL_CAP: 0,
-        DEVELOPED_INTL: 0.17, EMERGING_INTL: 0, FIXED_INCOME: 0.25, ALTERNATIVES: 0.08, CASH: 0,
+        DEVELOPED_INTL: 0.17, EMERGING_INTL: 0, FIXED_INCOME: 0.25, ALTERNATIVES: 0.08, CRYPTO: 0, PRECIOUS_METALS: 0, CASH: 0,
       },
     };
     const r = rebalance(accts, positions, strategy);
-    // Without the fix: projected DEVELOPED_INTL ≈ 17% + 100k/800k = 29.5%.
-    // With the fix: projected DEVELOPED_INTL ≈ 17%.
+    // Without the fix: projected DEVELOPED_INTL â‰ˆ 17% + 100k/800k = 29.5%.
+    // With the fix: projected DEVELOPED_INTL â‰ˆ 17%.
     expect(Math.abs(r.projectedWeights.DEVELOPED_INTL - 0.17)).toBeLessThan(0.02);
     expect(near(accountSum(r.trades, 'schwab'), 200_000, 5)).toBe(true);
     expect(near(accountSum(r.trades, 'k401'),   500_000, 5)).toBe(true);
   });
 });
 
-// ─── concentrateClasses — fill designated account first ──────────────────────
+// â”€â”€â”€ concentrateClasses â€” fill designated account first â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-describe('concentrateClasses — fill designated account first', () => {
+describe('concentrateClasses â€” fill designated account first', () => {
   // Two IRAs: Roth IRA concentrates ALTERNATIVES.
   // The default strategy spreads ALTERNATIVES proportionally across all TA accounts;
   // with concentrateClasses the Roth must absorb as much as its capacity allows first.
@@ -549,7 +548,7 @@ describe('concentrateClasses — fill designated account first', () => {
 
   it('all ALTERNATIVES go to Roth IRA when it has sufficient capacity', () => {
     const r = rebalance(CONCENTRATE_ACCOUNTS, NO_POSITIONS, ZERO_TOL_STRATEGY);
-    // ALTERNATIVES target = 2.5% × $1M = $25k. Roth has $150k capacity → absorbs all of it.
+    // ALTERNATIVES target = 2.5% Ã— $1M = $25k. Roth has $150k capacity â†’ absorbs all of it.
     expect(tradeFor(r.trades, 'roth',     'ALTERNATIVES')?.deltaUsd).toBeCloseTo(25_000, 0);
     expect(tradeFor(r.trades, 'trad_ira', 'ALTERNATIVES')).toBeUndefined();
     expect(tradeFor(r.trades, 'k401',     'ALTERNATIVES')).toBeUndefined();
@@ -563,7 +562,7 @@ describe('concentrateClasses — fill designated account first', () => {
         concentrateClasses: ['ALTERNATIVES'] as AssetClass[] },
     ];
     const r = rebalance(SMALL_ROTH, NO_POSITIONS, ZERO_TOL_STRATEGY);
-    // Roth has $5k — fills with ALTERNATIVES first, then capacity is gone.
+    // Roth has $5k â€” fills with ALTERNATIVES first, then capacity is gone.
     expect(tradeFor(r.trades, 'roth', 'ALTERNATIVES')?.deltaUsd).toBeCloseTo(5_000, 0);
     // Remaining $20k of ALTERNATIVES spills to trad IRA.
     expect(tradeFor(r.trades, 'trad_ira', 'ALTERNATIVES')?.deltaUsd).toBeCloseTo(20_000, 0);
@@ -578,15 +577,15 @@ describe('concentrateClasses — fill designated account first', () => {
   });
 });
 
-// ─── allowedAssetClasses — explicit class whitelist ──────────────────────────
+// â”€â”€â”€ allowedAssetClasses â€” explicit class whitelist â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-describe('allowedAssetClasses — explicit class whitelist', () => {
+describe('allowedAssetClasses â€” explicit class whitelist', () => {
   const EXPLICIT_CONSTRAINED: Account[] = [
     { id: 'schwab', name: 'Schwab',    institution: 'Schwab',   type: 'TAXABLE',         newCash: 200_000 },
     { id: 'ira',    name: 'Trad IRA',  institution: 'Fidelity', type: 'TRADITIONAL_IRA', newCash: 300_000 },
     {
       id: 'k401', name: 'Empower 401k', institution: 'Empower', type: 'FOUR_OH_ONE_K', newCash: 500_000,
-      // Direct class whitelist — same effective constraint as the availableTickers test
+      // Direct class whitelist â€” same effective constraint as the availableTickers test
       // but expressed without a ticker list.
       allowedAssetClasses: [
         'US_LARGE_CAP', 'US_MID_CAP', 'US_SMALL_CAP',
@@ -613,7 +612,7 @@ describe('allowedAssetClasses — explicit class whitelist', () => {
   });
 
   it('allowedAssetClasses takes precedence over availableTickers', () => {
-    // availableTickers includes GLD (→ ALTERNATIVES), but allowedAssetClasses overrides it.
+    // availableTickers includes GLD (â†’ ALTERNATIVES), but allowedAssetClasses overrides it.
     const accts: Account[] = [{
       id: 'ira', name: 'IRA', institution: 'Fidelity', type: 'TRADITIONAL_IRA', newCash: 500_000,
       availableTickers: ['GLD'],
@@ -625,15 +624,15 @@ describe('allowedAssetClasses — explicit class whitelist', () => {
   });
 });
 
-// ─── per-account net-zero when NO_ELIGIBLE_ACCOUNT fires ─────────────────────
+// â”€â”€â”€ per-account net-zero when NO_ELIGIBLE_ACCOUNT fires â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // An account restricted to one asset class must not produce surplus-cash trades
 // (net-negative) when the offsetting class has no eligible home anywhere.
 
-describe('per-account net-zero — NO_ELIGIBLE_ACCOUNT with restricted account', () => {
+describe('per-account net-zero â€” NO_ELIGIBLE_ACCOUNT with restricted account', () => {
   // Roth holds US_LARGE_CAP; target shifts 50% to FIXED_INCOME.
-  // Roth's allowedAssetClasses excludes FI → NO_ELIGIBLE_ACCOUNT fires.
+  // Roth's allowedAssetClasses excludes FI â†’ NO_ELIGIBLE_ACCOUNT fires.
   // Before the step-7.5 fix, Roth would receive a sell-only trade for $50k LC
-  // with no intra-account buy to absorb it (net = −$50k, surplus cash).
+  // with no intra-account buy to absorb it (net = âˆ’$50k, surplus cash).
   // After the fix, the gap is returned to LC so net = 0 and no trade is emitted.
   const RESTRICTED_ROTH: Account[] = [
     {
@@ -648,12 +647,12 @@ describe('per-account net-zero — NO_ELIGIBLE_ACCOUNT with restricted account',
     ...DEFAULT_STRATEGY,
     targets: {
       US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.5, US_MID_CAP: 0, US_SMALL_CAP: 0,
-      DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0.5, ALTERNATIVES: 0, CASH: 0,
+      DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0.5, ALTERNATIVES: 0, CRYPTO: 0, PRECIOUS_METALS: 0, CASH: 0,
     },
     toleranceAbs: 0,
   };
 
-  it('net trade delta for restricted account is 0, not −$50k', () => {
+  it('net trade delta for restricted account is 0, not âˆ’$50k', () => {
     const r = rebalance(RESTRICTED_ROTH, ROTH_POSITIONS, HALF_LC_HALF_FI);
     expect(near(accountSum(r.trades, 'roth'), 0, 1)).toBe(true);
   });
@@ -683,10 +682,10 @@ describe('per-account net-zero — NO_ELIGIBLE_ACCOUNT with restricted account',
   });
 });
 
-// ─── TAXABLE_SALE flag ───────────────────────────────────────────────────────
+// â”€â”€â”€ TAXABLE_SALE flag â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 describe('TAXABLE_SALE flag', () => {
-  // Start with more FI than target in taxable → engine must sell some.
+  // Start with more FI than target in taxable â†’ engine must sell some.
   const OVER_FI_POSITIONS: Position[] = [
     { accountId: 'schwab', ticker: 'MUNY',  marketValue: 300_000 },  // $100k over target
     { accountId: 'ira',    ticker: 'FZROX', marketValue: 215_625 },
@@ -709,16 +708,16 @@ describe('TAXABLE_SALE flag', () => {
   });
 });
 
-// ─── step 8.5 — post-minTradeUsd balance correction ─────────────────────────
+// â”€â”€â”€ step 8.5 â€” post-minTradeUsd balance correction â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // When minTradeUsd filtering drops a trade on one side of the ledger but not the
 // other, the per-account net would become nonzero. Step 8.5 absorbs the residual
 // into the largest kept trade on the imbalanced side.
 
-describe('step 8.5 — minTradeUsd balance correction', () => {
+describe('step 8.5 â€” minTradeUsd balance correction', () => {
   // Single account; $75k existing positions (no new cash).
   // LC is over-weight, FI is under-weight, ALT is slightly over-weight.
   // With minTradeUsd = $10 000, the ALT sell ($1 250) is filtered out.
-  // Before correction: net = −$17 500 + $18 750 = +$1 250 (surplus buy).
+  // Before correction: net = âˆ’$17 500 + $18 750 = +$1 250 (surplus buy).
   // After correction:  FI buy shrunk to $17 500; net = 0.
   const SINGLE_ACCT: Account[] = [
     { id: 'ira', name: 'IRA', institution: 'Fidelity', type: 'TRADITIONAL_IRA' },
@@ -728,15 +727,15 @@ describe('step 8.5 — minTradeUsd balance correction', () => {
     { accountId: 'ira', ticker: 'MUNY',  marketValue: 15_000 },  // FIXED_INCOME
     { accountId: 'ira', ticker: 'GLD',   marketValue:  5_000 },  // ALTERNATIVES
   ];
-  // Household = $75k; targets: 50% LC, 45% FI, 5% ALT → $37 500, $33 750, $3 750.
-  // LC delta = −$17 500 (sell, survives).
+  // Household = $75k; targets: 50% LC, 45% FI, 5% ALT â†’ $37 500, $33 750, $3 750.
+  // LC delta = âˆ’$17 500 (sell, survives).
   // FI delta = +$18 750 (buy, survives).
-  // ALT delta = −$1 250 (sell, filtered by $10 000).
+  // ALT delta = âˆ’$1 250 (sell, filtered by $10 000).
   const HIGH_MIN_TRADE_STRATEGY = {
     ...DEFAULT_STRATEGY,
     targets: {
       US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.50, US_MID_CAP: 0, US_SMALL_CAP: 0,
-      DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0.45, ALTERNATIVES: 0.05, CASH: 0,
+      DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0.45, ALTERNATIVES: 0.05, CRYPTO: 0, PRECIOUS_METALS: 0, CASH: 0,
     },
     toleranceAbs: 0,
     minTradeUsd: 10_000,
@@ -749,7 +748,7 @@ describe('step 8.5 — minTradeUsd balance correction', () => {
 
   it('the filtered-out class has no trade', () => {
     const r = rebalance(SINGLE_ACCT, POSITIONS_75K, HIGH_MIN_TRADE_STRATEGY);
-    // ALT sell is only −$1 250, below the $10 000 minTradeUsd.
+    // ALT sell is only âˆ’$1 250, below the $10 000 minTradeUsd.
     expect(tradeFor(r.trades, 'ira', 'ALTERNATIVES')).toBeUndefined();
   });
 
@@ -757,7 +756,7 @@ describe('step 8.5 — minTradeUsd balance correction', () => {
     const r = rebalance(SINGLE_ACCT, POSITIONS_75K, HIGH_MIN_TRADE_STRATEGY);
     const fiBuy = tradeFor(r.trades, 'ira', 'FIXED_INCOME');
     expect(fiBuy).toBeDefined();
-    // FI buy should be $17 500 (= $18 750 − $1 250 residual), not $18 750.
+    // FI buy should be $17 500 (= $18 750 âˆ’ $1 250 residual), not $18 750.
     expect(fiBuy!.deltaUsd).toBeCloseTo(17_500, -2);
   });
 
@@ -771,9 +770,9 @@ describe('step 8.5 — minTradeUsd balance correction', () => {
   });
 });
 
-// ─── freeCash — household-level free cash distribution ───────────────────────
+// â”€â”€â”€ freeCash â€” household-level free cash distribution â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-describe('freeCash — household-level cash distribution', () => {
+describe('freeCash â€” household-level cash distribution', () => {
   // Two deposit-eligible accounts: $200k taxable, $300k IRA.
   const ACCOUNTS_NO_CASH_ELIGIBLE: Account[] = [
     { id: 'schwab', name: 'Schwab', institution: 'Schwab',   type: 'TAXABLE',         },
@@ -814,7 +813,7 @@ describe('freeCash — household-level cash distribution', () => {
       { accountId: 'schwab', ticker: 'MUNY',  marketValue: 200_000 },
       { accountId: 'roth',   ticker: 'FZROX', marketValue: 200_000 },
     ];
-    // freeCash $20k — only schwab is eligible.
+    // freeCash $20k â€” only schwab is eligible.
     const r = rebalance(accounts, positions, ZERO_TOL_STRATEGY, {}, {}, 20_000);
     // schwab gets all $20k; roth net = 0.
     expect(near(accountSum(r.trades, 'schwab'), 20_000, 100)).toBe(true);
@@ -898,7 +897,7 @@ describe('freeCash — household-level cash distribution', () => {
   });
 
   it('emits EXCESS_CASH for free cash exceeding the sum of all caps', () => {
-    // Both accounts limited: schwab $5k, roth $8k → $13k total capacity. $20k free
+    // Both accounts limited: schwab $5k, roth $8k â†’ $13k total capacity. $20k free
     // cash leaves $7k un-allocatable.
     const accounts: Account[] = [
       { id: 'schwab', name: 'Schwab', institution: 'Schwab',   type: 'TAXABLE',  depositLimitUsd: 5_000 },
@@ -918,7 +917,7 @@ describe('freeCash — household-level cash distribution', () => {
 
   it('deploys per-account newCash in full regardless of the deposit cap', () => {
     // roth has a tight $1k free-cash cap but $9k of its own newCash. The cap governs
-    // only household free-cash routing — the $9k must still deploy in full.
+    // only household free-cash routing â€” the $9k must still deploy in full.
     const accounts: Account[] = [
       { id: 'roth', name: 'Roth', institution: 'Fidelity', type: 'ROTH_IRA', newCash: 9_000, depositLimitUsd: 1_000 },
     ];
@@ -930,7 +929,7 @@ describe('freeCash — household-level cash distribution', () => {
   });
 
   it('treats depositLimitUsd === 0 as closed', () => {
-    // roth capped at $0 is functionally closed → all free cash goes to schwab.
+    // roth capped at $0 is functionally closed â†’ all free cash goes to schwab.
     const accounts: Account[] = [
       { id: 'schwab', name: 'Schwab', institution: 'Schwab',   type: 'TAXABLE'  },
       { id: 'roth',   name: 'Roth',   institution: 'Fidelity', type: 'ROTH_IRA', depositLimitUsd: 0 },
@@ -945,9 +944,9 @@ describe('freeCash — household-level cash distribution', () => {
   });
 });
 
-// ─── plannedWithdrawal — drawdown / spending mode (issue #14) ────────────────
+// â”€â”€â”€ plannedWithdrawal â€” drawdown / spending mode (issue #14) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-describe('plannedWithdrawal — drawdown', () => {
+describe('plannedWithdrawal â€” drawdown', () => {
   // schwab (taxable, eligible by default) $200k; ira (traditional, RESTRICTED by
   // default) $300k. Net trade delta per account == its (negative) withdrawal.
   const ACCOUNTS: Account[] = [
@@ -959,8 +958,8 @@ describe('plannedWithdrawal — drawdown', () => {
     { accountId: 'ira',    ticker: 'FZROX', marketValue: 300_000 },
   ];
 
-  it('raises the full planned amount from the eligible account; net flow = −W', () => {
-    // Only schwab is eligible (ira is tax-advantaged → restricted by default), so
+  it('raises the full planned amount from the eligible account; net flow = âˆ’W', () => {
+    // Only schwab is eligible (ira is tax-advantaged â†’ restricted by default), so
     // it funds the whole $50k. Household value drops by the withdrawal.
     const r = rebalance(ACCOUNTS, POSITIONS, ZERO_TOL_STRATEGY, {}, {}, 0, 50_000);
     expect(near(accountSum(r.trades, 'schwab'), -50_000, 200)).toBe(true);
@@ -985,7 +984,7 @@ describe('plannedWithdrawal — drawdown', () => {
     expect(near(accountSum(r.trades, 'b'), -20_000, 200)).toBe(true);
   });
 
-  it('withdraws Σ RMD + the additional amount (RMDs are additive, not a ceiling)', () => {
+  it('withdraws Î£ RMD + the additional amount (RMDs are additive, not a ceiling)', () => {
     const accounts: Account[] = [
       { id: 'schwab', name: 'Schwab', institution: 'Schwab',   type: 'TAXABLE'         },
       { id: 'ira',    name: 'IRA',    institution: 'Fidelity', type: 'TRADITIONAL_IRA', rmdDueUsd: 20_000 },
@@ -998,7 +997,7 @@ describe('plannedWithdrawal — drawdown', () => {
   });
 
   it('routes no discretionary withdrawal to a restricted (tax-advantaged) account', () => {
-    // ira is restricted by default → all $40k comes from the taxable account.
+    // ira is restricted by default â†’ all $40k comes from the taxable account.
     const r = rebalance(ACCOUNTS, POSITIONS, ZERO_TOL_STRATEGY, {}, {}, 0, 40_000);
     expect(near(accountSum(r.trades, 'schwab'), -40_000, 200)).toBe(true);
     expect(near(accountSum(r.trades, 'ira'),    0,       200)).toBe(true);
@@ -1009,7 +1008,7 @@ describe('plannedWithdrawal — drawdown', () => {
       { id: 'schwab', name: 'Schwab', institution: 'Schwab',   type: 'TAXABLE'         },
       { id: 'ira',    name: 'IRA',    institution: 'Fidelity', type: 'TRADITIONAL_IRA', rmdDueUsd: 25_000 },
     ];
-    // additional = 0, so only the $25k RMD is taken — from the restricted ira.
+    // additional = 0, so only the $25k RMD is taken â€” from the restricted ira.
     const r = rebalance(accounts, POSITIONS, ZERO_TOL_STRATEGY, {}, {}, 0, 0);
     expect(near(accountSum(r.trades, 'ira'),    -25_000, 200)).toBe(true);
     expect(near(accountSum(r.trades, 'schwab'), 0,       200)).toBe(true);
@@ -1017,8 +1016,8 @@ describe('plannedWithdrawal — drawdown', () => {
 
   it('processes a withdrawal and free-cash deposit independently in the same run', () => {
     // Deposits and withdrawals are independent passes that net per account.
-    // a (lower id) drains the $30k withdrawal → net −$30k. The $30k of free cash
-    // routes to the largest-capacity account b (concentrate-then-spill) → net +$30k.
+    // a (lower id) drains the $30k withdrawal â†’ net âˆ’$30k. The $30k of free cash
+    // routes to the largest-capacity account b (concentrate-then-spill) â†’ net +$30k.
     const accounts: Account[] = [
       { id: 'a', name: 'A', institution: 'Schwab', type: 'TAXABLE' },
       { id: 'b', name: 'B', institution: 'Schwab', type: 'TAXABLE' },
@@ -1031,7 +1030,7 @@ describe('plannedWithdrawal — drawdown', () => {
     expect(near(accountSum(r.trades, 'a'), -30_000, 200)).toBe(true);
     expect(near(accountSum(r.trades, 'b'),  30_000, 200)).toBe(true);
     expect(r.flags.some(f => f.kind === 'EXCESS_CASH')).toBe(false);
-    // Household value is unchanged: +$30k deposit − $30k withdrawal.
+    // Household value is unchanged: +$30k deposit âˆ’ $30k withdrawal.
     expect(r.householdValue).toBeCloseTo(400_000, 0);
   });
 
@@ -1069,16 +1068,16 @@ describe('plannedWithdrawal — drawdown', () => {
   });
 });
 
-// ─── step 7.7 — redirect taxable equity sells to tax-advantaged accounts ─────
+// â”€â”€â”€ step 7.7 â€” redirect taxable equity sells to tax-advantaged accounts â”€â”€â”€â”€â”€
 //
 // Scenario: taxable holds equity that is overweight at household level. Without
 // the redirect, the engine would sell equity in taxable (bad: triggers capital
 // gains). With step 7.7, the sell is moved to the TA account instead.
 
-describe('step 7.7 — redirectTaxableSells', () => {
-  // ── shared fixture ──────────────────────────────────────────────────────────
+describe('step 7.7 â€” redirectTaxableSells', () => {
+  // â”€â”€ shared fixture â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Household $200k: taxable $60k US_LARGE_CAP, Roth $80k US_LARGE_CAP + $60k FI.
-  // Target 50% LC / 50% FI → need to sell $40k LC and buy $40k FI.
+  // Target 50% LC / 50% FI â†’ need to sell $40k LC and buy $40k FI.
   // greedyPlace routes: all LC to Roth (TAX_ADVANTAGED first), FI split Taxable $60k / Roth $40k.
   // Without redirect: taxable sells $60k LC and buys $60k FI; Roth buys $20k LC and sells $20k FI.
   // With redirect: taxable keeps its LC; Roth sells $40k LC and buys $40k FI; taxable has 0 trades.
@@ -1096,13 +1095,13 @@ describe('step 7.7 — redirectTaxableSells', () => {
     ...DEFAULT_STRATEGY,
     targets: {
       US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.5, US_MID_CAP: 0, US_SMALL_CAP: 0,
-      DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0.5, ALTERNATIVES: 0, CASH: 0,
+      DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0.5, ALTERNATIVES: 0, CRYPTO: 0, PRECIOUS_METALS: 0, CASH: 0,
     },
     toleranceAbs: 0,
     minTradeUsd: 0,
   };
 
-  it('emits no TAXABLE_SALE — equity sell fully redirected to Roth', () => {
+  it('emits no TAXABLE_SALE â€” equity sell fully redirected to Roth', () => {
     const r = rebalance(REDIRECT_ACCOUNTS, REDIRECT_POSITIONS, REDIRECT_STRATEGY);
     expect(r.flags.filter(f => f.kind === 'TAXABLE_SALE')).toHaveLength(0);
   });
@@ -1133,10 +1132,10 @@ describe('step 7.7 — redirectTaxableSells', () => {
     expect(r.projectedWeights.FIXED_INCOME).toBeCloseTo(0.5, 2);
   });
 
-  // ── partial redirect ─────────────────────────────────────────────────────────
+  // â”€â”€ partial redirect â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Roth holds only $10k LC (not enough to absorb the full $60k taxable sell).
   // Redirect absorbs $10k; taxable still sells the remaining $50k.
-  it('partial redirect — taxable sell shrinks when TA can only absorb part of it', () => {
+  it('partial redirect â€” taxable sell shrinks when TA can only absorb part of it', () => {
     const positions: Position[] = [
       { accountId: 'taxable', ticker: 'FXAIX', marketValue:  60_000 },  // LC
       { accountId: 'roth',    ticker: 'FXAIX', marketValue:  10_000 },  // LC (small)
@@ -1148,13 +1147,13 @@ describe('step 7.7 — redirectTaxableSells', () => {
       ...DEFAULT_STRATEGY,
       targets: {
         US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.25, US_MID_CAP: 0, US_SMALL_CAP: 0,
-        DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0.75, ALTERNATIVES: 0, CASH: 0,
+        DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0.75, ALTERNATIVES: 0, CRYPTO: 0, PRECIOUS_METALS: 0, CASH: 0,
       },
       toleranceAbs: 0,
       minTradeUsd: 0,
     };
     const r = rebalance(REDIRECT_ACCOUNTS, positions, strategy);
-    // Roth can absorb up to its target for LC. Any taxable sell should be ≤ original.
+    // Roth can absorb up to its target for LC. Any taxable sell should be â‰¤ original.
     const taxableLcSell = r.trades.find(t => t.accountId === 'taxable' && t.assetClass === 'US_LARGE_CAP');
     // Household is only $20k overweight LC overall. Any remaining taxable sell must be < $20k.
     if (taxableLcSell) {
@@ -1165,10 +1164,10 @@ describe('step 7.7 — redirectTaxableSells', () => {
     expect(near(accountSum(r.trades, 'roth'),    0, 2)).toBe(true);
   });
 
-  // ── FIXED_INCOME sells in taxable are NOT redirected ─────────────────────────
+  // â”€â”€ FIXED_INCOME sells in taxable are NOT redirected â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // FI prefers TAXABLE, so selling FI in taxable is correct behaviour.
   // (This is the existing OVER_FI_POSITIONS test scenario.)
-  it('does not redirect FIXED_INCOME sells — FI prefers TAXABLE', () => {
+  it('does not redirect FIXED_INCOME sells â€” FI prefers TAXABLE', () => {
     const accounts: Account[] = [
       { id: 'schwab', name: 'Schwab', institution: 'Schwab',   type: 'TAXABLE'         },
       { id: 'ira',    name: 'IRA',    institution: 'Fidelity', type: 'TRADITIONAL_IRA' },
@@ -1182,7 +1181,7 @@ describe('step 7.7 — redirectTaxableSells', () => {
       ...DEFAULT_STRATEGY,
       targets: {
         US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.8, US_MID_CAP: 0, US_SMALL_CAP: 0,
-        DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0.2, ALTERNATIVES: 0, CASH: 0,
+        DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0.2, ALTERNATIVES: 0, CRYPTO: 0, PRECIOUS_METALS: 0, CASH: 0,
       },
       toleranceAbs: 0,
       minTradeUsd: 0,
@@ -1193,11 +1192,11 @@ describe('step 7.7 — redirectTaxableSells', () => {
     expect(fiSaleFlag).toBeDefined();
   });
 
-  // ── TAXABLE-preferred class must not be used as compensating Y ───────────────
+  // â”€â”€ TAXABLE-preferred class must not be used as compensating Y â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Setup: taxable holds LC (overweight) + FI; 401k holds LC + FI.
-  // FI target is 60% — greedyPlace routes all $180k FI to taxable (fits within
-  // the $200k taxable capacity). The taxable LC surplus ($130k) would—without the
-  // guard—be redirected using FI as the compensating Y class, pushing $100k of FI
+  // FI target is 60% â€” greedyPlace routes all $180k FI to taxable (fits within
+  // the $200k taxable capacity). The taxable LC surplus ($130k) wouldâ€”without the
+  // guardâ€”be redirected using FI as the compensating Y class, pushing $100k of FI
   // into the 401k and leaving taxable with only $30k of FI. The guard must prevent
   // FI from ever being used as Y because its primary placement preference is TAXABLE.
   it('FI-as-Y guard: FIXED_INCOME never used as redirect compensator', () => {
@@ -1213,19 +1212,19 @@ describe('step 7.7 — redirectTaxableSells', () => {
       { accountId: 'k401',    ticker: 'FXNAX', marketValue:  50_000 }, // FIXED_INCOME
     ];
     // Total $300k. Target: 40% LC ($120k), 60% FI ($180k).
-    // Placement: FI → TAXABLE only; LC → TAX_ADVANTAGED first.
+    // Placement: FI â†’ TAXABLE only; LC â†’ TAX_ADVANTAGED first.
     const strategy = {
       ...DEFAULT_STRATEGY,
       targets: {
         US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.4, US_MID_CAP: 0, US_SMALL_CAP: 0,
-        DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0.6, ALTERNATIVES: 0, CASH: 0,
+        DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0.6, ALTERNATIVES: 0, CRYPTO: 0, PRECIOUS_METALS: 0, CASH: 0,
       },
       toleranceAbs: 0,
       minTradeUsd: 0,
     };
     const r = rebalance(accts, positions, strategy);
 
-    // FI buy must land in taxable — not in the 401k.
+    // FI buy must land in taxable â€” not in the 401k.
     const taxableFiBuy = tradeFor(r.trades, 'taxable', 'FIXED_INCOME');
     expect(taxableFiBuy).toBeDefined();
     expect(taxableFiBuy!.deltaUsd).toBeGreaterThan(0);
@@ -1244,7 +1243,7 @@ describe('step 7.7 — redirectTaxableSells', () => {
     expect(near(accountSum(r.trades, 'k401'),    0, 2)).toBe(true);
   });
 
-  // ── invariants survive redirect ───────────────────────────────────────────────
+  // â”€â”€ invariants survive redirect â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   it('multi-account net-zero preserved across all accounts after redirect', () => {
     const accounts: Account[] = [
       { id: 'taxable', name: 'Taxable', institution: 'Schwab',   type: 'TAXABLE'         },
@@ -1262,7 +1261,7 @@ describe('step 7.7 — redirectTaxableSells', () => {
       ...DEFAULT_STRATEGY,
       targets: {
         US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.6, US_MID_CAP: 0, US_SMALL_CAP: 0,
-        DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0.4, ALTERNATIVES: 0, CASH: 0,
+        DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0.4, ALTERNATIVES: 0, CRYPTO: 0, PRECIOUS_METALS: 0, CASH: 0,
       },
       toleranceAbs: 0,
       minTradeUsd: 0,
@@ -1277,24 +1276,24 @@ describe('step 7.7 — redirectTaxableSells', () => {
   });
 });
 
-// ─── backlog #17 — account-count minimization (concentrate-then-spill) ────────
+// â”€â”€â”€ backlog #17 â€” account-count minimization (concentrate-then-spill) â”€â”€â”€â”€â”€â”€â”€â”€
 //
 // greedyPlace now fills the largest-capacity eligible account first, spilling to
 // additional accounts only when the first is exhausted.  Proportional spreading
 // across all same-bucket accounts is replaced by this "waterfall" logic.
 
-describe('account-count minimization — concentrate-then-spill (backlog #17)', () => {
-  // ── single-account fill ────────────────────────────────────────────────────
+describe('account-count minimization â€” concentrate-then-spill (backlog #17)', () => {
+  // â”€â”€ single-account fill â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // 401k ($500k) and IRA ($300k) are both TAX_ADVANTAGED.  ALTERNATIVES target
-  // is $25k — easily fits inside either account alone.  The engine should send
+  // is $25k â€” easily fits inside either account alone.  The engine should send
   // it entirely to the larger account (401k) and leave IRA untouched for ALTS.
-  it('small ALTERNATIVES sleeve fits in one account — IRA receives no ALTS', () => {
+  it('small ALTERNATIVES sleeve fits in one account â€” IRA receives no ALTS', () => {
     const r = rebalance(BASE_ACCOUNTS, NO_POSITIONS, ZERO_TOL_STRATEGY);
     expect(tradeFor(r.trades, 'k401', 'ALTERNATIVES')?.deltaUsd).toBeCloseTo(25_000, 0);
     expect(tradeFor(r.trades, 'ira',  'ALTERNATIVES')).toBeUndefined();
   });
 
-  // ── per-account balance still preserved ───────────────────────────────────
+  // â”€â”€ per-account balance still preserved â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   it('account totals still match newCash after concentrate-then-spill', () => {
     const r = rebalance(BASE_ACCOUNTS, NO_POSITIONS, ZERO_TOL_STRATEGY);
     expect(near(accountSum(r.trades, 'schwab'), 200_000)).toBe(true);
@@ -1302,7 +1301,7 @@ describe('account-count minimization — concentrate-then-spill (backlog #17)', 
     expect(near(accountSum(r.trades, 'k401'),   500_000)).toBe(true);
   });
 
-  // ── spill fires when single account is insufficient ────────────────────────
+  // â”€â”€ spill fires when single account is insufficient â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // US_LARGE_CAP target ($385k) > 401k remaining capacity after prior fills,
   // so it spills to IRA.  Verify that the two accounts together receive the
   // full LC target and the capacity invariant holds.
@@ -1311,15 +1310,15 @@ describe('account-count minimization — concentrate-then-spill (backlog #17)', 
     const k401Lc = tradeFor(r.trades, 'k401', 'US_LARGE_CAP')?.deltaUsd ?? 0;
     const iraLc  = tradeFor(r.trades, 'ira',  'US_LARGE_CAP')?.deltaUsd ?? 0;
     // Combined LC allocation must equal the target ($385k scaled to free capacity).
-    // (greenfield ⇒ scale = 1, total = $385k)
+    // (greenfield â‡’ scale = 1, total = $385k)
     expect(near(k401Lc + iraLc, 385_000, 2)).toBe(true);
     // IRA receives the larger LC share: by the time LC is placed, k401 has already
-    // absorbed ALTS + EMINTL + DEVINTL ($225k), leaving it with $275k — less than
-    // IRA's untouched $300k — so IRA is filled first and gets the bulk of LC.
+    // absorbed ALTS + EMINTL + DEVINTL ($225k), leaving it with $275k â€” less than
+    // IRA's untouched $300k â€” so IRA is filled first and gets the bulk of LC.
     expect(iraLc).toBeGreaterThan(k401Lc);
   });
 
-  // ── three TA accounts — fills cascade from largest to smallest ────────────
+  // â”€â”€ three TA accounts â€” fills cascade from largest to smallest â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   it('three TA accounts: ALTS fills largest first, never touches smallest', () => {
     const accounts: Account[] = [
       { id: 'schwab', name: 'Schwab',  institution: 'Schwab',   type: 'TAXABLE',         newCash: 200_000 },
@@ -1327,7 +1326,7 @@ describe('account-count minimization — concentrate-then-spill (backlog #17)', 
       { id: 'mid',    name: 'Mid 401', institution: 'Empower',  type: 'FOUR_OH_ONE_K',   newCash: 150_000 },
       { id: 'tiny',   name: 'Tiny Roth', institution: 'Fidelity', type: 'ROTH_IRA',       newCash:  50_000 },
     ];
-    // ALTS target = 2.5% × $1M = $25k.  big IRA ($600k) absorbs it all.
+    // ALTS target = 2.5% Ã— $1M = $25k.  big IRA ($600k) absorbs it all.
     const r = rebalance(accounts, NO_POSITIONS, ZERO_TOL_STRATEGY);
     expect(tradeFor(r.trades, 'big',  'ALTERNATIVES')?.deltaUsd).toBeCloseTo(25_000, 0);
     expect(tradeFor(r.trades, 'mid',  'ALTERNATIVES')).toBeUndefined();
@@ -1338,7 +1337,7 @@ describe('account-count minimization — concentrate-then-spill (backlog #17)', 
     expect(near(accountSum(r.trades, 'tiny'),  50_000)).toBe(true);
   });
 
-  // ── concentrateClasses accounts still get priority within their group ──────
+  // â”€â”€ concentrateClasses accounts still get priority within their group â”€â”€â”€â”€â”€â”€
   // This verifies that the existing concentrateClasses feature interacts
   // correctly with the new concentrate-then-spill logic: a designated account
   // still wins even if a larger non-designated account exists.
@@ -1360,14 +1359,14 @@ describe('account-count minimization — concentrate-then-spill (backlog #17)', 
   });
 });
 
-// ─── backlog #16 — trade-count minimization (post-placement consolidation) ────
+// â”€â”€â”€ backlog #16 â€” trade-count minimization (post-placement consolidation) â”€â”€â”€â”€
 //
 // After all trades are balanced, the engine greedily drops small trades whose
 // removal (plus a compensating adjustment to the opposite-sign partner trade in
 // the same account) keeps every asset-class projected weight within toleranceAbs.
 
-describe('trade-count minimization — drop marginal trades (backlog #16)', () => {
-  // ── small-account pair collapses when both classes stay within tolerance ───
+describe('trade-count minimization â€” drop marginal trades (backlog #16)', () => {
+  // â”€â”€ small-account pair collapses when both classes stay within tolerance â”€â”€â”€
   //
   // Portfolio:
   //   A1 (TAX_ADVANTAGED, $900k): LC $780k, FI $120k
@@ -1375,12 +1374,12 @@ describe('trade-count minimization — drop marginal trades (backlog #16)', () =
   //   Household $1M. Target: LC 70%, FI 30%. toleranceAbs = 5%.
   //
   // Trades before minimization:
-  //   A1: sell LC $100k, buy FI $100k        (needed — 8% drift)
+  //   A1: sell LC $100k, buy FI $100k        (needed â€” 8% drift)
   //   A2: sell LC $10k,  buy FI $10k         (marginal)
   //
-  // Dropping A2 buy FI (+$10k) → projected FI = 31% (within 5% of 30%).
-  //   Compensation: shrink A2 sell LC from -$10k to $0 → projected LC = 69% (within 5%).
-  // Both checks pass → both A2 trades are eliminated.
+  // Dropping A2 buy FI (+$10k) â†’ projected FI = 31% (within 5% of 30%).
+  //   Compensation: shrink A2 sell LC from -$10k to $0 â†’ projected LC = 69% (within 5%).
+  // Both checks pass â†’ both A2 trades are eliminated.
 
   const A1A2_ACCOUNTS: Account[] = [
     { id: 'a1', name: 'A1', institution: 'Fidelity', type: 'TRADITIONAL_IRA' },
@@ -1396,9 +1395,9 @@ describe('trade-count minimization — drop marginal trades (backlog #16)', () =
     ...DEFAULT_STRATEGY,
     targets: {
       US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.7, US_MID_CAP: 0, US_SMALL_CAP: 0,
-      DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0.3, ALTERNATIVES: 0, CASH: 0,
+      DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0.3, ALTERNATIVES: 0, CRYPTO: 0, PRECIOUS_METALS: 0, CASH: 0,
     },
-    toleranceAbs: 0.05,  // 5% band — both A2 trades end up within it after compensation
+    toleranceAbs: 0.05,  // 5% band â€” both A2 trades end up within it after compensation
     minTradeUsd: 0,
   };
 
@@ -1426,7 +1425,7 @@ describe('trade-count minimization — drop marginal trades (backlog #16)', () =
     expect(near(accountSum(r.trades, 'a2'), 0, 1)).toBe(true);
   });
 
-  // ── zero-tolerance disables minimization ──────────────────────────────────
+  // â”€â”€ zero-tolerance disables minimization â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // With toleranceAbs = 0 every trade is needed to hit exact targets.
   it('does NOT drop trades when toleranceAbs = 0', () => {
     const strictStrategy = { ...LC70_FI30_STRATEGY, toleranceAbs: 0 };
@@ -1435,19 +1434,19 @@ describe('trade-count minimization — drop marginal trades (backlog #16)', () =
     expect(r.trades.filter(t => t.accountId === 'a2').length).toBeGreaterThan(0);
   });
 
-  // ── trade too large to drop stays ─────────────────────────────────────────
+  // â”€â”€ trade too large to drop stays â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // If dropping a trade would push projected weight beyond toleranceAbs, it must
   // be kept regardless of its size.
-  it('does NOT drop A1 trades — removal would breach tolerance', () => {
+  it('does NOT drop A1 trades â€” removal would breach tolerance', () => {
     const r = rebalance(A1A2_ACCOUNTS, A1A2_POSITIONS, LC70_FI30_STRATEGY);
-    // A1 has $100k sell of LC ($780k→$700k target). Without it, LC projected ≈ 78%,
-    // which is 8% away from the 70% target — outside the 5% band.
+    // A1 has $100k sell of LC ($780kâ†’$700k target). Without it, LC projected â‰ˆ 78%,
+    // which is 8% away from the 70% target â€” outside the 5% band.
     const a1LcSell = tradeFor(r.trades, 'a1', 'US_LARGE_CAP');
     expect(a1LcSell).toBeDefined();
     expect(Math.abs(a1LcSell!.deltaUsd)).toBeGreaterThan(50_000);
   });
 
-  // ── no compensating trade → cannot drop ───────────────────────────────────
+  // â”€â”€ no compensating trade â†’ cannot drop â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // When all trades in an account have the same sign (pure contribution deployment),
   // there is nothing to compensate with so no trade can be dropped.
   it('does not drop trades when the account has no opposite-sign partner', () => {
@@ -1465,13 +1464,13 @@ describe('trade-count minimization — drop marginal trades (backlog #16)', () =
   });
 });
 
-// ─── post-trade accuracy — stress scenarios ───────────────────────────────────
+// â”€â”€â”€ post-trade accuracy â€” stress scenarios â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //
 // These tests verify the end-to-end invariant: projectedWeights for every
 // out-of-tolerance class must land within toleranceAbs of the target after trades,
 // and the PROJECTED_OFF_TARGET flag must fire whenever a hard constraint prevents
 // that.  They complement the unit tests above by exercising full pipelines
-// (placement → trades → minimization → Step 11 validation) under varied stress.
+// (placement â†’ trades â†’ minimization â†’ Step 11 validation) under varied stress.
 
 // Shared helper: assert every OOT class projects within strategy.toleranceAbs,
 // and that no PROJECTED_OFF_TARGET flags were emitted.
@@ -1481,7 +1480,7 @@ function assertAllOnTarget(
 ) {
   const tol = strategy.toleranceAbs + 0.001; // tiny rounding buffer
   for (const ac of ALL_ASSET_CLASSES) {
-    // Only check OOT classes — within-tolerance classes intentionally stay at current.
+    // Only check OOT classes â€” within-tolerance classes intentionally stay at current.
     const isWithinTolNow =
       Math.abs(r.currentWeights[ac] - strategy.targets[ac]) <= strategy.toleranceAbs;
     if (isWithinTolNow) continue;
@@ -1497,11 +1496,11 @@ function assertAllOnTarget(
   ).toHaveLength(0);
 }
 
-describe('post-trade accuracy — stress scenarios', () => {
-  // ── S1: large single-class imbalance, 3 unconstrained accounts ───────────────
+describe('post-trade accuracy â€” stress scenarios', () => {
+  // â”€â”€ S1: large single-class imbalance, 3 unconstrained accounts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Portfolio holds only SPY (US Large Cap). Every other class needs to be bought
   // from scratch. Verifies the full household rebalance reaches every target.
-  it('S1: large single-class imbalance — all OOT classes reach target', () => {
+  it('S1: large single-class imbalance â€” all OOT classes reach target', () => {
     const accts: Account[] = [
       { id: 'schwab', name: 'Schwab', institution: 'Schwab',   type: 'TAXABLE'         },
       { id: 'ira',    name: 'IRA',    institution: 'Fidelity', type: 'TRADITIONAL_IRA' },
@@ -1516,10 +1515,10 @@ describe('post-trade accuracy — stress scenarios', () => {
     assertAllOnTarget(rebalance(accts, positions, strategy), strategy);
   });
 
-  // ── S2: multi-class drift across 5 accounts ───────────────────────────────────
+  // â”€â”€ S2: multi-class drift across 5 accounts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Each account holds exactly one asset class that is not its preferred home.
   // Full rebalance must correctly swap assets across account boundaries.
-  it('S2: multi-class drift across 5 accounts — all OOT classes within 1% after trades', () => {
+  it('S2: multi-class drift across 5 accounts â€” all OOT classes within 1% after trades', () => {
     const accts: Account[] = [
       { id: 't1', name: 'Taxable 1', institution: 'Schwab',   type: 'TAXABLE'         },
       { id: 't2', name: 'Taxable 2', institution: 'Fidelity', type: 'TAXABLE'         },
@@ -1540,9 +1539,9 @@ describe('post-trade accuracy — stress scenarios', () => {
     assertAllOnTarget(rebalance(accts, positions, strategy), strategy);
   });
 
-  // ── S3: greenfield with spillover — targets still met despite non-preferred placement
-  it('S3: placement spillover (taxable > FI target) — no PROJECTED_OFF_TARGET', () => {
-    // Taxable = 30% of household, FI target = 20% → REVISIT_PLACEMENT fires and
+  // â”€â”€ S3: greenfield with spillover â€” targets still met despite non-preferred placement
+  it('S3: placement spillover (taxable > FI target) â€” no PROJECTED_OFF_TARGET', () => {
+    // Taxable = 30% of household, FI target = 20% â†’ REVISIT_PLACEMENT fires and
     // equities spill into taxable, but all class targets are still reachable.
     const accts: Account[] = [
       { id: 'schwab', name: 'Schwab', institution: 'Schwab',   type: 'TAXABLE',         newCash: 300_000 },
@@ -1555,14 +1554,14 @@ describe('post-trade accuracy — stress scenarios', () => {
     assertAllOnTarget(r, strategy);
   });
 
-  // ── S4: NO_ELIGIBLE_ACCOUNT → PROJECTED_OFF_TARGET fires for constrained class
-  it('S4: NO_ELIGIBLE_ACCOUNT — PROJECTED_OFF_TARGET fires for the blocked class', () => {
+  // â”€â”€ S4: NO_ELIGIBLE_ACCOUNT â†’ PROJECTED_OFF_TARGET fires for constrained class
+  it('S4: NO_ELIGIBLE_ACCOUNT â€” PROJECTED_OFF_TARGET fires for the blocked class', () => {
     // Single IRA that explicitly excludes ALTERNATIVES.
-    // ALTERNATIVES (target 8%) cannot be placed anywhere → NO_ELIGIBLE_ACCOUNT.
+    // ALTERNATIVES (target 8%) cannot be placed anywhere â†’ NO_ELIGIBLE_ACCOUNT.
     // Step 7.5 gap-fill then redistributes the unplaceable $80k back to the
     // account's existing OOT holdings (LC, DEVINTL, FI) proportionally to keep
     // the account balanced. Those classes end up above their own targets too, so
-    // PROJECTED_OFF_TARGET fires for all affected classes — not just ALTS.
+    // PROJECTED_OFF_TARGET fires for all affected classes â€” not just ALTS.
     const accts: Account[] = [{
       id: 'ira', name: 'IRA', institution: 'Fidelity', type: 'TRADITIONAL_IRA',
       allowedAssetClasses: ['US_LARGE_CAP', 'DEVELOPED_INTL', 'FIXED_INCOME'] as AssetClass[],
@@ -1576,7 +1575,7 @@ describe('post-trade accuracy — stress scenarios', () => {
       ...ZERO_TOL_STRATEGY,
       targets: {
         US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.55, US_MID_CAP: 0, US_SMALL_CAP: 0,
-        DEVELOPED_INTL: 0.25, EMERGING_INTL: 0, FIXED_INCOME: 0.12, ALTERNATIVES: 0.08, CASH: 0,
+        DEVELOPED_INTL: 0.25, EMERGING_INTL: 0, FIXED_INCOME: 0.12, ALTERNATIVES: 0.08, CRYPTO: 0, PRECIOUS_METALS: 0, CASH: 0,
       },
     };
     const r = rebalance(accts, positions, strategy);
@@ -1604,8 +1603,8 @@ describe('post-trade accuracy — stress scenarios', () => {
     }
   });
 
-  // ── S5: locked position below target — must reach target (regression for fix) ─
-  it('S5: locked position below target — projected reaches target, no PROJECTED_OFF_TARGET', () => {
+  // â”€â”€ S5: locked position below target â€” must reach target (regression for fix) â”€
+  it('S5: locked position below target â€” projected reaches target, no PROJECTED_OFF_TARGET', () => {
     // IRA holds $60k of DEVINTL locked + $540k of LC. Taxable has $200k FI.
     // DEVINTL target 20% of $800k = $160k. $60k is locked; engine must buy $100k more.
     // Old bug: engine would over-buy DEVINTL by the locked amount ($60k), giving 27.5% not 20%.
@@ -1622,16 +1621,16 @@ describe('post-trade accuracy — stress scenarios', () => {
       ...ZERO_TOL_STRATEGY,
       targets: {
         US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.55, US_MID_CAP: 0, US_SMALL_CAP: 0,
-        DEVELOPED_INTL: 0.20, EMERGING_INTL: 0, FIXED_INCOME: 0.20, ALTERNATIVES: 0.05, CASH: 0,
+        DEVELOPED_INTL: 0.20, EMERGING_INTL: 0, FIXED_INCOME: 0.20, ALTERNATIVES: 0.05, CRYPTO: 0, PRECIOUS_METALS: 0, CASH: 0,
       },
     };
     assertAllOnTarget(rebalance(accts, positions, strategy), strategy);
   });
 
-  // ── S6: locked position exceeds target → PROJECTED_OFF_TARGET fires ──────────
-  it('S6: locked position above target — PROJECTED_OFF_TARGET fires for that class', () => {
+  // â”€â”€ S6: locked position exceeds target â†’ PROJECTED_OFF_TARGET fires â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  it('S6: locked position above target â€” PROJECTED_OFF_TARGET fires for that class', () => {
     // IRA has $250k DEVINTL locked (25% of $1M). Target is 10%. Cannot reduce.
-    // After trades: DEVINTL projected ≥ 25% >> 10% target.
+    // After trades: DEVINTL projected â‰¥ 25% >> 10% target.
     const accts: Account[] = [
       { id: 'schwab', name: 'Schwab', institution: 'Schwab',   type: 'TAXABLE'         },
       { id: 'ira',    name: 'IRA',    institution: 'Fidelity', type: 'TRADITIONAL_IRA' },
@@ -1647,7 +1646,7 @@ describe('post-trade accuracy — stress scenarios', () => {
       ...ZERO_TOL_STRATEGY,
       targets: {
         US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.50, US_MID_CAP: 0, US_SMALL_CAP: 0,
-        DEVELOPED_INTL: 0.10, EMERGING_INTL: 0, FIXED_INCOME: 0.25, ALTERNATIVES: 0.15, CASH: 0,
+        DEVELOPED_INTL: 0.10, EMERGING_INTL: 0, FIXED_INCOME: 0.25, ALTERNATIVES: 0.15, CRYPTO: 0, PRECIOUS_METALS: 0, CASH: 0,
       },
     };
     const r = rebalance(accts, positions, strategy);
@@ -1665,23 +1664,23 @@ describe('post-trade accuracy — stress scenarios', () => {
     }
   });
 
-  // ── S7: minTradeUsd suppresses needed trade → PROJECTED_OFF_TARGET ────────────
-  it('S7: minTradeUsd too large — PROJECTED_OFF_TARGET fires when adjustment is suppressed', () => {
+  // â”€â”€ S7: minTradeUsd suppresses needed trade â†’ PROJECTED_OFF_TARGET â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  it('S7: minTradeUsd too large â€” PROJECTED_OFF_TARGET fires when adjustment is suppressed', () => {
     // $10k portfolio; LC needs $500 sell, FI needs $500 buy.
-    // minTradeUsd = $1000 → both trades filtered. Portfolio stays at current.
-    // |50% - 55%| = 5% > toleranceAbs (0%) → PROJECTED_OFF_TARGET for both.
+    // minTradeUsd = $1000 â†’ both trades filtered. Portfolio stays at current.
+    // |50% - 55%| = 5% > toleranceAbs (0%) â†’ PROJECTED_OFF_TARGET for both.
     const accts: Account[] = [
       { id: 'ira', name: 'IRA', institution: 'Fidelity', type: 'TRADITIONAL_IRA' },
     ];
     const positions: Position[] = [
-      { accountId: 'ira', ticker: 'FXAIX', marketValue: 5_500 },  // LC — 55%, target 50%
-      { accountId: 'ira', ticker: 'MUNY',  marketValue: 4_500 },  // FI — 45%, target 50%
+      { accountId: 'ira', ticker: 'FXAIX', marketValue: 5_500 },  // LC â€” 55%, target 50%
+      { accountId: 'ira', ticker: 'MUNY',  marketValue: 4_500 },  // FI â€” 45%, target 50%
     ];
     const strategy = {
       ...ZERO_TOL_STRATEGY,
       targets: {
         US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.5, US_MID_CAP: 0, US_SMALL_CAP: 0,
-        DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0.5, ALTERNATIVES: 0, CASH: 0,
+        DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0.5, ALTERNATIVES: 0, CRYPTO: 0, PRECIOUS_METALS: 0, CASH: 0,
       },
       toleranceAbs: 0,
       minTradeUsd: 1_000,  // $500 trades are filtered out
@@ -1692,8 +1691,8 @@ describe('post-trade accuracy — stress scenarios', () => {
     expect(r.flags.some(f => f.kind === 'PROJECTED_OFF_TARGET' && f.assetClass === 'FIXED_INCOME')).toBe(true);
   });
 
-  // ── S8: locked account — unlocked accounts reach target, locked stays put ─────
-  it('S8: locked account — unlocked accounts trade to target; locked account untouched', () => {
+  // â”€â”€ S8: locked account â€” unlocked accounts reach target, locked stays put â”€â”€â”€â”€â”€
+  it('S8: locked account â€” unlocked accounts trade to target; locked account untouched', () => {
     // IRA is locked (whole account). 401k and taxable handle all trades.
     // IRA's holdings still count in household weights but create no trades.
     const accts: Account[] = [
@@ -1724,7 +1723,7 @@ describe('post-trade accuracy — stress scenarios', () => {
     expect(r.flags.filter(f => f.kind === 'PROJECTED_OFF_TARGET')).toHaveLength(0);
   });
 
-  // ── S9: PROJECTED_OFF_TARGET values are accurate ─────────────────────────────
+  // â”€â”€ S9: PROJECTED_OFF_TARGET values are accurate â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   it('S9: PROJECTED_OFF_TARGET carries correct projectedWeight and targetWeight', () => {
     // Reproduce S4 minimal case; verify flag fields round-trip correctly.
     const accts: Account[] = [{
@@ -1739,7 +1738,7 @@ describe('post-trade accuracy — stress scenarios', () => {
       ...ZERO_TOL_STRATEGY,
       targets: {
         US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.7, US_MID_CAP: 0, US_SMALL_CAP: 0,
-        DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0.2, ALTERNATIVES: 0.1, CASH: 0,
+        DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0.2, ALTERNATIVES: 0.1, CRYPTO: 0, PRECIOUS_METALS: 0, CASH: 0,
       },
     };
     const r = rebalance(accts, positions, strategy);
@@ -1750,21 +1749,21 @@ describe('post-trade accuracy — stress scenarios', () => {
     if (flag?.kind === 'PROJECTED_OFF_TARGET') {
       expect(flag.projectedWeight).toBeCloseTo(r.projectedWeights.ALTERNATIVES, 6);
       expect(flag.targetWeight).toBe(0.1);
-      // Projected must be below target (can't buy ALTS — below target, not above).
+      // Projected must be below target (can't buy ALTS â€” below target, not above).
       expect(flag.projectedWeight).toBeLessThan(flag.targetWeight);
     }
   });
 });
 
-// ─── "No preference" placement (issue #21) ───────────────────────────────────
+// â”€â”€â”€ "No preference" placement (issue #21) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //
 // An empty bucket list for a class means it has no required home. The greedy fill
 // places it wherever capacity is largest, across any account type, and treats those
-// placements as intentional — no PLACEMENT_SPILLOVER is emitted. A no-preference
+// placements as intentional â€” no PLACEMENT_SPILLOVER is emitted. A no-preference
 // class is the least constrained, so it is placed *after* classes with a required
 // home.
 
-describe('no-preference placement — empty bucket list', () => {
+describe('no-preference placement â€” empty bucket list', () => {
   it('places a no-preference class by capacity, largest account first, with no spillover flag', () => {
     // LC has no preference; taxable ($700k) is larger than the IRA ($300k).
     // Under a normal TAX_ADVANTAGED-first rule, LC would fill the IRA first and the
@@ -1778,7 +1777,7 @@ describe('no-preference placement — empty bucket list', () => {
       ...DEFAULT_STRATEGY,
       targets: {
         US_TOTAL_MARKET: 0, US_LARGE_CAP: 1.0, US_MID_CAP: 0, US_SMALL_CAP: 0,
-        DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0, ALTERNATIVES: 0, CASH: 0,
+        DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0, ALTERNATIVES: 0, CRYPTO: 0, PRECIOUS_METALS: 0, CASH: 0,
       },
       placement: { ...DEFAULT_STRATEGY.placement, US_LARGE_CAP: [] },
       toleranceAbs: 0,
@@ -1804,7 +1803,7 @@ describe('no-preference placement — empty bucket list', () => {
       ...DEFAULT_STRATEGY,
       targets: {
         US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.5, US_MID_CAP: 0, US_SMALL_CAP: 0,
-        DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0.5, ALTERNATIVES: 0, CASH: 0,
+        DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0.5, ALTERNATIVES: 0, CRYPTO: 0, PRECIOUS_METALS: 0, CASH: 0,
       },
       placement: { ...DEFAULT_STRATEGY.placement, FIXED_INCOME: ['TAXABLE'], US_LARGE_CAP: [] },
       toleranceAbs: 0,
@@ -1830,7 +1829,7 @@ describe('no-preference placement — empty bucket list', () => {
       ...DEFAULT_STRATEGY,
       targets: {
         US_TOTAL_MARKET: 0, US_LARGE_CAP: 1.0, US_MID_CAP: 0, US_SMALL_CAP: 0,
-        DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0, ALTERNATIVES: 0, CASH: 0,
+        DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0, ALTERNATIVES: 0, CRYPTO: 0, PRECIOUS_METALS: 0, CASH: 0,
       },
       placement: { ...DEFAULT_STRATEGY.placement, US_LARGE_CAP: [] },
       toleranceAbs: 0,
@@ -1844,7 +1843,7 @@ describe('no-preference placement — empty bucket list', () => {
   });
 });
 
-// ─── Contribution-first funding summary (issue #3) ───────────────────────────
+// â”€â”€â”€ Contribution-first funding summary (issue #3) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 describe('contributionSummary', () => {
   it('is all zeros for an empty portfolio', () => {
@@ -1880,7 +1879,7 @@ describe('contributionSummary', () => {
   });
 });
 
-// ─── Tax-advantaged-first rebalancing toggle (issue #4) ──────────────────────
+// â”€â”€â”€ Tax-advantaged-first rebalancing toggle (issue #4) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 describe('tax-advantaged-first rebalancing', () => {
   // Reuses the step 7.7 fully-redirectable scenario: taxable $60k large-cap +
@@ -1898,7 +1897,7 @@ describe('tax-advantaged-first rebalancing', () => {
     ...DEFAULT_STRATEGY,
     targets: {
       US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.5, US_MID_CAP: 0, US_SMALL_CAP: 0,
-      DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0.5, ALTERNATIVES: 0, CASH: 0,
+      DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0.5, ALTERNATIVES: 0, CRYPTO: 0, PRECIOUS_METALS: 0, CASH: 0,
     },
     toleranceAbs: 0,
     minTradeUsd: 0,
@@ -1907,7 +1906,7 @@ describe('tax-advantaged-first rebalancing', () => {
   const taxableSold = (flags: ReturnType<typeof rebalance>['flags']) =>
     flags.reduce((s, f) => s + (f.kind === 'TAXABLE_SALE' ? f.amountUsd : 0), 0);
 
-  it('default (preference on) redirects the equity sell — no taxable sale, no avoidable flag', () => {
+  it('default (preference on) redirects the equity sell â€” no taxable sale, no avoidable flag', () => {
     const r = rebalance(ACCOUNTS, POSITIONS, STRAT);
     expect(taxableSold(r.flags)).toBe(0);
     expect(r.flags.some(f => f.kind === 'TAXABLE_REBALANCE_AVOIDABLE')).toBe(false);
@@ -1926,15 +1925,15 @@ describe('tax-advantaged-first rebalancing', () => {
   });
 });
 
-// ─── Blended-fund composite sells (issue #40) ────────────────────────────────
+// â”€â”€â”€ Blended-fund composite sells (issue #40) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //
 // A blended fund (TDF, balanced fund) is a single position whose composition is
-// fixed — selling N% of it sells N% of every sub-class proportionally. Before
+// fixed â€” selling N% of it sells N% of every sub-class proportionally. Before
 // #40 the engine treated all decomposed positions as frozen; now they are
 // sellable as a whole, with Step 8.7 enforcing the proportionality constraint
 // and routing compensating buys to keep per-account net invariants intact.
 
-describe('blended-fund sells — issue #40', () => {
+describe('blended-fund sells â€” issue #40', () => {
   // 60% US large cap, 30% INTL developed, 10% fixed income.
   const TDF_DECOMP = {
     US_LARGE_CAP:   0.60,
@@ -1948,7 +1947,7 @@ describe('blended-fund sells — issue #40', () => {
     targets: {
       US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.60, US_MID_CAP: 0, US_SMALL_CAP: 0,
       DEVELOPED_INTL:  0.30, EMERGING_INTL: 0,
-      FIXED_INCOME:    0.10, ALTERNATIVES: 0, CASH: 0,
+      FIXED_INCOME:    0.10, ALTERNATIVES: 0, CRYPTO: 0, PRECIOUS_METALS: 0, CASH: 0,
     },
     placement: {
       FIXED_INCOME:    ['TAXABLE'],
@@ -1965,9 +1964,9 @@ describe('blended-fund sells — issue #40', () => {
     minTradeUsd:  0,
   };
 
-  describe('drawdown — TDF-only 401k funds an RMD', () => {
+  describe('drawdown â€” TDF-only 401k funds an RMD', () => {
     // A 401k holding only FDKLX. An RMD is due. The engine must sell FDKLX
-    // proportionally to raise the cash — pre-#40 this was impossible because
+    // proportionally to raise the cash â€” pre-#40 this was impossible because
     // decomposed funds were excluded from sellable.
     const accts: Account[] = [
       { id: 'k401', name: '401k', institution: 'Empower', type: 'FOUR_OH_ONE_K', rmdDueUsd: 10_000 },
@@ -2011,9 +2010,9 @@ describe('blended-fund sells — issue #40', () => {
     });
   });
 
-  describe('drift within tolerance — blended fund untouched', () => {
+  describe('drift within tolerance â€” blended fund untouched', () => {
     // Household is already at target (FDKLX's 60/30/10 split lines up exactly
-    // with the strategy). No drift, no trades, no fund disturbance — the
+    // with the strategy). No drift, no trades, no fund disturbance â€” the
     // tolerance band naturally protects the fund when there's nothing to fix.
     const accts: Account[] = [
       { id: 'k401', name: '401k', institution: 'Empower', type: 'FOUR_OH_ONE_K' },
@@ -2030,8 +2029,8 @@ describe('blended-fund sells — issue #40', () => {
     });
   });
 
-  describe('large drift — engine sells the fund to fix the allocation', () => {
-    // 401k holds only FDKLX (60/30/10) but the strategy targets 80/15/5 — the
+  describe('large drift â€” engine sells the fund to fix the allocation', () => {
+    // 401k holds only FDKLX (60/30/10) but the strategy targets 80/15/5 â€” the
     // user's TDF doesn't fit. The only path to the target is to sell the fund
     // and reallocate. Without #40 the engine silently refused; now it acts.
     // (The 401k menu carries non-blended tickers so the engine can route the
@@ -2048,7 +2047,7 @@ describe('blended-fund sells — issue #40', () => {
       targets: {
         US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.80, US_MID_CAP: 0, US_SMALL_CAP: 0,
         DEVELOPED_INTL:  0.15, EMERGING_INTL: 0,
-        FIXED_INCOME:    0.05, ALTERNATIVES: 0, CASH: 0,
+        FIXED_INCOME:    0.05, ALTERNATIVES: 0, CRYPTO: 0, PRECIOUS_METALS: 0, CASH: 0,
       },
       toleranceAbs: 0.05,
     };
@@ -2059,7 +2058,7 @@ describe('blended-fund sells — issue #40', () => {
       expect(fundSells.length).toBeGreaterThan(0);
     });
 
-    it('per-account net delta remains zero (Principle #3) — compensating buys balance', () => {
+    it('per-account net delta remains zero (Principle #3) â€” compensating buys balance', () => {
       const r = rebalance(accts, positions, AGGRESSIVE, {}, TDF, 0, 0);
       expect(near(accountSum(r.trades, 'k401'), 0, 5)).toBe(true);
     });
@@ -2067,7 +2066,7 @@ describe('blended-fund sells — issue #40', () => {
 
   describe('drawdown over-sell with in-place compensation', () => {
     // 401k holds FDKLX plus FXAIX as a non-blended FI offset isn't possible
-    // (no MUNY here) — the FI sub-class can only be raised by selling FDKLX.
+    // (no MUNY here) â€” the FI sub-class can only be raised by selling FDKLX.
     // availableTickers includes FXAIX/VXUS so the equity/INTL over-sells get
     // compensated in-place by buys against those tickers.
     const accts: Account[] = [
@@ -2079,7 +2078,7 @@ describe('blended-fund sells — issue #40', () => {
       { accountId: 'k401', ticker: 'FDKLX', marketValue: 100_000 },
     ];
 
-    it('preserves per-account net trade delta = newCash − withdrawal (Principle #3)', () => {
+    it('preserves per-account net trade delta = newCash âˆ’ withdrawal (Principle #3)', () => {
       const r = rebalance(accts, positions, SIMPLE_STRAT, {}, TDF, 0, 0);
       // expected net per account = -RMD = -$2k
       expect(near(accountSum(r.trades, 'k401'), -2_000, 5)).toBe(true);
@@ -2095,7 +2094,7 @@ describe('blended-fund sells — issue #40', () => {
           .filter(t => t.accountId === 'k401' && t.assetClass === ac && (t.excludeTickers ?? []).includes('FDKLX'))
           .reduce((s, t) => s + t.deltaUsd, 0);
         // The forced sell on a non-binding sub-class always exceeds the engine's
-        // residual demand (which is 0 here — engine wasn't trying to sell US_LC).
+        // residual demand (which is 0 here â€” engine wasn't trying to sell US_LC).
         // The full forced amount should be compensated by a matching buy.
         expect(near(compensatingBuy, sellFromFund, 5)).toBe(true);
       }
@@ -2107,7 +2106,7 @@ describe('blended-fund sells — issue #40', () => {
     });
   });
 
-  describe('drawdown over-sell without compensation path — flag emitted', () => {
+  describe('drawdown over-sell without compensation path â€” flag emitted', () => {
     // 401k holds FDKLX (60/30/10) plus a standalone FXAIX (US_LARGE_CAP) lot.
     // The mixed-position composition skews the engine's per-class sell demand
     // away from the fund's composition: most of the US_LC over-target sits in
@@ -2152,7 +2151,7 @@ describe('blended-fund sells — issue #40', () => {
   describe('BLENDED_FUND_SOLD disclosure', () => {
     // Whenever the engine touches a blended fund, it surfaces a one-per-fund
     // informational flag carrying the total fund-level sale amount. Users see
-    // this so they know the engine sells but doesn't buy blended funds —
+    // this so they know the engine sells but doesn't buy blended funds â€”
     // repeated rebalances will trend them out of the position over time.
     const accts: Account[] = [
       { id: 'k401', name: '401k', institution: 'Empower', type: 'FOUR_OH_ONE_K',
@@ -2166,7 +2165,7 @@ describe('blended-fund sells — issue #40', () => {
       targets: {
         US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.80, US_MID_CAP: 0, US_SMALL_CAP: 0,
         DEVELOPED_INTL:  0.15, EMERGING_INTL: 0,
-        FIXED_INCOME:    0.05, ALTERNATIVES: 0, CASH: 0,
+        FIXED_INCOME:    0.05, ALTERNATIVES: 0, CRYPTO: 0, PRECIOUS_METALS: 0, CASH: 0,
       },
       toleranceAbs: 0.05,
     };
@@ -2188,7 +2187,7 @@ describe('blended-fund sells — issue #40', () => {
     });
   });
 
-  describe('blended fund in taxable — TAXABLE_SALE flags per sub-class', () => {
+  describe('blended fund in taxable â€” TAXABLE_SALE flags per sub-class', () => {
     const accts: Account[] = [
       { id: 'schwab', name: 'Schwab', institution: 'Schwab', type: 'TAXABLE', rmdDueUsd: 0 },
     ];
@@ -2207,9 +2206,9 @@ describe('blended-fund sells — issue #40', () => {
   });
 });
 
-// ─── tax-adjusted allocation (issue #7) ──────────────────────────────────────
+// â”€â”€â”€ tax-adjusted allocation (issue #7) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-describe('tax-adjusted allocation — issue #7', () => {
+describe('tax-adjusted allocation â€” issue #7', () => {
   const TA_STRAT: Strategy = {
     ...DEFAULT_STRATEGY,
     toleranceAbs: 0,
@@ -2228,7 +2227,7 @@ describe('tax-adjusted allocation — issue #7', () => {
     // Nominal household value is the sum of newCash ($1M).
     expect(r.householdValue).toBeCloseTo(1_000_000, 0);
     // TA household value is reduced by the Trad/401k haircut: 200k Taxable +
-    // 300k × 0.8 + 500k × 0.8 = 840_000.
+    // 300k Ã— 0.8 + 500k Ã— 0.8 = 840_000.
     expect(r.taxAdjusted!.householdValue).toBeCloseTo(840_000, 0);
   });
 
@@ -2242,7 +2241,7 @@ describe('tax-adjusted allocation — issue #7', () => {
     const positions: Position[] = [
       { accountId: 'schwab', ticker: 'MUNY',  marketValue: 100_000 }, // no basis
       { accountId: 'schwab', ticker: 'BND',   marketValue: 100_000, costBasis: 95_000 },
-      { accountId: 'ira',    ticker: 'FZROX', marketValue: 100_000 }, // not taxable — no flag
+      { accountId: 'ira',    ticker: 'FZROX', marketValue: 100_000 }, // not taxable â€” no flag
     ];
     const r = rebalance(
       BASE_ACCOUNTS.map(a => ({ ...a, newCash: undefined })),
@@ -2256,18 +2255,18 @@ describe('tax-adjusted allocation — issue #7', () => {
 
   it('per-account trade sum still matches newCash after TA conversion', () => {
     // Greenfield deposit-only run: per-account net trades must equal newCash
-    // (no positions to sell, so all trades are buys at contribTaf — clean nominal).
+    // (no positions to sell, so all trades are buys at contribTaf â€” clean nominal).
     const r = rebalance(BASE_ACCOUNTS, NO_POSITIONS, TA_STRAT);
     expect(near(accountSum(r.trades, 'schwab'), 200_000)).toBe(true);
     expect(near(accountSum(r.trades, 'ira'),    300_000)).toBe(true);
     expect(near(accountSum(r.trades, 'k401'),   500_000)).toBe(true);
   });
 
-  it('TA mode shifts target sizing — Trad equities buy is larger than nominal mode', () => {
+  it('TA mode shifts target sizing â€” Trad equities buy is larger than nominal mode', () => {
     // With TA on, the household TA value is smaller (Trad accounts haircut), so
     // hitting target weights in TA dollars requires a different nominal trade
     // distribution. Concretely: total TA = 840k, FIXED_INCOME target 20% of TA
-    // = 168k — but the Taxable account has $200k of capacity, so FIXED_INCOME
+    // = 168k â€” but the Taxable account has $200k of capacity, so FIXED_INCOME
     // gets fully placed there. The remainder of Taxable (32k) spills into other
     // classes via the engine's gap-fill / redirect logic.
     const r = rebalance(BASE_ACCOUNTS, NO_POSITIONS, TA_STRAT);
@@ -2278,3 +2277,4 @@ describe('tax-adjusted allocation — issue #7', () => {
     expect(fi?.deltaUsd).toBeGreaterThan(0);
   });
 });
+

@@ -2,6 +2,7 @@ import type { Account, AccountType, Position, Strategy, RebalanceResult, AssetCl
 import { ALL_ASSET_CLASSES } from './types';
 import { makeClassifier, type ClassifyFn } from './classify';
 import { rollup } from './rollup';
+import { consolidateParentClasses } from './hierarchy';
 import { accountBucket, greedyPlace } from './placement';
 import { fillOrdered } from './cashfill';
 import { EPSILON, effectiveTolerance, zeroByClass } from './utils';
@@ -598,6 +599,7 @@ export function rebalance(
     for (const a of accounts) originalNewCash[a.id] = a.newCash ?? 0;
     // Nominal snapshot for the result API (currentWeights, projectedWeights).
     const nomRoll = rollup(accounts, positions, classify, decompositions);
+    consolidateParentClasses(strategy.targets, nomRoll.currentValue, nomRoll.currentValueByAccount, nomRoll.lockedValueByAccount, nomRoll.blendedValueByAccount);
     nominalCurrentValue = nomRoll.currentValue;
     nominalHouseholdValue = nomRoll.householdValue;
 
@@ -617,6 +619,16 @@ export function rebalance(
     householdValue, currentValue, currentValueByAccount,
     accountValues, lockedValueByAccount, blendedValueByAccount, unmappedTickers,
   } = rollup(accounts, positions, classify, decompositions);
+
+  // Parent-class consolidation (issue #36).
+  // When a parent class is the target level (parent target > 0, all children = 0),
+  // child-class holdings should count toward the parent rather than appearing as
+  // unsolicited positions. Example: user holds GLD (PRECIOUS_METALS) and targets
+  // ALTERNATIVES: 2.5% — after consolidation, GLD's value counts as ALTERNATIVES.
+  consolidateParentClasses(
+    strategy.targets,
+    currentValue, currentValueByAccount, lockedValueByAccount, blendedValueByAccount,
+  );
 
   // Blended-fund value (issue #40) is always tradeable as a whole. rollup adds
   // it to lockedValueByAccount so callers that don't know about #40 still see

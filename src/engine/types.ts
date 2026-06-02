@@ -6,7 +6,9 @@ export type AssetClass =
   | 'DEVELOPED_INTL'
   | 'EMERGING_INTL'
   | 'FIXED_INCOME'
-  | 'ALTERNATIVES'  // extension point: split into CRYPTO + PRECIOUS_METALS in a future version
+  | 'ALTERNATIVES'
+  | 'CRYPTO'
+  | 'PRECIOUS_METALS'
   | 'CASH';
 
 export type FundDecomposition = Partial<Record<AssetClass, number>>;
@@ -32,6 +34,8 @@ export const ALL_ASSET_CLASSES: readonly AssetClass[] = [
   'EMERGING_INTL',
   'FIXED_INCOME',
   'ALTERNATIVES',
+  'CRYPTO',
+  'PRECIOUS_METALS',
   'CASH',
 ] as const;
 

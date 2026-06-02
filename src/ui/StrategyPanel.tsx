@@ -1,17 +1,56 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import type { Strategy, AssetClass, PlacementBucket } from '../engine/types';
 import { ALL_ASSET_CLASSES } from '../engine/types';
 import { DEFAULT_STRATEGY } from '../engine/strategy';
-import { RUSSELL_CAP_SPLIT } from '../engine/rollup';
+import { CLASS_HIERARCHY, PARENT_CLASS, isParentClass, isChildClass, childrenOf } from '../engine/hierarchy';
 import { AC_COLOR, AC_LABEL, BUCKET_LABEL, fmtPct } from './fmt';
 import { WeightPie } from './WeightPie';
 import type { WeightSlice } from './WeightPie';
 import { HelpBox, HelpDef, HelpSection, HelpTip } from './HelpBox';
 
 const ALL_BUCKETS: PlacementBucket[] = ['TAX_ADVANTAGED', 'TAXABLE', 'EDUCATION'];
-const US_CAP_SUBS: readonly AssetClass[] = ['US_LARGE_CAP', 'US_MID_CAP', 'US_SMALL_CAP'];
 
-type CapSplit = { US_LARGE_CAP: number; US_MID_CAP: number; US_SMALL_CAP: number };
+// Parent classes (US_TOTAL_MARKET, ALTERNATIVES, …) and the top-level rows shown
+// in the target/placement tables. Children are pulled in beneath their parent.
+const PARENT_CLASSES = Object.keys(CLASS_HIERARCHY) as AssetClass[];
+const CHILD_CLASSES = new Set<AssetClass>(Object.keys(PARENT_CLASS) as AssetClass[]);
+const TOP_LEVEL_CLASSES = ALL_ASSET_CLASSES.filter(ac => !CHILD_CLASSES.has(ac));
+
+// A proportion split over a parent's children (values sum to ~1).
+type Split = Record<string, number>;
+
+/** Normalised child proportions from current child weights (in percent). Falls back to the
+ *  parent's declared default split (e.g. Russell cap weights) when all children are zero. */
+function deriveSplit(parent: AssetClass, vals: Record<string, number>): Split {
+  const children = childrenOf(parent);
+  const total = children.reduce((s, c) => s + (vals[c] || 0), 0);
+  if (total < 0.001) return { ...CLASS_HIERARCHY[parent]!.defaultWeights };
+  return Object.fromEntries(children.map(c => [c, (vals[c] || 0) / total]));
+}
+
+/** Distribute a composite total (percent) across a parent's children using a split.
+ *  The last child absorbs any rounding remainder so the children always re-sum to the total. */
+function splitComposite(parent: AssetClass, totalPct: number, split: Split): Record<string, string> {
+  const children = childrenOf(parent);
+  const out: Record<string, string> = {};
+  let acc = 0;
+  children.forEach((c, i) => {
+    if (i < children.length - 1) {
+      const v = totalPct * (split[c] ?? 0);
+      out[c] = v.toFixed(1);
+      acc += v;
+    } else {
+      out[c] = Math.max(totalPct - acc, 0).toFixed(1);
+    }
+  });
+  return out;
+}
+
+/** True when the split matches the parent's declared default weights (within rounding). */
+function isDefaultSplit(parent: AssetClass, split: Split): boolean {
+  const def = CLASS_HIERARCHY[parent]!.defaultWeights;
+  return childrenOf(parent).every(c => Math.abs((split[c] ?? 0) - (def[c] ?? 0)) < 0.005);
+}
 
 /**
  * A section with a collapsible body. The heading row toggles open/closed;
@@ -58,21 +97,6 @@ interface Props {
    *  to strategy.targets; when TA is on it diverges by the per-class taf at
    *  placement (Trad/401k haircut shifts equities up in the nominal mix). */
   taxAdjustedTargetWeights?: Record<AssetClass, number>;
-}
-
-/** Derive normalised proportions from the current cap-sub weights (values in percent). Falls back to Russell if all zero. */
-function deriveCapSplit(lc: number, mc: number, sc: number): CapSplit {
-  const total = lc + mc + sc;
-  if (total < 0.001) return { ...RUSSELL_CAP_SPLIT };
-  return { US_LARGE_CAP: lc / total, US_MID_CAP: mc / total, US_SMALL_CAP: sc / total };
-}
-
-/** Apply a cap split (proportions summing to 1) to a composite US equity total (in percent). */
-function splitComposite(totalPct: number, split: CapSplit): Record<'US_LARGE_CAP' | 'US_MID_CAP' | 'US_SMALL_CAP', string> {
-  const lc = totalPct * split.US_LARGE_CAP;
-  const mc = totalPct * split.US_MID_CAP;
-  const sc = Math.max(totalPct - lc - mc, 0);
-  return { US_LARGE_CAP: lc.toFixed(1), US_MID_CAP: mc.toFixed(1), US_SMALL_CAP: sc.toFixed(1) };
 }
 
 /**
@@ -262,38 +286,45 @@ function TaxAdjustmentControl({
   );
 }
 
-export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentWeights, taxAdjustedTargetWeights }: Props) {
-  // Linked by default when US_TOTAL_MARKET has no standalone target (the normal case).
-  const [usEquityLinked, setUsEquityLinked] = useState<boolean>(
-    (strategy.targets.US_TOTAL_MARKET ?? 0) < 0.001,
-  );
+export function StrategyPanel({ strategy, setStrategy, currentWeights, taxAdjustedTargetWeights }: Props) {
+  // A child class "carries weight" when it is targeted or actually held — such a
+  // parent is force-expanded (its sub-classes are real, not a hidden refinement).
+  const heldOrTargeted = (ac: AssetClass) =>
+    (strategy.targets[ac] ?? 0) > 1e-4 || (currentWeights[ac] ?? 0) > 1e-4;
+  const forceExpanded = (parent: AssetClass) => childrenOf(parent).some(heldOrTargeted);
 
-  // Proportions used when scaling the composite total in linked mode.
-  // Persisted across link/unlink cycles so the user's custom split is not lost.
-  const [capSplit, setCapSplit] = useState<CapSplit>(() =>
-    deriveCapSplit(
-      (strategy.targets.US_LARGE_CAP ?? 0) * 100,
-      (strategy.targets.US_MID_CAP   ?? 0) * 100,
-      (strategy.targets.US_SMALL_CAP  ?? 0) * 100,
-    ),
-  );
+  const initWeights = (): Record<AssetClass, string> =>
+    Object.fromEntries(
+      ALL_ASSET_CLASSES.map(ac => [ac, ((strategy.targets[ac] ?? 0) * 100).toFixed(1)]),
+    ) as Record<AssetClass, string>;
+
+  // Child weights (percent) as stored in the strategy — used to seed split proportions.
+  const childPct = (parent: AssetClass): Record<string, number> =>
+    Object.fromEntries(childrenOf(parent).map(c => [c, (strategy.targets[c] ?? 0) * 100]));
+
+  // Composite handle value for a parent: the children's subtotal when they carry the
+  // weight, else the parent's own target (so expanding distributes the parent amount).
+  const initComposite = (parent: AssetClass): string => {
+    const sub = childrenOf(parent).reduce((s, c) => s + (strategy.targets[c] ?? 0), 0) * 100;
+    return (sub > 0.001 ? sub : (strategy.targets[parent] ?? 0) * 100).toFixed(1);
+  };
 
   // Atomic targets for all classes (edit strings, committed on blur).
-  const [weights, setWeights] = useState<Record<AssetClass, string>>(
-    () => Object.fromEntries(
-      ALL_ASSET_CLASSES.map(ac => [ac, (strategy.targets[ac] * 100).toFixed(1)]),
-    ) as Record<AssetClass, string>,
-  );
+  const [weights, setWeights] = useState<Record<AssetClass, string>>(initWeights);
 
-  // Composite input string for the US Total Market handle (linked mode only).
-  const [compositeStr, setCompositeStr] = useState<string>(() => {
-    const subTotal = (
-      (strategy.targets.US_LARGE_CAP ?? 0)
-      + (strategy.targets.US_MID_CAP ?? 0)
-      + (strategy.targets.US_SMALL_CAP ?? 0)
-    ) * 100;
-    return (subTotal > 0.001 ? subTotal : strategy.targets.US_TOTAL_MARKET * 100).toFixed(1);
-  });
+  // Per-parent UI state, keyed by parent class.
+  //   expanded  — sub-class rows are shown and the weight lives in the children
+  //   linked    — a single composite handle drives the children proportionally
+  //   splits    — locked child proportions (preserved across link/unlink)
+  //   composites— the composite handle's input string
+  const [expanded, setExpanded] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(PARENT_CLASSES.map(p => [p, forceExpanded(p)])));
+  const [linked, setLinked] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(PARENT_CLASSES.map(p => [p, true])));
+  const [splits, setSplits] = useState<Record<string, Split>>(() =>
+    Object.fromEntries(PARENT_CLASSES.map(p => [p, deriveSplit(p, childPct(p))])));
+  const [composites, setComposites] = useState<Record<string, string>>(() =>
+    Object.fromEntries(PARENT_CLASSES.map(p => [p, initComposite(p)])));
 
   const [tolerance, setTolerance] = useState(String((strategy.toleranceAbs * 100).toFixed(1)));
   const [toleranceRel, setToleranceRel] = useState(
@@ -302,77 +333,135 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentW
   const [minTrade,  setMinTrade]  = useState(String(strategy.minTradeUsd));
 
   // Sync local state if strategy prop changes externally (e.g. JSON import).
+  // We re-derive weights/splits/composites every time, but only *force-expand*
+  // parents (never collapse) and never clobber the user's link/unlink choice —
+  // that would discard in-session edits on every committed keystroke.
   useEffect(() => {
-    setWeights(Object.fromEntries(
-      ALL_ASSET_CLASSES.map(ac => [ac, (strategy.targets[ac] * 100).toFixed(1)]),
-    ) as Record<AssetClass, string>);
-    const lcPct = (strategy.targets.US_LARGE_CAP ?? 0) * 100;
-    const mcPct = (strategy.targets.US_MID_CAP   ?? 0) * 100;
-    const scPct = (strategy.targets.US_SMALL_CAP  ?? 0) * 100;
-    const subTotal = lcPct + mcPct + scPct;
-    setCompositeStr((subTotal > 0.001 ? subTotal : strategy.targets.US_TOTAL_MARKET * 100).toFixed(1));
-    setCapSplit(deriveCapSplit(lcPct, mcPct, scPct));
+    setWeights(initWeights());
+    setSplits(Object.fromEntries(PARENT_CLASSES.map(p => [p, deriveSplit(p, childPct(p))])));
+    setComposites(Object.fromEntries(PARENT_CLASSES.map(p => [p, initComposite(p)])));
+    setExpanded(prev => {
+      const next = { ...prev };
+      for (const p of PARENT_CLASSES) if (forceExpanded(p)) next[p] = true;
+      return next;
+    });
     setTolerance(String((strategy.toleranceAbs * 100).toFixed(1)));
     setToleranceRel(String((((strategy.toleranceRel ?? 0.25)) * 100).toFixed(1)));
     setMinTrade(String(strategy.minTradeUsd));
   }, [strategy]);
 
-  // US_TOTAL_MARKET is always a derived display value — exclude it; sub-classes carry the weight.
-  const sum = ALL_ASSET_CLASSES
-    .filter(ac => ac !== 'US_TOTAL_MARKET')
-    .reduce((s, ac) => s + (parseFloat(weights[ac]) || 0), 0);
+  // The classes that actually carry a target weight: an expanded parent's children,
+  // a collapsed parent itself, or a standalone class. Parents never double-count.
+  const effectiveLeaves: AssetClass[] = TOP_LEVEL_CLASSES.flatMap(ac =>
+    isParentClass(ac) && expanded[ac] ? [...childrenOf(ac)] : [ac]);
+
+  const sum = effectiveLeaves.reduce((s, ac) => s + (parseFloat(weights[ac]) || 0), 0);
   const sumOk = Math.abs(sum - 100) < 0.11;
 
-  function commitWeights() {
-    if (!sumOk) return;
+  // Build the strategy.targets map from local weight strings and expansion state.
+  // An expanded parent stores 0 (children carry); a collapsed parent carries its own
+  // weight (children store 0); standalone classes store their weight directly.
+  function buildTargets(w: Record<AssetClass, string>, exp: Record<string, boolean>): Record<AssetClass, number> {
+    return Object.fromEntries(ALL_ASSET_CLASSES.map(ac => {
+      let v: number;
+      if (isParentClass(ac)) {
+        v = exp[ac] ? 0 : (parseFloat(w[ac]) || 0) / 100;
+      } else if (isChildClass(ac)) {
+        const parent = PARENT_CLASS[ac]!;
+        v = exp[parent] ? (parseFloat(w[ac]) || 0) / 100 : 0;
+      } else {
+        v = (parseFloat(w[ac]) || 0) / 100;
+      }
+      return [ac, v];
+    })) as Record<AssetClass, number>;
+  }
+
+  // Commit from explicit maps (used by expand/collapse handlers, which mutate weights
+  // and expansion together). Skips the write when the result is out of the ±0.1% band.
+  function commitFrom(w: Record<AssetClass, string>, exp: Record<string, boolean>) {
+    const targets = buildTargets(w, exp);
+    const total = Object.values(targets).reduce((s, v) => s + v, 0);
+    if (Math.abs(total - 1) > 0.0011) return;
     setStrategy({
       ...strategy,
-      targets: Object.fromEntries(
-        ALL_ASSET_CLASSES.map(ac => [
-          ac,
-          // When linked, store 0 for the composite handle — sub-classes carry the weight.
-          usEquityLinked && ac === 'US_TOTAL_MARKET' ? 0 : (parseFloat(weights[ac]) || 0) / 100,
-        ]),
-      ) as Record<AssetClass, number>,
+      targets,
       toleranceAbs: (parseFloat(tolerance) || 5) / 100,
       toleranceRel: (parseFloat(toleranceRel) || 25) / 100,
       minTradeUsd:  parseFloat(minTrade) || 250,
     });
   }
 
-  function handleCompositeChange(val: string) {
-    setCompositeStr(val);
-    setWeights(prev => ({ ...prev, ...splitComposite(parseFloat(val) || 0, capSplit) }));
+  function commitWeights() {
+    if (!sumOk) return;
+    commitFrom(weights, expanded);
   }
 
-  function handleToggleLinked() {
-    if (usEquityLinked) {
-      // Release: sub-classes keep their current derived values; US_TOTAL_MARKET becomes editable at 0.
-      setWeights(prev => ({ ...prev, US_TOTAL_MARKET: '0.0' }));
-      setUsEquityLinked(false);
+  function handleCompositeChange(parent: AssetClass, val: string) {
+    setComposites(prev => ({ ...prev, [parent]: val }));
+    setWeights(prev => ({ ...prev, ...splitComposite(parent, parseFloat(val) || 0, splits[parent]) }));
+  }
+
+  function handleToggleLinked(parent: AssetClass) {
+    if (linked[parent]) {
+      // Release: children keep their current values and become individually editable.
+      setLinked(prev => ({ ...prev, [parent]: false }));
     } else {
-      // Link: derive proportions from the user's current sub-class weights (preserve custom split).
-      const lc = parseFloat(weights.US_LARGE_CAP) || 0;
-      const mc = parseFloat(weights.US_MID_CAP) || 0;
-      const sc = parseFloat(weights.US_SMALL_CAP) || 0;
-      const subTotal = lc + mc + sc;
-      const newSplit = deriveCapSplit(lc, mc, sc);
-      setCapSplit(newSplit);
-      setCompositeStr(subTotal.toFixed(1));
-      // Keep current sub-class values unchanged when linking — proportions are locked, not reset.
-      setUsEquityLinked(true);
+      // Link: lock in the proportions implied by the current child values.
+      const vals = Object.fromEntries(childrenOf(parent).map(c => [c, parseFloat(weights[c]) || 0]));
+      const subTotal = childrenOf(parent).reduce((s, c) => s + (vals[c] as number), 0);
+      setSplits(prev => ({ ...prev, [parent]: deriveSplit(parent, vals) }));
+      setComposites(prev => ({ ...prev, [parent]: subTotal.toFixed(1) }));
+      setLinked(prev => ({ ...prev, [parent]: true }));
     }
   }
 
-  function handleResetToRussell() {
-    const newSplit = { ...RUSSELL_CAP_SPLIT };
-    setCapSplit(newSplit);
-    const total = parseFloat(compositeStr) || 0;
-    setWeights(prev => ({ ...prev, ...splitComposite(total, newSplit) }));
+  function handleResetSplit(parent: AssetClass) {
+    const newSplit = { ...CLASS_HIERARCHY[parent]!.defaultWeights };
+    setSplits(prev => ({ ...prev, [parent]: newSplit }));
+    const total = parseFloat(composites[parent]) || 0;
+    const nextWeights = { ...weights, ...splitComposite(parent, total, newSplit) };
+    setWeights(nextWeights);
+    commitFrom(nextWeights, expanded);
+  }
+
+  // Expand a collapsed parent: split its own weight across the children using the
+  // default proportions, then surface the (linked) sub-class rows.
+  function handleExpand(parent: AssetClass) {
+    const parentVal = parseFloat(weights[parent]) || 0;
+    const split = { ...CLASS_HIERARCHY[parent]!.defaultWeights };
+    const nextWeights = { ...weights, [parent]: '0.0', ...splitComposite(parent, parentVal, split) };
+    const nextExpanded = { ...expanded, [parent]: true };
+    setSplits(prev => ({ ...prev, [parent]: split }));
+    setComposites(prev => ({ ...prev, [parent]: parentVal.toFixed(1) }));
+    setLinked(prev => ({ ...prev, [parent]: true }));
+    setWeights(nextWeights);
+    setExpanded(nextExpanded);
+    commitFrom(nextWeights, nextExpanded);
+  }
+
+  // Collapse an expanded parent back to a single handle: fold the children's subtotal
+  // up into the parent. Only available when no child is independently held/targeted.
+  function handleCollapse(parent: AssetClass) {
+    const subTotal = childrenOf(parent).reduce((s, c) => s + (parseFloat(weights[c]) || 0), 0);
+    const nextWeights = { ...weights, [parent]: subTotal.toFixed(1) };
+    for (const c of childrenOf(parent)) nextWeights[c] = '0.0';
+    const nextExpanded = { ...expanded, [parent]: false };
+    setWeights(nextWeights);
+    setExpanded(nextExpanded);
+    commitFrom(nextWeights, nextExpanded);
   }
 
   // Sentinel for the 1st-choice dropdown's "No preference" option.
   const NO_PREF = 'ANY';
+
+  // Placement buckets shown for a class. Sub-classes with no explicit entry inherit
+  // their parent's current placement (so a child defaults to the parent preference).
+  function placementBuckets(ac: AssetClass): PlacementBucket[] {
+    if (strategy.placement[ac]) return strategy.placement[ac];
+    const parent = PARENT_CLASS[ac];
+    if (parent && strategy.placement[parent]) return strategy.placement[parent];
+    return DEFAULT_STRATEGY.placement[ac] ?? [];
+  }
 
   function updatePlacement(ac: AssetClass, slot: 0 | 1, bucket: PlacementBucket | '' | typeof NO_PREF) {
     // "No preference" → empty bucket list; the engine places the class freely.
@@ -380,7 +469,7 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentW
       setStrategy({ ...strategy, placement: { ...strategy.placement, [ac]: [] } });
       return;
     }
-    const current = [...(strategy.placement[ac] ?? DEFAULT_STRATEGY.placement[ac])] as PlacementBucket[];
+    const current = [...placementBuckets(ac)] as PlacementBucket[];
     if (slot === 0) {
       current[0] = bucket as PlacementBucket;
     } else {
@@ -400,7 +489,7 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentW
   // Risk-profile score: growth assets vs defensive, derived from live weights.
   const GROWTH_CLASSES = new Set<AssetClass>([
     'US_TOTAL_MARKET', 'US_LARGE_CAP', 'US_MID_CAP', 'US_SMALL_CAP',
-    'DEVELOPED_INTL', 'EMERGING_INTL', 'ALTERNATIVES',
+    'DEVELOPED_INTL', 'EMERGING_INTL', 'ALTERNATIVES', 'CRYPTO', 'PRECIOUS_METALS',
   ]);
   const growthPct    = ALL_ASSET_CLASSES
     .filter(ac => GROWTH_CLASSES.has(ac))
@@ -422,12 +511,13 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentW
     const w = (parseFloat(weights[ac]) || 0) / 100;
     return s + w * w;
   }, 0);
-  // Gauge position: 0 = equal-weight across all 9 classes (HHI ≈ 0.111), 100 = all in one.
+  // Gauge position: 0 = equal-weight across all leaf classes (HHI ≈ 1/N), 100 = all in one.
+  const nLeaves = Math.max(effectiveLeaves.length, 2);
   const concentrationScore = Math.round(
-    Math.max(0, Math.min(100, (hhi - 1 / 9) / (1 - 1 / 9) * 100)),
+    Math.max(0, Math.min(100, (hhi - 1 / nLeaves) / (1 - 1 / nLeaves) * 100)),
   );
-  const activeClasses = ALL_ASSET_CLASSES.filter(ac => (parseFloat(weights[ac]) || 0) >= 0.5).length;
-  const maxWeight     = Math.max(...ALL_ASSET_CLASSES.map(ac => parseFloat(weights[ac]) || 0));
+  const activeClasses = effectiveLeaves.filter(ac => (parseFloat(weights[ac]) || 0) >= 0.5).length;
+  const maxWeight     = Math.max(...effectiveLeaves.map(ac => parseFloat(weights[ac]) || 0));
 
   const { label: diversLabel, color: diversColor } = ((): { label: string; color: string } => {
     if (hhi < 0.15) return { label: 'Well Diversified',        color: 'text-sky-600'     };
@@ -437,19 +527,10 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentW
     return               { label: 'Highly Concentrated',       color: 'text-red-500'     };
   })();
 
-  // US_TOTAL_MARKET is always shown as a parent row with sub-classes indented beneath it.
-  // Exclude the three sub-classes from the primary iteration — they're injected as children.
-  const primaryClasses = ALL_ASSET_CLASSES.filter(ac => !US_CAP_SUBS.includes(ac));
-
-  // Grayed-out sum displayed on the US Total Market row when in unlinked mode.
-  const usSubTotal = (parseFloat(weights.US_LARGE_CAP) || 0)
-                   + (parseFloat(weights.US_MID_CAP)   || 0)
-                   + (parseFloat(weights.US_SMALL_CAP)  || 0);
-
-  const isRussell =
-    Math.abs(capSplit.US_LARGE_CAP - RUSSELL_CAP_SPLIT.US_LARGE_CAP) < 0.005 &&
-    Math.abs(capSplit.US_MID_CAP   - RUSSELL_CAP_SPLIT.US_MID_CAP)   < 0.005 &&
-    Math.abs(capSplit.US_SMALL_CAP - RUSSELL_CAP_SPLIT.US_SMALL_CAP) < 0.005;
+  // Parent classes render with their sub-classes indented beneath; children are
+  // injected as child rows, so iterate the top-level classes only.
+  const subTotalOf = (parent: AssetClass) =>
+    childrenOf(parent).reduce((s, c) => s + (parseFloat(weights[c]) || 0), 0);
 
   return (
     <div className="space-y-6">
@@ -542,8 +623,9 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentW
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {primaryClasses.flatMap(ac => {
-                  if (ac !== 'US_TOTAL_MARKET') {
+                {TOP_LEVEL_CLASSES.flatMap(ac => {
+                  // ── Standalone class — a single editable row ──
+                  if (!isParentClass(ac)) {
                     return [(
                       <tr key={ac} className="hover:bg-gray-50">
                         <td className="px-4 py-1.5">
@@ -571,63 +653,105 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentW
                     )];
                   }
 
-                  // ── US Total Market row — always present, with sub-class children ──
-                  const utmRow = (
-                    <tr key="US_TOTAL_MARKET" className="hover:bg-gray-50">
+                  // ── Parent class row (with optional indented sub-class children) ──
+                  const isExpanded   = expanded[ac];
+                  const isLinked     = linked[ac];
+                  const canCollapse  = isExpanded && !forceExpanded(ac);
+                  const subs         = childrenOf(ac);
+                  const defaultLabel = ac === 'US_TOTAL_MARKET'
+                    ? 'Reset to Russell index weights (Large 67%, Mid 25%, Small 8%)'
+                    : 'Reset to default split';
+
+                  const parentRow = (
+                    <tr key={ac} className="hover:bg-gray-50">
                       <td className="px-4 py-1.5">
                         <div className="flex items-center gap-2 whitespace-nowrap">
-                          <span className="w-2 h-2 rounded-sm shrink-0" style={{ backgroundColor: AC_COLOR.US_TOTAL_MARKET }} />
-                          <span className="text-gray-700">{AC_LABEL.US_TOTAL_MARKET}</span>
-                          <button
-                            type="button"
-                            onClick={handleToggleLinked}
-                            title={usEquityLinked
-                              ? 'Release: edit Large/Mid/Small Cap independently'
-                              : 'Link: drive Large/Mid/Small Cap from a single total'}
-                            className={`text-xs px-1.5 py-0.5 rounded border transition-colors ${
-                              usEquityLinked
-                                ? 'border-indigo-300 text-indigo-600 bg-indigo-50 hover:bg-indigo-100'
-                                : 'border-gray-200 text-gray-400 hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50'
-                            }`}
-                          >
-                            {usEquityLinked ? 'linked' : 'link'}
-                          </button>
-                          {usEquityLinked && !isRussell && (
-                            <span className="text-[10px] text-gray-400">
-                              custom ·{' '}
+                          <span className="w-2 h-2 rounded-sm shrink-0" style={{ backgroundColor: AC_COLOR[ac] }} />
+                          <span className="text-gray-700">{AC_LABEL[ac]}</span>
+                          {isExpanded ? (
+                            <>
                               <button
                                 type="button"
-                                onClick={handleResetToRussell}
-                                title="Reset to Russell index weights (Large 67%, Mid 25%, Small 8%)"
-                                className="underline hover:text-indigo-600"
+                                onClick={() => handleToggleLinked(ac)}
+                                title={isLinked
+                                  ? `Release: edit ${subs.map(s => AC_LABEL[s]).join(' / ')} independently`
+                                  : 'Link: drive the sub-classes from a single total'}
+                                className={`text-xs px-1.5 py-0.5 rounded border transition-colors ${
+                                  isLinked
+                                    ? 'border-indigo-300 text-indigo-600 bg-indigo-50 hover:bg-indigo-100'
+                                    : 'border-gray-200 text-gray-400 hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50'
+                                }`}
                               >
-                                reset
+                                {isLinked ? 'linked' : 'link'}
                               </button>
-                            </span>
+                              {isLinked && !isDefaultSplit(ac, splits[ac]) && (
+                                <span className="text-[10px] text-gray-400">
+                                  custom ·{' '}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleResetSplit(ac)}
+                                    title={defaultLabel}
+                                    className="underline hover:text-indigo-600"
+                                  >
+                                    reset
+                                  </button>
+                                </span>
+                              )}
+                              {canCollapse && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleCollapse(ac)}
+                                  title="Collapse: fold the sub-classes back into a single target"
+                                  className="text-[10px] text-gray-400 underline hover:text-indigo-600"
+                                >
+                                  merge
+                                </button>
+                              )}
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleExpand(ac)}
+                              title={`Split into ${subs.map(s => AC_LABEL[s]).join(' / ')}`}
+                              className="text-xs px-1.5 py-0.5 rounded border border-gray-200 text-gray-400 hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                            >
+                              split
+                            </button>
                           )}
                         </div>
                       </td>
                       <td className="px-4 py-1.5 text-right">
                         <div className="flex items-center justify-end gap-1">
-                          {usEquityLinked ? (
+                          {isExpanded && isLinked ? (
                             <input
                               type="number"
-                              value={compositeStr}
+                              value={composites[ac]}
                               step="0.1"
                               min="0"
                               max="100"
-                              onChange={e => handleCompositeChange(e.target.value)}
+                              onChange={e => handleCompositeChange(ac, e.target.value)}
                               onBlur={commitWeights}
                               className="w-16 border rounded px-2 py-1 text-right text-sm"
+                            />
+                          ) : isExpanded ? (
+                            <input
+                              type="number"
+                              value={subTotalOf(ac).toFixed(1)}
+                              readOnly
+                              disabled
+                              title={`Sum of ${subs.map(s => AC_LABEL[s]).join(' + ')} targets`}
+                              className="w-16 border border-gray-100 rounded px-2 py-1 text-right text-sm text-gray-400 bg-transparent cursor-not-allowed"
                             />
                           ) : (
                             <input
                               type="number"
-                              value={usSubTotal.toFixed(1)}
-                              readOnly
-                              disabled
-                              title="Sum of Large + Mid + Small Cap targets"
-                              className="w-16 border border-gray-100 rounded px-2 py-1 text-right text-sm text-gray-400 bg-transparent cursor-not-allowed"
+                              value={weights[ac]}
+                              step="0.1"
+                              min="0"
+                              max="100"
+                              onChange={e => setWeights({ ...weights, [ac]: e.target.value })}
+                              onBlur={commitWeights}
+                              className="w-16 border rounded px-2 py-1 text-right text-sm"
                             />
                           )}
                           <span className="text-gray-400 text-xs">%</span>
@@ -636,18 +760,20 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentW
                     </tr>
                   );
 
-                  // ── Sub-class rows — always indented, editable only when unlinked ──
-                  const subRows = US_CAP_SUBS.map(sub => (
+                  if (!isExpanded) return [parentRow];
+
+                  // ── Sub-class rows — indented; editable only when unlinked ──
+                  const subRows = subs.map(sub => (
                     <tr key={sub} className="bg-gray-50/60">
                       <td className="pl-10 pr-4 py-1">
                         <span className="flex items-center gap-2 whitespace-nowrap">
                           <span className="w-1.5 h-1.5 rounded-sm shrink-0" style={{ backgroundColor: AC_COLOR[sub] }} />
-                          <span className={`text-xs ${usEquityLinked ? 'text-gray-400' : 'text-gray-600'}`}>{AC_LABEL[sub]}</span>
+                          <span className={`text-xs ${isLinked ? 'text-gray-400' : 'text-gray-600'}`}>{AC_LABEL[sub]}</span>
                         </span>
                       </td>
                       <td className="px-4 py-1 text-right">
                         <div className="flex items-center justify-end gap-1">
-                          {usEquityLinked ? (
+                          {isLinked ? (
                             <input
                               type="number"
                               value={weights[sub]}
@@ -667,13 +793,13 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentW
                               className="w-16 border rounded px-2 py-0.5 text-right text-xs"
                             />
                           )}
-                          <span className={`text-xs ${usEquityLinked ? 'text-gray-300' : 'text-gray-400'}`}>%</span>
+                          <span className={`text-xs ${isLinked ? 'text-gray-300' : 'text-gray-400'}`}>%</span>
                         </div>
                       </td>
                     </tr>
                   ));
 
-                  return [utmRow, ...subRows];
+                  return [parentRow, ...subRows];
                 })}
               </tbody>
               <tfoot>
@@ -740,7 +866,7 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentW
                 <span>Diversified</span>
               </div>
               <p className="text-center text-[10px] text-gray-400 leading-none pt-0.5">
-                {activeClasses} of 9 classes · {maxWeight.toFixed(0)}% largest
+                {activeClasses} of {nLeaves} classes · {maxWeight.toFixed(0)}% largest
               </p>
             </div>
 
@@ -783,46 +909,69 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentW
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {ALL_ASSET_CLASSES.map(ac => {
-                const buckets = strategy.placement[ac] ?? DEFAULT_STRATEGY.placement[ac];
-                const noPreference = buckets.length === 0;
-                return (
-                  <tr key={ac} className="hover:bg-gray-50">
-                    <td className="px-4 py-2 text-gray-700">{AC_LABEL[ac]}</td>
+              {TOP_LEVEL_CLASSES.flatMap(ac => {
+                const renderRow = (cls: AssetClass, depth: 0 | 1) => {
+                  const buckets = placementBuckets(cls);
+                  const noPreference = buckets.length === 0;
+                  const isChild = depth > 0;
+                  const parent = PARENT_CLASS[cls];
+                  // A child with no explicit placement of its own inherits the parent's.
+                  const inherits = isChild && !strategy.placement[cls];
+                  return (
+                    <tr key={cls} className={`hover:bg-gray-50 ${isChild ? 'bg-gray-50/40' : ''}`}>
+                      <td className={`py-2 ${isChild ? 'pl-10 pr-4' : 'px-4'}`}>
+                        <span className={isChild ? 'text-xs text-gray-500' : 'text-gray-700'}>
+                          {AC_LABEL[cls]}
+                        </span>
+                        {inherits && (
+                          <span className="ml-2 text-[10px] text-gray-400 italic">inherits {AC_LABEL[parent!]}</span>
+                        )}
+                      </td>
 
-                    {/* 1st choice — required; "No preference" relaxes placement entirely */}
-                    <td className="px-4 py-2">
-                      <select
-                        value={noPreference ? NO_PREF : (buckets[0] ?? 'TAX_ADVANTAGED')}
-                        onChange={e => updatePlacement(ac, 0, e.target.value as PlacementBucket | typeof NO_PREF)}
-                        className="border border-gray-200 rounded px-2 py-1 text-sm bg-white hover:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400"
-                      >
-                        <option value={NO_PREF}>No preference</option>
-                        {ALL_BUCKETS.map(b => (
-                          <option key={b} value={b}>{BUCKET_LABEL[b]}</option>
-                        ))}
-                      </select>
-                    </td>
-
-                    {/* 2nd choice — optional, empty = spill anywhere. Disabled when no preference. */}
-                    <td className="px-4 py-2">
-                      {noPreference ? (
-                        <span className="text-xs text-gray-400 italic">placed wherever capacity exists</span>
-                      ) : (
+                      {/* 1st choice — required; "No preference" relaxes placement entirely */}
+                      <td className="px-4 py-2">
                         <select
-                          value={buckets[1] ?? ''}
-                          onChange={e => updatePlacement(ac, 1, e.target.value as PlacementBucket | '')}
-                          className="border border-gray-200 rounded px-2 py-1 text-sm bg-white hover:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400 text-gray-500"
+                          value={noPreference ? NO_PREF : (buckets[0] ?? 'TAX_ADVANTAGED')}
+                          onChange={e => updatePlacement(cls, 0, e.target.value as PlacementBucket | typeof NO_PREF)}
+                          className="border border-gray-200 rounded px-2 py-1 text-sm bg-white hover:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400"
                         >
-                          <option value="">— none —</option>
+                          <option value={NO_PREF}>No preference</option>
                           {ALL_BUCKETS.map(b => (
                             <option key={b} value={b}>{BUCKET_LABEL[b]}</option>
                           ))}
                         </select>
-                      )}
-                    </td>
-                  </tr>
-                );
+                      </td>
+
+                      {/* 2nd choice — optional, empty = spill anywhere. Disabled when no preference. */}
+                      <td className="px-4 py-2">
+                        {noPreference ? (
+                          <span className="text-xs text-gray-400 italic">placed wherever capacity exists</span>
+                        ) : (
+                          <select
+                            value={buckets[1] ?? ''}
+                            onChange={e => updatePlacement(cls, 1, e.target.value as PlacementBucket | '')}
+                            className="border border-gray-200 rounded px-2 py-1 text-sm bg-white hover:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400 text-gray-500"
+                          >
+                            <option value="">— none —</option>
+                            {ALL_BUCKETS.map(b => (
+                              <option key={b} value={b}>{BUCKET_LABEL[b]}</option>
+                            ))}
+                          </select>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                };
+
+                const rows = [renderRow(ac, 0)];
+                // Sub-classes appear (indented, defaulting to the parent's placement) only
+                // when they actually carry weight — held or individually targeted.
+                if (isParentClass(ac)) {
+                  for (const child of childrenOf(ac)) {
+                    if (heldOrTargeted(child)) rows.push(renderRow(child, 1));
+                  }
+                }
+                return rows;
               })}
             </tbody>
           </table>
