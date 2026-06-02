@@ -1,8 +1,8 @@
-import { useState, Fragment } from 'react';
+﻿import { useState, Fragment } from 'react';
 import type { Account, AssetClass, Flag, FundDecomposition, PlacementBucket, Position } from '../engine/types';
 import { ALL_ASSET_CLASSES } from '../engine/types';
 import { BUILTIN_CLASS_MAP, makeClassifier } from '../engine/classify';
-import { isChildClass } from '../engine/hierarchy';
+import { isChildClass, isParentClass, childrenOf } from '../engine/hierarchy';
 import { accountBucket } from '../engine/placement';
 import { AC_COLOR, AC_LABEL, BUCKET_COLOR, BUCKET_LABEL } from './fmt';
 import { PieChart } from './PieChart';
@@ -14,19 +14,28 @@ import { HelpBox, HelpDef, HelpSection } from './HelpBox';
 const PLACEMENT_BUCKETS: PlacementBucket[] = ['TAX_ADVANTAGED', 'TAXABLE', 'EDUCATION'];
 
 /**
- * Asset-class <option> list that reflects the parent/child hierarchy: sub-classes
- * (CRYPTO, US_LARGE_CAP, …) are indented beneath their parent so the dropdown
- * stays readable as the class list grows. Native <option> can't truly nest, so
- * we indent with a leading glyph + non-breaking spaces.
+ * Asset-class <option> list that reflects the parent/child hierarchy. Each parent
+ * (US Total Market, Alternatives) becomes a bold, non-selectable <optgroup> header
+ * above its sub-classes; the parent class itself is still selectable as the first
+ * option inside its own group. Native <select> has no collapse/expand, so grouping
+ * headers are the closest the browser control gets to a nested menu.
  */
 function ClassOptions() {
   return (
     <>
-      {ALL_ASSET_CLASSES.map(ac => (
-        <option key={ac} value={ac}>
-          {isChildClass(ac) ? `   ↳ ${AC_LABEL[ac]}` : AC_LABEL[ac]}
-        </option>
-      ))}
+      {ALL_ASSET_CLASSES.filter(ac => !isChildClass(ac)).map(ac => {
+        if (!isParentClass(ac)) {
+          return <option key={ac} value={ac}>{AC_LABEL[ac]}</option>;
+        }
+        return (
+          <optgroup key={ac} label={AC_LABEL[ac]}>
+            <option value={ac}>{AC_LABEL[ac]}</option>
+            {childrenOf(ac).map(child => (
+              <option key={child} value={child}>{AC_LABEL[child]}</option>
+            ))}
+          </optgroup>
+        );
+      })}
     </>
   );
 }
