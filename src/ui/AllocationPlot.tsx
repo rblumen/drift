@@ -54,29 +54,39 @@ export function AllocationPlot({
           >
             <path d="M 0 0 L 10 5 L 0 10 z" fill="#2563eb" />
           </marker>
+          <marker
+            id="axis-arrow"
+            viewBox="0 0 10 10"
+            refX="8" refY="5"
+            markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"
+          >
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#9ca3af" />
+          </marker>
         </defs>
 
-        {/* Plot background + axes */}
-        <rect x={pad} y={pad} width={plot} height={plot}
-          fill="#fafafa" stroke="#e5e7eb" strokeWidth={1} />
+        {/* Cross-shaped axes with arrowheads on all four ends */}
+        <line
+          x1={pad + plot / 2} y1={pad} x2={pad + plot / 2} y2={pad + plot}
+          stroke="#9ca3af" strokeWidth={1}
+          markerStart="url(#axis-arrow)" markerEnd="url(#axis-arrow)"
+        />
+        <line
+          x1={pad} y1={pad + plot / 2} x2={pad + plot} y2={pad + plot / 2}
+          stroke="#9ca3af" strokeWidth={1}
+          markerStart="url(#axis-arrow)" markerEnd="url(#axis-arrow)"
+        />
 
-        {/* Center cross-hair */}
-        <line x1={pad + plot / 2} y1={pad} x2={pad + plot / 2} y2={pad + plot}
-          stroke="#f1f5f9" strokeWidth={1} />
-        <line x1={pad} y1={pad + plot / 2} x2={pad + plot} y2={pad + plot / 2}
-          stroke="#f1f5f9" strokeWidth={1} />
-
-        {/* Axis labels */}
-        <text x={pad + plot / 2} y={size - 6} textAnchor="middle"
-          fontSize="10" fill="#6b7280">diversification →</text>
-        <text x={pad - 4} y={pad - 8} textAnchor="start"
+        {/* Axis end labels — tucked inside the plot next to each arrow tip
+            so they never get clipped at the SVG edge. */}
+        <text x={pad + plot / 2 + 6} y={pad + 8}
           fontSize="10" fill="#6b7280">aggressive</text>
-        <text x={pad - 4} y={size - pad + 14} textAnchor="start"
+        <text x={pad + plot / 2 + 6} y={pad + plot - 2}
           fontSize="10" fill="#6b7280">conservative</text>
-        <text x={pad} y={size - 6} textAnchor="end"
-          fontSize="10" fill="#9ca3af">concentrated</text>
-        <text x={pad + plot} y={size - 6} textAnchor="end"
-          fontSize="10" fill="#9ca3af">diversified</text>
+        <text x={pad + 8} y={pad + plot / 2 - 4}
+          fontSize="10" fill="#6b7280">concentrated</text>
+        <text x={pad + plot - 8} y={pad + plot / 2 - 4} textAnchor="end"
+          fontSize="10" fill="#6b7280">diversified</text>
 
         {/* Target reference (small star) */}
         <g>
