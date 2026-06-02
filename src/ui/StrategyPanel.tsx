@@ -52,9 +52,12 @@ interface Props {
   strategy: Strategy;
   setStrategy: (s: Strategy) => void;
   currentWeights: Record<AssetClass, number>;
-  /** Tax-adjusted current weights (issue #7). Present only when the engine ran
-   *  with strategy.taxAdjustment.enabled = true on the last rebalance. */
-  taCurrentWeights?: Record<AssetClass, number>;
+  /** Nominal weights the engine drives toward when tax adjustment is enabled —
+   *  i.e. the nominal allocation required to satisfy strategy.targets in
+   *  after-tax dollars (issue #7). When TA is off this is approximately equal
+   *  to strategy.targets; when TA is on it diverges by the per-class taf at
+   *  placement (Trad/401k haircut shifts equities up in the nominal mix). */
+  taxAdjustedTargetWeights?: Record<AssetClass, number>;
 }
 
 /** Derive normalised proportions from the current cap-sub weights (values in percent). Falls back to Russell if all zero. */
@@ -74,17 +77,18 @@ function splitComposite(totalPct: number, split: CapSplit): Record<'US_LARGE_CAP
 
 /**
  * Two-row 100%-normalized stacked bar comparing the user's target composition
- * to their current after-tax composition (issue #7). The Strategy tab is where
- * the user designs targets, so the visualization anchors on the target and
- * surfaces the gap that remains in after-tax terms — which is what tax-adjusted
- * mode is designed to close.
+ * interpreted **pre-tax** vs **tax-adjusted** (issue #7). The pre-tax bar is
+ * the strategy targets as stated; the tax-adjusted bar is the nominal weights
+ * required to achieve those same targets in after-tax dollars — equities held
+ * in Traditional/401k get haircut, so hitting an after-tax target needs more
+ * nominal $ in those classes than the stated percentage suggests.
  */
 function AllocationCompareBars({
-  target, current,
-}: { target: Record<AssetClass, number>; current: Record<AssetClass, number> }) {
+  preTax, taxAdjusted,
+}: { preTax: Record<AssetClass, number>; taxAdjusted: Record<AssetClass, number> }) {
   // Classes appearing in either view, in the canonical asset-class order so
   // the segments line up visually between the two bars.
-  const classes = ALL_ASSET_CLASSES.filter(ac => (target[ac] ?? 0) > 0.0005 || (current[ac] ?? 0) > 0.0005);
+  const classes = ALL_ASSET_CLASSES.filter(ac => (preTax[ac] ?? 0) > 0.0005 || (taxAdjusted[ac] ?? 0) > 0.0005);
   if (classes.length === 0) return null;
 
   const renderBar = (label: string, weights: Record<AssetClass, number>) => {
@@ -97,16 +101,16 @@ function AllocationCompareBars({
           {classes.map(ac => {
             const share = (weights[ac] ?? 0) / total;
             if (share <= 0) return null;
-            const tgtPct = target[ac] ?? 0;
-            const curPct = current[ac] ?? 0;
-            const drift  = curPct - tgtPct;
-            const sign   = drift >= 0 ? '+' : '';
+            const prePct = preTax[ac] ?? 0;
+            const taPct  = taxAdjusted[ac] ?? 0;
+            const delta  = taPct - prePct;
+            const sign   = delta >= 0 ? '+' : '';
             return (
               <div
                 key={ac}
                 className="h-full"
                 style={{ width: `${share * 100}%`, backgroundColor: AC_COLOR[ac] }}
-                title={`${AC_LABEL[ac]} — target ${fmtPct(tgtPct)} · after-tax current ${fmtPct(curPct)} (${sign}${(drift * 100).toFixed(1)}pp)`}
+                title={`${AC_LABEL[ac]} — pre-tax ${fmtPct(prePct)} · tax-adjusted ${fmtPct(taPct)} (${sign}${(delta * 100).toFixed(1)}pp)`}
               />
             );
           })}
@@ -117,8 +121,8 @@ function AllocationCompareBars({
 
   return (
     <div className="space-y-1.5">
-      {renderBar('Target', target)}
-      {renderBar('Current (after-tax)', current)}
+      {renderBar('Pre-tax', preTax)}
+      {renderBar('Tax-adjusted', taxAdjusted)}
       <div className="flex flex-wrap gap-x-4 gap-y-1 pt-2 pl-[6.75rem]">
         {classes.map(ac => (
           <div key={ac} className="flex items-center gap-1.5 text-xs text-gray-500">
@@ -137,11 +141,11 @@ function AllocationCompareBars({
  * 60/40 target refers to after-tax wealth rather than nominal market value.
  */
 function TaxAdjustmentControl({
-  strategy, setStrategy, taCurrentWeights,
+  strategy, setStrategy, taxAdjustedTargetWeights,
 }: {
   strategy: Strategy;
   setStrategy: (s: Strategy) => void;
-  taCurrentWeights?: Record<AssetClass, number>;
+  taxAdjustedTargetWeights?: Record<AssetClass, number>;
 }) {
   const enabled = strategy.taxAdjustment?.enabled === true;
   const eff = strategy.taxAdjustment?.effectiveRateAtRetirement ?? 0.15;
@@ -240,17 +244,17 @@ function TaxAdjustmentControl({
         </div>
       )}
 
-      {enabled && taCurrentWeights && (
+      {enabled && taxAdjustedTargetWeights && (
         <div className="max-w-2xl pl-4 border-l-2 border-indigo-100 pt-1">
           <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">
-            Target composition vs current (after-tax)
+            Target composition: pre-tax vs tax-adjusted
           </p>
-          <AllocationCompareBars target={strategy.targets} current={taCurrentWeights} />
+          <AllocationCompareBars preTax={strategy.targets} taxAdjusted={taxAdjustedTargetWeights} />
           <p className="text-xs text-gray-400 mt-3">
-            The top bar is the target you're designing on this tab. The bottom bar is your
-            <em> current </em> holdings re-valued at after-tax dollars. Hover a segment for
-            per-class drift in percentage points — that's the gap the engine closes when tax
-            adjustment is enabled.
+            Both bars show your target. The top bar is the target as stated. The bottom bar is
+            the nominal allocation required to achieve that same target in <em>after-tax</em>
+            dollars — equities held in Traditional / 401k get haircut by the effective retirement
+            rate, so you need a larger nominal share of them to hit an after-tax target.
           </p>
         </div>
       )}
@@ -258,7 +262,7 @@ function TaxAdjustmentControl({
   );
 }
 
-export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentWeights, taCurrentWeights }: Props) {
+export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentWeights, taxAdjustedTargetWeights }: Props) {
   // Linked by default when US_TOTAL_MARKET has no standalone target (the normal case).
   const [usEquityLinked, setUsEquityLinked] = useState<boolean>(
     (strategy.targets.US_TOTAL_MARKET ?? 0) < 0.001,
@@ -943,7 +947,7 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentW
         <TaxAdjustmentControl
           strategy={strategy}
           setStrategy={setStrategy}
-          taCurrentWeights={taCurrentWeights}
+          taxAdjustedTargetWeights={taxAdjustedTargetWeights}
         />
       </div>
     </div>
