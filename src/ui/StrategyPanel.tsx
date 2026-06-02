@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import type { Strategy, AssetClass, PlacementBucket } from '../engine/types';
 import { ALL_ASSET_CLASSES } from '../engine/types';
 import { DEFAULT_STRATEGY } from '../engine/strategy';
-import { RUSSELL_CAP_SPLIT } from '../engine/rollup';
+import { CLASS_HIERARCHY } from '../engine/hierarchy';
 import { AC_COLOR, AC_LABEL, BUCKET_LABEL, fmtPct } from './fmt';
 import { WeightPie } from './WeightPie';
 import type { WeightSlice } from './WeightPie';
@@ -12,6 +12,8 @@ const ALL_BUCKETS: PlacementBucket[] = ['TAX_ADVANTAGED', 'TAXABLE', 'EDUCATION'
 const US_CAP_SUBS: readonly AssetClass[] = ['US_LARGE_CAP', 'US_MID_CAP', 'US_SMALL_CAP'];
 
 type CapSplit = { US_LARGE_CAP: number; US_MID_CAP: number; US_SMALL_CAP: number };
+
+const UTM_WEIGHTS = CLASS_HIERARCHY.US_TOTAL_MARKET!.defaultWeights as CapSplit;
 
 /**
  * A section with a collapsible body. The heading row toggles open/closed;
@@ -63,7 +65,7 @@ interface Props {
 /** Derive normalised proportions from the current cap-sub weights (values in percent). Falls back to Russell if all zero. */
 function deriveCapSplit(lc: number, mc: number, sc: number): CapSplit {
   const total = lc + mc + sc;
-  if (total < 0.001) return { ...RUSSELL_CAP_SPLIT };
+  if (total < 0.001) return { ...UTM_WEIGHTS };
   return { US_LARGE_CAP: lc / total, US_MID_CAP: mc / total, US_SMALL_CAP: sc / total };
 }
 
@@ -365,7 +367,7 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentW
   }
 
   function handleResetToRussell() {
-    const newSplit = { ...RUSSELL_CAP_SPLIT };
+    const newSplit = { ...UTM_WEIGHTS };
     setCapSplit(newSplit);
     const total = parseFloat(compositeStr) || 0;
     setWeights(prev => ({ ...prev, ...splitComposite(total, newSplit) }));
@@ -447,9 +449,9 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentW
                    + (parseFloat(weights.US_SMALL_CAP)  || 0);
 
   const isRussell =
-    Math.abs(capSplit.US_LARGE_CAP - RUSSELL_CAP_SPLIT.US_LARGE_CAP) < 0.005 &&
-    Math.abs(capSplit.US_MID_CAP   - RUSSELL_CAP_SPLIT.US_MID_CAP)   < 0.005 &&
-    Math.abs(capSplit.US_SMALL_CAP - RUSSELL_CAP_SPLIT.US_SMALL_CAP) < 0.005;
+    Math.abs(capSplit.US_LARGE_CAP - UTM_WEIGHTS.US_LARGE_CAP) < 0.005 &&
+    Math.abs(capSplit.US_MID_CAP   - UTM_WEIGHTS.US_MID_CAP)   < 0.005 &&
+    Math.abs(capSplit.US_SMALL_CAP - UTM_WEIGHTS.US_SMALL_CAP) < 0.005;
 
   return (
     <div className="space-y-6">
