@@ -1,10 +1,129 @@
 import type { Account, AccountType, Position, Strategy, RebalanceResult, AssetClass, Flag, FundDecomposition, Trade } from './types';
 import { ALL_ASSET_CLASSES } from './types';
-import { makeClassifier } from './classify';
+import { makeClassifier, type ClassifyFn } from './classify';
 import { rollup } from './rollup';
 import { accountBucket, greedyPlace } from './placement';
 import { fillOrdered } from './cashfill';
 import { EPSILON, effectiveTolerance, zeroByClass } from './utils';
+import {
+  positionTaxFactor,
+  contributionTaxFactor,
+  findMissingCostBasis,
+} from './taxAdjust';
+
+// ── Tax-adjusted allocation (issue #7) ───────────────────────────────────────
+//
+// When strategy.taxAdjustment.enabled, the engine runs in *after-tax* dollar
+// space: positions and newCash are scaled by their per-position / per-account
+// tax factor before rollup, so drift detection and target sizing reflect the
+// user's true after-tax wealth and target mix.
+//
+// Trades emerge from the engine in TA dollars. They are converted back to
+// nominal at the end so the user transacts the right amount at the broker:
+//   • Buys      → divide by contribTaf(acct.type)  (new buys have B = V)
+//   • Sells     → divide by slotTaf[acct][class]   (avg taf of what's there)
+//
+// For Roth/HSA/529/Taxable buys and Roth/HSA/529 sells, the factor is 1 and
+// the conversion is a no-op. For Trad/401k sells, it's the uniform (1 − eff).
+// For Taxable sells, slotTaf reflects the *embedded* gain of the slot — selling
+// $1 TA-dollars from a high-gain slot requires more than $1 nominal, so
+// per-account nominal sums diverge from TA sums. A post-conversion balance pass
+// (mirroring Step 8.5) re-aligns each account's net to its real newCash by
+// trimming the largest opposite-sign trade.
+
+interface TaxAdjustContext {
+  scaledAccounts:  Account[];
+  scaledPositions: Position[];
+  /** Avg taf for each (account, class) slot, computed from ORIGINAL positions.
+   *  Used to convert engine-emitted TA sell deltas back to nominal. Slots with
+   *  no positions fall back to contribTaf for the account type. */
+  slotTaf:         Record<string, Record<AssetClass, number>>;
+  /** Contribution taf per account, keyed by id. Used for buy conversions and
+   *  for scaling newCash (a fungible cash flow into/out of the account). */
+  contribTaf:      Record<string, number>;
+}
+
+function buildTaxAdjustContext(
+  accounts: Account[],
+  positions: Position[],
+  classify: ClassifyFn,
+  decompositions: Record<string, FundDecomposition>,
+  taxAdjustment: NonNullable<Strategy['taxAdjustment']>,
+): TaxAdjustContext {
+  const contribTaf: Record<string, number> = {};
+  for (const a of accounts) contribTaf[a.id] = contributionTaxFactor(a.type, taxAdjustment);
+
+  // Accumulate weighted taf per slot from ORIGINAL positions. Numerator =
+  // Σ value_in_slot × position_taf; denominator = Σ value_in_slot. Blended-fund
+  // positions distribute uniformly across their sub-classes (the fund as a whole
+  // has a single taf — for taxable, based on its aggregate costBasis).
+  const num: Record<string, Record<AssetClass, number>> = {};
+  const den: Record<string, Record<AssetClass, number>> = {};
+  for (const a of accounts) {
+    num[a.id] = zeroByClass();
+    den[a.id] = zeroByClass();
+  }
+
+  const acctById = new Map(accounts.map(a => [a.id, a] as const));
+  for (const p of positions) {
+    const acct = acctById.get(p.accountId);
+    if (!acct) continue;
+    const taf = positionTaxFactor(p, acct, taxAdjustment);
+    const decomp = decompositions[p.ticker.toUpperCase()];
+    if (decomp) {
+      for (const [ac, w] of Object.entries(decomp) as [AssetClass, number][]) {
+        const v = p.marketValue * w;
+        num[p.accountId][ac] += v * taf;
+        den[p.accountId][ac] += v;
+      }
+      continue;
+    }
+    const ac = classify(p.ticker);
+    if (ac === null) continue;
+    num[p.accountId][ac] += p.marketValue * taf;
+    den[p.accountId][ac] += p.marketValue;
+  }
+
+  const slotTaf: Record<string, Record<AssetClass, number>> = {};
+  for (const a of accounts) {
+    slotTaf[a.id] = zeroByClass();
+    for (const ac of ALL_ASSET_CLASSES) {
+      slotTaf[a.id][ac] = den[a.id][ac] > EPSILON
+        ? num[a.id][ac] / den[a.id][ac]
+        : contribTaf[a.id];
+    }
+  }
+
+  // Scale newCash (the net deposit/withdrawal cash flow for the account) by the
+  // account-type contribution taf. For Roth/HSA/529/Taxable this is 1.0 (cash
+  // is fungible at face value); for Trad/401k it's (1 − effectiveRate), which
+  // is the right TA value of a dollar flowing into or out of the account.
+  const scaledAccounts = accounts.map(a => {
+    if (a.newCash === undefined) return a;
+    return { ...a, newCash: a.newCash * contribTaf[a.id] };
+  });
+
+  // Scale each position's marketValue by its tax factor. Blended funds get
+  // their account-type-derived taf (uniform across the fund). Locked positions
+  // are scaled too — they still count in totals; the lock just prevents trades.
+  const scaledPositions = positions.map(p => {
+    const acct = acctById.get(p.accountId);
+    if (!acct) return p;
+    const taf = positionTaxFactor(p, acct, taxAdjustment);
+    return { ...p, marketValue: p.marketValue * taf };
+  });
+
+  return { scaledAccounts, scaledPositions, slotTaf, contribTaf };
+}
+
+/** Convert a TA-space trade delta back to nominal. */
+function convertTradeToNominal(trade: Trade, ctx: TaxAdjustContext): Trade {
+  const factor = trade.deltaUsd >= 0
+    ? ctx.contribTaf[trade.accountId]
+    : ctx.slotTaf[trade.accountId][trade.assetClass];
+  if (factor <= EPSILON) return trade; // defensive — shouldn't happen
+  return { ...trade, deltaUsd: trade.deltaUsd / factor };
+}
 
 /**
  * Contribution-first funding breakdown (backlog #2 / issue #3).
@@ -458,6 +577,42 @@ export function rebalance(
     }
   }
 
+  // ── Tax adjustment (issue #7) ──────────────────────────────────────────────
+  //
+  // When enabled, scale positions and newCash to after-tax dollars so the rest
+  // of the engine pipeline (rollup, drift, target sizing, placement, trades)
+  // runs in TA space. We also keep a nominal rollup snapshot taken from the
+  // original inputs so the result can expose nominal currentWeights and
+  // projected weights alongside the TA view, and so trade deltas can be
+  // converted back to nominal at the end via the per-(account, direction)
+  // factor in taCtx.
+  const ta = strategy.taxAdjustment;
+  const taEnabled = ta?.enabled === true;
+  let taCtx: TaxAdjustContext | null = null;
+  let originalAccounts: Account[] = accounts;
+  let originalPositions: Position[] = positions;
+  let nominalCurrentValue: Record<AssetClass, number> | null = null;
+  let nominalHouseholdValue: number | null = null;
+  let originalNewCash: Record<string, number> = {};
+  if (taEnabled) {
+    for (const a of accounts) originalNewCash[a.id] = a.newCash ?? 0;
+    // Nominal snapshot for the result API (currentWeights, projectedWeights).
+    const nomRoll = rollup(accounts, positions, classify, decompositions);
+    nominalCurrentValue = nomRoll.currentValue;
+    nominalHouseholdValue = nomRoll.householdValue;
+
+    // Emit MISSING_COST_BASIS for each taxable position lacking usable basis.
+    // The engine falls back to B = V (no haircut) for these, so the run still
+    // succeeds — the flag is purely advisory.
+    for (const m of findMissingCostBasis(accounts, positions)) {
+      flags.push({ kind: 'MISSING_COST_BASIS', accountId: m.accountId, ticker: m.ticker });
+    }
+
+    taCtx = buildTaxAdjustContext(accounts, positions, classify, decompositions, ta!);
+    accounts  = taCtx.scaledAccounts;
+    positions = taCtx.scaledPositions;
+  }
+
   const {
     householdValue, currentValue, currentValueByAccount,
     accountValues, lockedValueByAccount, blendedValueByAccount, unmappedTickers,
@@ -891,6 +1046,59 @@ export function rebalance(
     unlockedCurrent, effectiveAllowed, strategy,
   ));
 
+  // ── Tax-adjustment trade conversion (issue #7) ────────────────────────────
+  //
+  // Engine ran in TA dollars when enabled. Convert each trade delta to nominal
+  // (what the user will execute at the broker) using the per-(account, direction)
+  // factor from taCtx. After conversion, per-account nominal sums can diverge
+  // from the user's real newCash because high-gain taxable sells produce more
+  // nominal cash than their TA-target value would suggest. Re-run the balance
+  // correction in nominal terms to absorb the residual, mirroring Step 8.5.
+  let taProjectedWeights: Record<AssetClass, number> | null = null;
+  if (taEnabled && taCtx) {
+    // Capture TA projected weights BEFORE conversion (the engine's own currentValue
+    // is in TA space; trades are still in TA at this point).
+    const taProjVal: Record<AssetClass, number> = { ...currentValue };
+    for (const t of trades) taProjVal[t.assetClass] += t.deltaUsd;
+    taProjectedWeights = Object.fromEntries(
+      ALL_ASSET_CLASSES.map(ac => [ac, householdValue > 0 ? taProjVal[ac] / householdValue : 0]),
+    ) as Record<AssetClass, number>;
+
+    // Convert TA→nominal in place.
+    for (let i = 0; i < trades.length; i++) trades[i] = convertTradeToNominal(trades[i], taCtx);
+    for (let i = 0; i < avoidableSells.length; i++) {
+      const a = avoidableSells[i];
+      const f = taCtx.slotTaf[a.accountId][a.assetClass];
+      if (f > EPSILON) avoidableSells[i] = { ...a, amountUsd: a.amountUsd / f };
+    }
+
+    // Nominal balance correction (mirror of Step 8.5).
+    for (const acct of nonLockedAccounts) {
+      const expectedNet = originalNewCash[acct.id] ?? 0;
+      const acctTrades = trades.filter(t => t.accountId === acct.id);
+      const net = acctTrades.reduce((s, t) => s + t.deltaUsd, 0);
+      const residual = net - expectedNet;
+      if (Math.abs(residual) < EPSILON) continue;
+      const targetSign = residual > 0 ? 1 : -1;
+      const candidates = acctTrades
+        .filter(t => Math.sign(t.deltaUsd) === targetSign)
+        .sort((a, b) => Math.abs(b.deltaUsd) - Math.abs(a.deltaUsd));
+      let remaining = Math.abs(residual);
+      for (const cand of candidates) {
+        if (remaining < EPSILON) break;
+        const idx = trades.indexOf(cand);
+        const adjust = Math.min(remaining, Math.abs(cand.deltaUsd));
+        const newDelta = cand.deltaUsd - targetSign * adjust;
+        remaining -= adjust;
+        if (Math.abs(newDelta) < strategy.minTradeUsd) {
+          trades.splice(idx, 1);
+        } else {
+          trades[idx] = { ...cand, deltaUsd: newDelta };
+        }
+      }
+    }
+  }
+
   // Generate TAXABLE_SALE flags from the corrected trade list.
   for (const trade of trades) {
     if (trade.deltaUsd < 0 && trade.inTaxableAccount) {
@@ -913,14 +1121,28 @@ export function rebalance(
     flags.push({ kind: 'REVISIT_PLACEMENT', taxableShare, fixedIncomeTarget: strategy.targets.FIXED_INCOME });
   }
 
-  // Step 10 — Projected weights after trades (applied to full current value).
-  const projectedValue = { ...currentValue };
-  for (const trade of trades) {
-    projectedValue[trade.assetClass] += trade.deltaUsd;
+  // Step 10 — Projected weights after trades.
+  //
+  // In TA mode the engine's currentValue / householdValue are already in TA
+  // dollars and taProjectedWeights was captured BEFORE trade conversion. The
+  // result's nominal projectedWeights are computed from the nominal snapshot
+  // (taken upstream from original positions) plus the converted nominal trades.
+  let nominalProjectedWeights: Record<AssetClass, number>;
+  let taCurrentWeights: Record<AssetClass, number> | null = null;
+  if (taEnabled && nominalCurrentValue && nominalHouseholdValue !== null) {
+    const projVal = { ...nominalCurrentValue };
+    for (const t of trades) projVal[t.assetClass] += t.deltaUsd;
+    nominalProjectedWeights = nominalHouseholdValue > 0
+      ? Object.fromEntries(ALL_ASSET_CLASSES.map(ac => [ac, projVal[ac] / nominalHouseholdValue])) as Record<AssetClass, number>
+      : zeroByClass();
+    taCurrentWeights = currentWeights; // engine ran in TA → these are TA weights
+  } else {
+    const projVal = { ...currentValue };
+    for (const t of trades) projVal[t.assetClass] += t.deltaUsd;
+    nominalProjectedWeights = Object.fromEntries(
+      ALL_ASSET_CLASSES.map(ac => [ac, projVal[ac] / householdValue]),
+    ) as Record<AssetClass, number>;
   }
-  const projectedWeights = Object.fromEntries(
-    ALL_ASSET_CLASSES.map(ac => [ac, projectedValue[ac] / householdValue]),
-  ) as Record<AssetClass, number>;
 
   // Step 11 — Post-trade accuracy validation (5/25 rule, per-class).
   //
@@ -934,21 +1156,52 @@ export function rebalance(
   //
   // Emits PROJECTED_OFF_TARGET so the UI can surface this visibly rather than
   // leaving the user to notice the "After trades" column is still off.
+  // In TA mode the check operates on TA projected weights vs targets (targets
+  // are interpreted as TA weights when tax adjustment is enabled).
+  const checkProjected = (taEnabled && taProjectedWeights) ? taProjectedWeights : nominalProjectedWeights;
   for (const ac of ALL_ASSET_CLASSES) {
     if (withinTolerance.has(ac)) continue;
-    if (Math.abs(projectedWeights[ac] - strategy.targets[ac]) > effectiveTolerance(ac, strategy)) {
+    if (Math.abs(checkProjected[ac] - strategy.targets[ac]) > effectiveTolerance(ac, strategy)) {
       flags.push({
         kind: 'PROJECTED_OFF_TARGET',
         assetClass: ac,
-        projectedWeight: projectedWeights[ac],
+        projectedWeight: checkProjected[ac],
         targetWeight: strategy.targets[ac],
       });
     }
   }
 
+  // Compose nominal currentWeights and currentValueByAccount for the result API.
+  let nominalCurrentWeights = currentWeights;
+  let resultCurrentValueByAccount = currentValueByAccount;
+  let resultHouseholdValue = householdValue;
+  if (taEnabled && nominalCurrentValue && nominalHouseholdValue !== null) {
+    nominalCurrentWeights = nominalHouseholdValue > 0
+      ? Object.fromEntries(ALL_ASSET_CLASSES.map(ac => [ac, nominalCurrentValue[ac] / nominalHouseholdValue])) as Record<AssetClass, number>
+      : zeroByClass();
+    resultHouseholdValue = nominalHouseholdValue;
+    // Re-roll currentValueByAccount from original (unscaled) positions so the
+    // per-account/per-class slot values displayed in the UI are nominal.
+    const nomRoll = rollup(originalAccounts, originalPositions, classify, decompositions);
+    resultCurrentValueByAccount = nomRoll.currentValueByAccount;
+  }
+
   return {
-    householdValue, currentWeights, targetWeights: strategy.targets,
-    projectedWeights, currentValueByAccount, withdrawalByAccount, trades, flags,
+    householdValue: resultHouseholdValue,
+    currentWeights: nominalCurrentWeights,
+    targetWeights: strategy.targets,
+    projectedWeights: nominalProjectedWeights,
+    currentValueByAccount: resultCurrentValueByAccount,
+    withdrawalByAccount,
+    trades,
+    flags,
     contributionSummary: summarizeContributions(trades),
+    ...(taEnabled && taCurrentWeights && taProjectedWeights ? {
+      taxAdjusted: {
+        householdValue: householdValue, // engine's householdValue is in TA dollars
+        currentWeights: taCurrentWeights,
+        projectedWeights: taProjectedWeights,
+      },
+    } : {}),
   };
 }

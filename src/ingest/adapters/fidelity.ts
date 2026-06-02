@@ -45,6 +45,7 @@ const COL = {
   marketValue:   'Current Value',
   description:   'Description',
   price:         'Last Price',
+  costBasis:     'Cost Basis Total',
 } as const;
 
 // ── Single-account adapter (backward-compatible) ──────────────────────────────
@@ -55,6 +56,7 @@ export function parseFidelityCsv(csvText: string, accountId: string): CsvParseRe
     marketValue: COL.marketValue,
     description: COL.description,
     price:       COL.price,
+    costBasis:   COL.costBasis,
   });
 }
 
@@ -104,6 +106,7 @@ export function parseFidelityMultiCsv(csvText: string): FidelityMultiResult {
     const marketValue   = parseMoney(row[COL.marketValue]);
     const price         = parseMoney(row[COL.price]);
     const description   = row[COL.description]?.trim();
+    const costBasis     = parseMoney(row[COL.costBasis]);
 
     if (!accountNumber) continue;
 
@@ -126,6 +129,7 @@ export function parseFidelityMultiCsv(csvText: string): FidelityMultiResult {
       description,
       marketValue,
       price: price && !isNaN(price) && price > 0 ? price : undefined,
+      costBasis: !isNaN(costBasis) && costBasis >= 0 ? costBasis : undefined,
     });
 
     if (result.success) {

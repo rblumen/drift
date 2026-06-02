@@ -222,6 +222,12 @@ describe('parseSchwabCsv', () => {
     const muny = r.positions.find(p => p.ticker === 'MUNY');
     expect(muny?.price).toBeCloseTo(52.10, 2);
   });
+
+  it('parses cost basis when present (issue #7)', () => {
+    const r = parseSchwabCsv(schwabCsv, 'schwab-taxable');
+    const muny = r.positions.find(p => p.ticker === 'MUNY');
+    expect(muny?.costBasis).toBeCloseTo(198_000, 0);
+  });
 });
 
 // ─── Fidelity adapter ─────────────────────────────────────────────────────────
@@ -248,6 +254,12 @@ describe('parseFidelityCsv', () => {
   it('attaches the supplied accountId', () => {
     const r = parseFidelityCsv(fidelityCsv, 'fidelity-ira');
     expect(r.positions.every(p => p.accountId === 'fidelity-ira')).toBe(true);
+  });
+
+  it('parses cost basis when present (issue #7)', () => {
+    const r = parseFidelityCsv(fidelityCsv, 'fidelity-ira');
+    const fzrox = r.positions.find(p => p.ticker === 'FZROX');
+    expect(fzrox?.costBasis).toBeCloseTo(200_495, 0);
   });
 });
 

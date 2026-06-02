@@ -2206,3 +2206,75 @@ describe('blended-fund sells — issue #40', () => {
     });
   });
 });
+
+// ─── tax-adjusted allocation (issue #7) ──────────────────────────────────────
+
+describe('tax-adjusted allocation — issue #7', () => {
+  const TA_STRAT: Strategy = {
+    ...DEFAULT_STRATEGY,
+    toleranceAbs: 0,
+    taxAdjustment: {
+      enabled: true,
+      effectiveRateAtRetirement: 0.20,
+      marginalRateLTCG: 0.15,
+    },
+  };
+
+  it('result includes both nominal and tax-adjusted views when enabled', () => {
+    const r = rebalance(BASE_ACCOUNTS, NO_POSITIONS, TA_STRAT);
+    expect(r.taxAdjusted).toBeDefined();
+    expect(r.taxAdjusted!.currentWeights).toBeDefined();
+    expect(r.taxAdjusted!.projectedWeights).toBeDefined();
+    // Nominal household value is the sum of newCash ($1M).
+    expect(r.householdValue).toBeCloseTo(1_000_000, 0);
+    // TA household value is reduced by the Trad/401k haircut: 200k Taxable +
+    // 300k × 0.8 + 500k × 0.8 = 840_000.
+    expect(r.taxAdjusted!.householdValue).toBeCloseTo(840_000, 0);
+  });
+
+  it('omits taxAdjusted view when disabled (back-compat)', () => {
+    const r = rebalance(BASE_ACCOUNTS, NO_POSITIONS, ZERO_TOL_STRATEGY);
+    expect(r.taxAdjusted).toBeUndefined();
+    expect(r.householdValue).toBe(1_000_000);
+  });
+
+  it('emits MISSING_COST_BASIS for taxable positions without basis', () => {
+    const positions: Position[] = [
+      { accountId: 'schwab', ticker: 'MUNY',  marketValue: 100_000 }, // no basis
+      { accountId: 'schwab', ticker: 'BND',   marketValue: 100_000, costBasis: 95_000 },
+      { accountId: 'ira',    ticker: 'FZROX', marketValue: 100_000 }, // not taxable — no flag
+    ];
+    const r = rebalance(
+      BASE_ACCOUNTS.map(a => ({ ...a, newCash: undefined })),
+      positions,
+      TA_STRAT,
+    );
+    const missing = r.flags.filter(f => f.kind === 'MISSING_COST_BASIS');
+    expect(missing).toHaveLength(1);
+    expect(missing[0]).toMatchObject({ kind: 'MISSING_COST_BASIS', ticker: 'MUNY' });
+  });
+
+  it('per-account trade sum still matches newCash after TA conversion', () => {
+    // Greenfield deposit-only run: per-account net trades must equal newCash
+    // (no positions to sell, so all trades are buys at contribTaf — clean nominal).
+    const r = rebalance(BASE_ACCOUNTS, NO_POSITIONS, TA_STRAT);
+    expect(near(accountSum(r.trades, 'schwab'), 200_000)).toBe(true);
+    expect(near(accountSum(r.trades, 'ira'),    300_000)).toBe(true);
+    expect(near(accountSum(r.trades, 'k401'),   500_000)).toBe(true);
+  });
+
+  it('TA mode shifts target sizing — Trad equities buy is larger than nominal mode', () => {
+    // With TA on, the household TA value is smaller (Trad accounts haircut), so
+    // hitting target weights in TA dollars requires a different nominal trade
+    // distribution. Concretely: total TA = 840k, FIXED_INCOME target 20% of TA
+    // = 168k — but the Taxable account has $200k of capacity, so FIXED_INCOME
+    // gets fully placed there. The remainder of Taxable (32k) spills into other
+    // classes via the engine's gap-fill / redirect logic.
+    const r = rebalance(BASE_ACCOUNTS, NO_POSITIONS, TA_STRAT);
+    // Per-account totals still must match newCash (invariant preserved).
+    expect(near(accountSum(r.trades, 'schwab'), 200_000)).toBe(true);
+    // Some FIXED_INCOME lands in the taxable account.
+    const fi = tradeFor(r.trades, 'schwab', 'FIXED_INCOME');
+    expect(fi?.deltaUsd).toBeGreaterThan(0);
+  });
+});

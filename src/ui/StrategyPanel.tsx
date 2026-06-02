@@ -69,6 +69,114 @@ function splitComposite(totalPct: number, split: CapSplit): Record<'US_LARGE_CAP
   return { US_LARGE_CAP: lc.toFixed(1), US_MID_CAP: mc.toFixed(1), US_SMALL_CAP: sc.toFixed(1) };
 }
 
+/**
+ * Tax-adjusted allocation control (issue #7). When enabled, the engine values
+ * each account at its after-tax worth and rebalances against that view — so a
+ * 60/40 target refers to after-tax wealth rather than nominal market value.
+ */
+function TaxAdjustmentControl({
+  strategy, setStrategy,
+}: { strategy: Strategy; setStrategy: (s: Strategy) => void }) {
+  const enabled = strategy.taxAdjustment?.enabled === true;
+  const eff = strategy.taxAdjustment?.effectiveRateAtRetirement ?? 0.15;
+  const ltcg = strategy.taxAdjustment?.marginalRateLTCG ?? 0.15;
+
+  // Local string state so users can clear/edit the inputs without losing focus.
+  const [effStr, setEffStr] = useState(String((eff * 100).toFixed(1)));
+  const [ltcgStr, setLtcgStr] = useState(String((ltcg * 100).toFixed(1)));
+  useEffect(() => { setEffStr(String((eff * 100).toFixed(1))); }, [eff]);
+  useEffect(() => { setLtcgStr(String((ltcg * 100).toFixed(1))); }, [ltcg]);
+
+  function commit(next: { enabled?: boolean; effPct?: string; ltcgPct?: string }) {
+    const ta = {
+      enabled: next.enabled ?? enabled,
+      effectiveRateAtRetirement: Math.max(0, Math.min(1, (parseFloat(next.effPct ?? effStr) || 0) / 100)),
+      marginalRateLTCG:          Math.max(0, Math.min(1, (parseFloat(next.ltcgPct ?? ltcgStr) || 0) / 100)),
+    };
+    setStrategy({ ...strategy, taxAdjustment: ta });
+  }
+
+  return (
+    <div className="border-t border-gray-100 pt-3 space-y-3">
+      <div className="flex items-start justify-between gap-4 max-w-2xl">
+        <div>
+          <div className="text-sm text-gray-700">Tax-adjusted allocation</div>
+          <p className="text-xs text-gray-400 mt-0.5 max-w-md">
+            Value each account at its after-tax worth before computing drift and
+            target sizes. Roth, HSA, and 529 count at face value; Traditional/401k
+            are haircut by your expected effective rate at retirement; taxable
+            positions are haircut by the LTCG on their unrealized gain (cost basis
+            required per position).
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={enabled}
+          onClick={() => commit({ enabled: !enabled })}
+          className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+            enabled ? 'bg-indigo-600' : 'bg-gray-300'
+          }`}
+        >
+          <span
+            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+              enabled ? 'translate-x-6' : 'translate-x-1'
+            }`}
+          />
+        </button>
+      </div>
+
+      {enabled && (
+        <div className="grid grid-cols-2 gap-4 max-w-2xl pl-4 border-l-2 border-indigo-100">
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">
+              Effective rate at retirement (Trad / 401k)
+            </label>
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                step="0.5"
+                min="0"
+                max="100"
+                value={effStr}
+                onChange={e => setEffStr(e.target.value)}
+                onBlur={() => commit({ effPct: effStr })}
+                className="w-20 border rounded px-2 py-1.5 text-sm text-right"
+              />
+              <span className="text-gray-400 text-xs">%</span>
+            </div>
+            <p className="text-xs text-gray-400 mt-1">
+              Your expected effective tax rate in retirement (typically lower than
+              your current marginal — withdrawals fill multiple brackets).
+            </p>
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">
+              Long-term capital gains rate (Taxable)
+            </label>
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                step="0.5"
+                min="0"
+                max="100"
+                value={ltcgStr}
+                onChange={e => setLtcgStr(e.target.value)}
+                onBlur={() => commit({ ltcgPct: ltcgStr })}
+                className="w-20 border rounded px-2 py-1.5 text-sm text-right"
+              />
+              <span className="text-gray-400 text-xs">%</span>
+            </div>
+            <p className="text-xs text-gray-400 mt-1">
+              Federal LTCG. State tax and NIIT are out of scope.
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentWeights }: Props) {
   // Linked by default when US_TOTAL_MARKET has no standalone target (the normal case).
   const [usEquityLinked, setUsEquityLinked] = useState<boolean>(
@@ -749,6 +857,9 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights: _currentW
             />
           </button>
         </div>
+
+        {/* Tax-adjusted allocation (issue #7) */}
+        <TaxAdjustmentControl strategy={strategy} setStrategy={setStrategy} />
       </div>
     </div>
   );
