@@ -37,6 +37,21 @@ export const PARENT_CLASS: Partial<Record<AssetClass, AssetClass>> = Object.from
   ),
 ) as Partial<Record<AssetClass, AssetClass>>;
 
+/** True when `ac` is a parent class with declared children (e.g. ALTERNATIVES, US_TOTAL_MARKET). */
+export function isParentClass(ac: AssetClass): boolean {
+  return ac in CLASS_HIERARCHY;
+}
+
+/** True when `ac` is a sub-class nested under a parent (e.g. CRYPTO, US_LARGE_CAP). */
+export function isChildClass(ac: AssetClass): boolean {
+  return ac in PARENT_CLASS;
+}
+
+/** The children of `ac`, or an empty array when `ac` is not a parent class. */
+export function childrenOf(ac: AssetClass): readonly AssetClass[] {
+  return CLASS_HIERARCHY[ac]?.children ?? [];
+}
+
 /**
  * Consolidation pass — the inverse of the rollup redistribution.
  *

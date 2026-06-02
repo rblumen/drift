@@ -2,6 +2,7 @@ import { useState, Fragment } from 'react';
 import type { Account, AssetClass, Flag, FundDecomposition, PlacementBucket, Position } from '../engine/types';
 import { ALL_ASSET_CLASSES } from '../engine/types';
 import { BUILTIN_CLASS_MAP, makeClassifier } from '../engine/classify';
+import { isChildClass } from '../engine/hierarchy';
 import { accountBucket } from '../engine/placement';
 import { AC_COLOR, AC_LABEL, BUCKET_COLOR, BUCKET_LABEL } from './fmt';
 import { PieChart } from './PieChart';
@@ -11,6 +12,24 @@ import { detectTargetDateFund } from '../data/targetDateFunds';
 import { HelpBox, HelpDef, HelpSection } from './HelpBox';
 
 const PLACEMENT_BUCKETS: PlacementBucket[] = ['TAX_ADVANTAGED', 'TAXABLE', 'EDUCATION'];
+
+/**
+ * Asset-class <option> list that reflects the parent/child hierarchy: sub-classes
+ * (CRYPTO, US_LARGE_CAP, …) are indented beneath their parent so the dropdown
+ * stays readable as the class list grows. Native <option> can't truly nest, so
+ * we indent with a leading glyph + non-breaking spaces.
+ */
+function ClassOptions() {
+  return (
+    <>
+      {ALL_ASSET_CLASSES.map(ac => (
+        <option key={ac} value={ac}>
+          {isChildClass(ac) ? `   ↳ ${AC_LABEL[ac]}` : AC_LABEL[ac]}
+        </option>
+      ))}
+    </>
+  );
+}
 
 interface Props {
   accounts: Account[];
@@ -104,7 +123,7 @@ function DecompEditor({
               className="inline-block w-2.5 h-2.5 rounded-sm flex-shrink-0"
               style={{ background: AC_COLOR[ac] ?? '#ccc' }}
             />
-            <span className="w-28 text-gray-600">{AC_LABEL[ac] ?? ac}</span>
+            <span className={`w-28 text-gray-600 ${isChildClass(ac) ? 'pl-3' : ''}`}>{AC_LABEL[ac] ?? ac}</span>
             <input
               type="number"
               min="0"
@@ -381,9 +400,7 @@ export function ClassifyPanel({
                             className={`text-xs border rounded px-1.5 py-0.5 bg-white ${tdfDetect ? 'border-gray-200 text-gray-500' : 'border-amber-300 text-gray-700'}`}
                           >
                             <option value="">{tdfDetect ? 'or single class…' : '— select class —'}</option>
-                            {ALL_ASSET_CLASSES.map(ac => (
-                              <option key={ac} value={ac}>{AC_LABEL[ac]}</option>
-                            ))}
+                            <ClassOptions />
                           </select>
                         </>
                       )}
@@ -523,9 +540,7 @@ export function ClassifyPanel({
                               onChange={e => assign(row.ticker, e.target.value as AssetClass | '')}
                               className="border border-gray-200 rounded px-2 py-1 text-sm bg-transparent"
                             >
-                              {ALL_ASSET_CLASSES.map(ac => (
-                                <option key={ac} value={ac}>{AC_LABEL[ac]}</option>
-                              ))}
+                              <ClassOptions />
                             </select>
                           )}
                         </td>

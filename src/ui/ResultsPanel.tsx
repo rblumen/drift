@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Account, AssetClass, Flag, RebalanceResult, ResolvedTrade } from '../engine/types';
 import { ALL_ASSET_CLASSES } from '../engine/types';
 import { withdrawalPriorityOf, isWithdrawalEligible } from '../engine/rebalance';
+import { isChildClass, isParentClass, childrenOf } from '../engine/hierarchy';
 import { AC_COLOR, AC_LABEL, ACCT_TYPE_LABEL, fmtUsd, fmtPct, fmtDelta } from './fmt';
 import { PieChart } from './PieChart';
 import type { PieSlice } from './PieChart';
@@ -173,17 +174,20 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
 // ── Household allocation table row ────────────────────────────────────────────
 
 function AllocationRow({
-  ac, current, target, projected, taCurrent, taProjected,
+  ac, current, target, projected, taCurrent, taProjected, depth = 0,
 }: {
   ac: AssetClass; current: number; target: number; projected: number;
-  taCurrent?: number; taProjected?: number;
+  taCurrent?: number; taProjected?: number; depth?: 0 | 1;
 }) {
   const drift = current - target;
   const showTA = taCurrent !== undefined && taProjected !== undefined;
+  const isChild = depth > 0;
 
   return (
-    <tr className="border-t border-gray-100">
-      <td className="px-4 py-3 text-gray-700 font-medium">{AC_LABEL[ac]}</td>
+    <tr className={`border-t border-gray-100 ${isChild ? 'bg-gray-50/40' : ''}`}>
+      <td className={`py-3 ${isChild ? 'pl-10 pr-4 text-gray-500 font-normal text-xs' : 'px-4 text-gray-700 font-medium'}`}>
+        {isChild ? <span className="text-gray-300 mr-1">↳</span> : null}{AC_LABEL[ac]}
+      </td>
       <td className="px-4 py-3 text-right tabular-nums">{fmtPct(current)}</td>
       <td className="px-4 py-3 text-right tabular-nums">{fmtPct(target)}</td>
       <td className="px-4 py-3 text-right tabular-nums">
@@ -854,17 +858,46 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plann
               </tr>
             </thead>
             <tbody>
-              {ALL_ASSET_CLASSES.map(ac => (
-                <AllocationRow
-                  key={ac}
-                  ac={ac}
-                  current={currentWeights[ac]}
-                  target={targetWeights[ac]}
-                  projected={projectedWeights[ac]}
-                  taCurrent={result.taxAdjusted?.currentWeights[ac]}
-                  taProjected={result.taxAdjusted?.projectedWeights[ac]}
-                />
-              ))}
+              {ALL_ASSET_CLASSES.filter(ac => !isChildClass(ac)).flatMap(ac => {
+                const rows = [(
+                  <AllocationRow
+                    key={ac}
+                    ac={ac}
+                    current={currentWeights[ac]}
+                    target={targetWeights[ac]}
+                    projected={projectedWeights[ac]}
+                    taCurrent={result.taxAdjusted?.currentWeights[ac]}
+                    taProjected={result.taxAdjusted?.projectedWeights[ac]}
+                  />
+                )];
+                // Nest sub-classes beneath their parent, but only when the
+                // sub-class actually carries weight (held, targeted, or projected) —
+                // an unused refinement stays hidden to keep the table clean.
+                if (isParentClass(ac)) {
+                  for (const child of childrenOf(ac)) {
+                    const cur  = currentWeights[child] ?? 0;
+                    const tgt  = targetWeights[child] ?? 0;
+                    const proj = projectedWeights[child] ?? 0;
+                    const taC  = result.taxAdjusted?.currentWeights[child] ?? 0;
+                    const taP  = result.taxAdjusted?.projectedWeights[child] ?? 0;
+                    const visible = cur > 5e-4 || tgt > 5e-4 || proj > 5e-4 || taC > 5e-4 || taP > 5e-4;
+                    if (!visible) continue;
+                    rows.push(
+                      <AllocationRow
+                        key={child}
+                        ac={child}
+                        current={cur}
+                        target={tgt}
+                        projected={proj}
+                        taCurrent={result.taxAdjusted?.currentWeights[child]}
+                        taProjected={result.taxAdjusted?.projectedWeights[child]}
+                        depth={1}
+                      />,
+                    );
+                  }
+                }
+                return rows;
+              })}
             </tbody>
           </table>
         </div>
