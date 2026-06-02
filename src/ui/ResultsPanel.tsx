@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import type { Account, AssetClass, Flag, RebalanceResult, ResolvedTrade } from '../engine/types';
 import { ALL_ASSET_CLASSES } from '../engine/types';
 import { withdrawalPriorityOf, isWithdrawalEligible } from '../engine/rebalance';
@@ -186,7 +186,7 @@ function AllocationRow({
   return (
     <tr className={`border-t border-gray-100 ${isChild ? 'bg-gray-50/40' : ''}`}>
       <td className={`py-3 ${isChild ? 'pl-10 pr-4 text-gray-500 font-normal text-xs' : 'px-4 text-gray-700 font-medium'}`}>
-        {isChild ? <span className="text-gray-300 mr-1">↳</span> : null}{AC_LABEL[ac]}
+        {AC_LABEL[ac]}
       </td>
       <td className="px-4 py-3 text-right tabular-nums">{fmtPct(current)}</td>
       <td className="px-4 py-3 text-right tabular-nums">{fmtPct(target)}</td>

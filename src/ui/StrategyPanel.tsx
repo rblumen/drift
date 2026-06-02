@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import type { Strategy, AssetClass, PlacementBucket } from '../engine/types';
 import { ALL_ASSET_CLASSES } from '../engine/types';
 import { DEFAULT_STRATEGY } from '../engine/strategy';
@@ -921,7 +921,7 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights, taxAdjust
                     <tr key={cls} className={`hover:bg-gray-50 ${isChild ? 'bg-gray-50/40' : ''}`}>
                       <td className={`py-2 ${isChild ? 'pl-10 pr-4' : 'px-4'}`}>
                         <span className={isChild ? 'text-xs text-gray-500' : 'text-gray-700'}>
-                          {isChild && <span className="text-gray-300 mr-1">↳</span>}{AC_LABEL[cls]}
+                          {AC_LABEL[cls]}
                         </span>
                         {inherits && (
                           <span className="ml-2 text-[10px] text-gray-400 italic">inherits {AC_LABEL[parent!]}</span>
