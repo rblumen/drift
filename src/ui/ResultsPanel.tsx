@@ -771,23 +771,32 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plann
         <div className="overflow-hidden border border-gray-200 rounded-lg">
           <div className="p-4 border-b border-gray-100">
             {(() => {
+              // When tax adjustment is enabled, the pies show after-tax composition
+              // (the lens the engine is targeting). The titles include "(after-tax)"
+              // so the user knows what they're looking at. Nominal mode uses nominal.
+              const pieCurrentWeights = result.taxAdjusted?.currentWeights ?? currentWeights;
+              const pieProjectedWeights = result.taxAdjusted?.projectedWeights ?? projectedWeights;
+              const pieTotal = result.taxAdjusted?.householdValue ?? householdValue;
+              const ta = result.taxAdjusted !== undefined;
               const currentByClass = Object.fromEntries(
-                ALL_ASSET_CLASSES.map(ac => [ac, (currentWeights[ac] ?? 0) * householdValue])
+                ALL_ASSET_CLASSES.map(ac => [ac, (pieCurrentWeights[ac] ?? 0) * pieTotal])
               ) as Record<AssetClass, number>;
               const projectedByClass = Object.fromEntries(
-                ALL_ASSET_CLASSES.map(ac => [ac, (projectedWeights[ac] ?? 0) * householdValue])
+                ALL_ASSET_CLASSES.map(ac => [ac, (pieProjectedWeights[ac] ?? 0) * pieTotal])
               ) as Record<AssetClass, number>;
               const beforeSlices = buildPieSlices(currentByClass);
               const afterSlices  = buildPieSlices(projectedByClass);
               const hasBoth = beforeSlices.length > 0 && afterSlices.length > 0;
+              const beforeTitle = ta ? 'Before (after-tax)' : 'Before';
+              const afterTitle  = ta ? 'After trades (after-tax)' : 'After trades';
               return (
                 <div className="space-y-4">
                   <div className={hasBoth ? 'grid grid-cols-2 gap-6' : ''}>
                     {beforeSlices.length > 0 && (
-                      <PieChart title="Before" slices={beforeSlices} size={88} />
+                      <PieChart title={beforeTitle} slices={beforeSlices} size={88} />
                     )}
                     {afterSlices.length > 0 && (
-                      <PieChart title="After trades" slices={afterSlices} size={88} />
+                      <PieChart title={afterTitle} slices={afterSlices} size={88} />
                     )}
                   </div>
                   {hasBoth && (
