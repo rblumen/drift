@@ -656,7 +656,10 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights, taxAdjust
                   // ── Parent class row (with optional indented sub-class children) ──
                   const isExpanded   = expanded[ac];
                   const isLinked     = linked[ac];
-                  const canCollapse  = isExpanded && !forceExpanded(ac);
+                  // Block collapse only when a child is *held* in the portfolio — you
+                  // can't hide a real position. A split that only set targets (no
+                  // current holdings) should always be reversible via "merge".
+                  const canCollapse  = isExpanded && !childrenOf(ac).some(c => (currentWeights[c] ?? 0) > 1e-4);
                   const subs         = childrenOf(ac);
                   const defaultLabel = ac === 'US_TOTAL_MARKET'
                     ? 'Reset to Russell index weights (Large 67%, Mid 25%, Small 8%)'
