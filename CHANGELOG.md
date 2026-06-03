@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Selling a cash position is not a taxable trade** ([#56](https://github.com/rblumen/drift/issues/56)) — reducing a money-market or cash holding (e.g. SPAXX) to fund purchases no longer triggers a `TAXABLE_SALE` warning, since depleting cash carries no capital-gains exposure. In the "How this rebalance is funded" breakdown, freed cash now appears in the left box alongside new contributions (label updated to "Funded by new & free cash") and is excluded from the "Requires sales" total on the right.
+
 - **Aggressiveness stable across split/merge** ([#61](https://github.com/rblumen/drift/issues/61)) — toggling a parent class between split and merged no longer causes a jump in the "X% growth · Y% defensive" gauge or the AllocationPlot aggressiveness axis. Both now derive the defensive set from the hierarchy (`FIXED_INCOME` + all sub-classes + `CASH`), so whether bonds are held at the parent level or split into Treasury/Muni/TIPS/etc., and whether Developed Intl is split into Europe/Pacific sub-regions, the reading is the same.
 
 - **Strategy: "merge" reappears after split** ([#59](https://github.com/rblumen/drift/issues/59)) — clicking **split** on a parent class (Alternatives, Fixed Income, Developed Intl) distributed its weight into sub-class targets but then permanently hid the **merge** link, leaving no way to undo the split. The merge button is now suppressed only when a child class is *held* in the portfolio (you can't hide real positions); a split that only set targets with no current holdings is always reversible.
