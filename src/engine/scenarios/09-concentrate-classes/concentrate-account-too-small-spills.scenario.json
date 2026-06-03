@@ -1,0 +1,30 @@
+{
+  "name": "concentrate-account-too-small-spills",
+  "description": "Goal 9 (edge case): when the concentrate account lacks capacity for the whole sleeve, it is filled to the brim and the remainder spills to other eligible accounts",
+  "principle": 9,
+  "accounts": [
+    { "id": "schwab", "name": "Schwab Brokerage", "institution": "Schwab", "type": "TAXABLE", "newCash": 200000 },
+    { "id": "trad_ira", "name": "Fidelity Trad IRA", "institution": "Fidelity", "type": "TRADITIONAL_IRA", "newCash": 795000 },
+    { "id": "roth", "name": "Roth IRA", "institution": "Fidelity", "type": "ROTH_IRA", "newCash": 5000, "concentrateClasses": ["ALTERNATIVES"] }
+  ],
+  "holdings": [],
+  "strategy": {
+    "targets": {
+      "US_TOTAL_MARKET": 0.0, "US_LARGE_CAP": 0.385, "US_MID_CAP": 0.144, "US_SMALL_CAP": 0.046,
+      "DEVELOPED_INTL": 0.17, "DEVELOPED_EUROPE": 0.0, "DEVELOPED_PACIFIC": 0.0, "EMERGING_INTL": 0.03,
+      "FIXED_INCOME": 0.2, "US_TREASURY": 0.0, "US_CORP_BOND": 0.0, "MUNI_BOND": 0.0, "TIPS": 0.0, "INTL_BOND": 0.0,
+      "REAL_ESTATE": 0.0, "ALTERNATIVES": 0.025, "CRYPTO": 0.0, "PRECIOUS_METALS": 0.0, "CASH": 0.0
+    },
+    "placement": {},
+    "toleranceAbs": 0.0,
+    "toleranceRel": 0.25,
+    "minTradeUsd": 250
+  },
+  "expected": {
+    "requiredTrades": [
+      { "accountId": "roth", "assetClass": "ALTERNATIVES", "deltaUsd": 5000 },
+      { "accountId": "trad_ira", "assetClass": "ALTERNATIVES", "deltaUsd": 20000 }
+    ],
+    "netByAccount": { "schwab": 200000, "trad_ira": 795000, "roth": 5000 }
+  }
+}

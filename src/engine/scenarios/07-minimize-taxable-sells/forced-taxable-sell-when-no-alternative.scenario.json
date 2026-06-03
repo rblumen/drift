@@ -1,0 +1,27 @@
+{
+  "name": "forced-taxable-sell-when-no-alternative",
+  "description": "Goal 7 (edge case): an over-weight fixed-income sleeve held only in the taxable account cannot be redirected (FI belongs in taxable), so the sell is forced there and TAXABLE_SALE is surfaced",
+  "principle": 7,
+  "accounts": [
+    { "id": "schwab", "name": "Schwab Brokerage", "institution": "Schwab", "type": "TAXABLE" },
+    { "id": "ira", "name": "Fidelity Trad IRA", "institution": "Fidelity", "type": "TRADITIONAL_IRA" }
+  ],
+  "holdings": [
+    { "accountId": "schwab", "ticker": "MUNY", "marketValue": 300000 },
+    { "accountId": "ira", "ticker": "FZROX", "marketValue": 700000 }
+  ],
+  "strategy": {
+    "targets": { "US_TOTAL_MARKET": 0.0, "US_LARGE_CAP": 0.8, "DEVELOPED_INTL": 0.0, "EMERGING_INTL": 0.0, "FIXED_INCOME": 0.2, "ALTERNATIVES": 0.0, "CASH": 0.0 },
+    "placement": {},
+    "toleranceAbs": 0.0,
+    "toleranceRel": 0.25,
+    "minTradeUsd": 0,
+    "preferTaxAdvantagedRebalance": true
+  },
+  "expected": {
+    "flags": [
+      { "kind": "TAXABLE_SALE", "accountId": "schwab", "assetClass": "FIXED_INCOME" }
+    ],
+    "netByAccount": { "schwab": 0, "ira": 0 }
+  }
+}

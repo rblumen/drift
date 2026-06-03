@@ -97,6 +97,26 @@ function assertScenario(s: Scenario, result: RebalanceResult): void {
     }
   }
 
+  // ── requiredTrades — specific trades that must be present ─────────────────
+  if (expected.requiredTrades) {
+    for (const rt of expected.requiredTrades) {
+      const hit = result.trades.find(
+        t => t.accountId === rt.accountId && t.assetClass === rt.assetClass,
+      );
+      const ok =
+        hit !== undefined &&
+        Math.abs(hit.deltaUsd - rt.deltaUsd) <= Math.max(1, Math.abs(rt.deltaUsd) * 0.005) &&
+        (rt.inTaxableAccount === undefined || hit.inTaxableAccount === rt.inTaxableAccount);
+      if (!ok) {
+        throw new Error(
+          `Required trade not found / mismatched — ${s.description}\n` +
+            `  required: ${JSON.stringify(rt)}\n` +
+            `  actual for ${rt.accountId}/${rt.assetClass}: ${JSON.stringify(hit ?? null)}`,
+        );
+      }
+    }
+  }
+
   // ── flags — presence (subset) ─────────────────────────────────────────────
   if (expected.flags) {
     for (const ef of expected.flags) {

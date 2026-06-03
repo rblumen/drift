@@ -35,8 +35,8 @@ Most-constrained classes (fewest eligible bucket options) are placed first. If a
 **7. Minimize taxable sells.**
 Sells in taxable accounts are avoided or redirected to tax-advantaged accounts wherever possible.
 
-**8. Distribute proportionally by remaining capacity.**
-Among equally eligible accounts within the same placement bucket, dollars are split in proportion to each account's remaining unfilled capacity.
+**8. Distribute by remaining capacity (largest first).**
+Among equally eligible accounts within the same placement bucket, a class fills the account with the most remaining unfilled capacity first, then spills the remainder to the next-largest, and so on (`distributeConcentrate`, `placement.ts`). Capacity ties are broken deterministically by input order, so identical inputs always yield the same split. This concentrate-then-spill waterfall superseded the earlier proportional-spreading rule (backlog #17); it serves Goal 11 by keeping each class in as few accounts as possible.
 
 **9. Fill `concentrateClasses` accounts before general accounts.**
 Within the same placement bucket, accounts designated to concentrate a class are filled ahead of others.
