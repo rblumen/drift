@@ -706,6 +706,23 @@ describe('TAXABLE_SALE flag', () => {
     expect(flag?.kind === 'TAXABLE_SALE' && flag.accountId).toBe('schwab');
     expect(flag?.kind === 'TAXABLE_SALE' && flag.assetClass).toBe('FIXED_INCOME');
   });
+
+  it('does not emit TAXABLE_SALE for a cash position reduced in a taxable account (issue #56)', () => {
+    const accounts: Account[] = [
+      { id: 'taxable', name: 'Taxable', institution: 'X', type: 'TAXABLE' },
+      { id: 'ira',     name: 'IRA',     institution: 'X', type: 'TRADITIONAL_IRA' },
+    ];
+    // CASH target is 0 → engine must sell the SPAXX position.
+    const positions: Position[] = [
+      { accountId: 'taxable', ticker: 'SPAXX', marketValue:  20_000 },
+      { accountId: 'ira',     ticker: 'BND',   marketValue: 200_000 },
+      { accountId: 'ira',     ticker: 'VOO',   marketValue: 780_000 },
+    ];
+    const r = rebalance(accounts, positions, ZERO_TOL_STRATEGY);
+    const cashSell = r.trades.find(t => t.assetClass === 'CASH' && t.deltaUsd < 0);
+    expect(cashSell).toBeDefined();
+    expect(r.flags.some(f => f.kind === 'TAXABLE_SALE' && f.assetClass === 'CASH')).toBe(false);
+  });
 });
 
 // â”€â”€â”€ step 8.5 â€” post-minTradeUsd balance correction â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -1881,6 +1898,30 @@ describe('contributionSummary', () => {
     // With no new cash, buys are fully funded by sells.
     expect(cs.newCashDeployed).toBeLessThan(1);
     expect(cs.buysUsd).toBeCloseTo(cs.sellsUsd, 2);
+  });
+
+  it('treats a cash position reduction as free cash, not a sale (issue #56)', () => {
+    // Single taxable account holding only SPAXX; target is 100% FIXED_INCOME.
+    // The engine sells the CASH position and buys FIXED_INCOME — net account flow is
+    // zero (no new contribution). After the fix, CASH sells are excluded from sellsUsd
+    // and appear in newCashDeployed instead.
+    const accounts: Account[] = [
+      { id: 'taxable', name: 'Taxable', institution: 'X', type: 'TAXABLE' },
+    ];
+    const positions: Position[] = [
+      { accountId: 'taxable', ticker: 'SPAXX', marketValue: 100_000 },
+    ];
+    const targets = Object.fromEntries(
+      ALL_ASSET_CLASSES.map(ac => [ac, ac === 'FIXED_INCOME' ? 1.0 : 0.0]),
+    ) as Record<AssetClass, number>;
+    const strategy: Strategy = { ...DEFAULT_STRATEGY, targets, toleranceAbs: 0 };
+    const r = rebalance(accounts, positions, strategy);
+    const cashSell = r.trades.find(t => t.assetClass === 'CASH' && t.deltaUsd < 0);
+    expect(cashSell).toBeDefined();
+    // CASH sell is free cash — it should NOT count as sellsUsd.
+    expect(r.contributionSummary.sellsUsd).toBeCloseTo(0, 0);
+    // Instead it shows up as new/free cash deployed.
+    expect(r.contributionSummary.newCashDeployed).toBeCloseTo(100_000, -2);
   });
 });
 

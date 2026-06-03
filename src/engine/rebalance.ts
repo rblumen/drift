@@ -138,7 +138,9 @@ function summarizeContributions(trades: Trade[]): RebalanceResult['contributionS
   let sellsUsd = 0;
   for (const t of trades) {
     if (t.deltaUsd > 0) buysUsd += t.deltaUsd;
-    else sellsUsd += -t.deltaUsd;
+    // Cash reductions are free cash deployed into underweight classes — treat them
+    // as new money (left box) rather than taxable sales (right box).
+    else if (t.assetClass !== 'CASH') sellsUsd += -t.deltaUsd;
   }
   return {
     newCashDeployed: Math.max(0, buysUsd - sellsUsd),
@@ -1125,8 +1127,9 @@ export function rebalance(
   }
 
   // Generate TAXABLE_SALE flags from the corrected trade list.
+  // Cash position reductions are not real trades; they don't generate capital-gains exposure.
   for (const trade of trades) {
-    if (trade.deltaUsd < 0 && trade.inTaxableAccount) {
+    if (trade.deltaUsd < 0 && trade.inTaxableAccount && trade.assetClass !== 'CASH') {
       flags.push({ kind: 'TAXABLE_SALE', accountId: trade.accountId, assetClass: trade.assetClass, amountUsd: Math.abs(trade.deltaUsd) });
     }
   }
