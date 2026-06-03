@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Strategy: "merge" reappears after split** ([#59](https://github.com/rblumen/drift/issues/59)) — clicking **split** on a parent class (Alternatives, Fixed Income, Developed Intl) distributed its weight into sub-class targets but then permanently hid the **merge** link, leaving no way to undo the split. The merge button is now suppressed only when a child class is *held* in the portfolio (you can't hide real positions); a split that only set targets with no current holdings is always reversible.
+
 ### Added
 
 - **Expanded asset-class hierarchy — Phase 2a** ([#36](https://github.com/rblumen/drift/issues/36)) — three new allocation dimensions built on the generalized hierarchy below, all opt-in via the portfolio-driven visibility rule (sub-classes stay hidden until held or individually targeted). **Fixed income** is now a parent class that subdivides into `US_TREASURY`, `US_CORP_BOND`, `MUNI_BOND`, `TIPS`, and `INTL_BOND` — the highest-value addition, since each sleeve places by tax treatment (munis in taxable; taxable-coupon bonds shelter in tax-advantaged) instead of one blended bucket. **Developed international** subdivides into `DEVELOPED_EUROPE` and `DEVELOPED_PACIFIC` (≈ MSCI EAFE 62/38). **Real estate** (`REAL_ESTATE`, REITs) is a new standalone top-level sleeve defaulting to tax-advantaged placement. Common ETFs/mutual funds for every new sleeve are mapped (e.g. GOVT/VGIT → Treasury, LQD/VCIT → corporate, MUB/VTEB → muni, SCHP/VTIP → TIPS, BNDX → intl bond, VGK/VPL → Europe/Pacific, VNQ/SCHH → real estate); `MUNY` now maps to `MUNI_BOND`. A user holding a broad bond or developed-international fund against a parent-level target sees no change — holdings roll up and consolidate to the parent, and the sub-classes surface only when explicitly used. Default split weights are anchored on index composition data (Bloomberg US Aggregate, MSCI EAFE) and are fully user-editable.
