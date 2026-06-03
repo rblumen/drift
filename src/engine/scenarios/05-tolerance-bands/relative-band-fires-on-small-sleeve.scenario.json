@@ -1,0 +1,31 @@
+{
+  "name": "relative-band-fires-on-small-sleeve",
+  "description": "Goal 5 (edge case): a small-target sleeve drifted within the absolute band but outside the 25% relative band is treated as out of tolerance, not suppressed",
+  "principle": 5,
+  "accounts": [
+    { "id": "ira", "name": "Fidelity Trad IRA", "institution": "Fidelity", "type": "TRADITIONAL_IRA" },
+    { "id": "tax", "name": "Schwab Brokerage", "institution": "Schwab", "type": "TAXABLE" }
+  ],
+  "holdings": [
+    { "accountId": "ira", "ticker": "FXAIX", "marketValue": 930000 },
+    { "accountId": "tax", "ticker": "MUNY", "marketValue": 70000 }
+  ],
+  "strategy": {
+    "targets": {
+      "US_TOTAL_MARKET": 0.0, "US_LARGE_CAP": 0.9, "DEVELOPED_INTL": 0.0, "EMERGING_INTL": 0.0,
+      "FIXED_INCOME": 0.1, "ALTERNATIVES": 0.0, "CASH": 0.0
+    },
+    "placement": {},
+    "toleranceAbs": 0.05,
+    "toleranceRel": 0.25,
+    "minTradeUsd": 0
+  },
+  "expected": {
+    "absentFlags": [
+      { "kind": "WITHIN_TOLERANCE", "assetClass": "FIXED_INCOME" }
+    ],
+    "flags": [
+      { "kind": "WITHIN_TOLERANCE", "assetClass": "US_LARGE_CAP" }
+    ]
+  }
+}

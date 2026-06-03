@@ -45,6 +45,10 @@ const expectedSchema = z
     // Presence (subset): each listed flag must appear in the result. Other flags
     // the engine emits (e.g. WITHIN_TOLERANCE) are not asserted against.
     flags: z.array(expectedFlagSchema).optional(),
+    // Absence: none of these flags may appear — e.g. asserting a class is NOT
+    // within tolerance (the 5/25 relative band fired) or that no
+    // PLACEMENT_SPILLOVER was raised for a no-preference class.
+    absentFlags: z.array(expectedFlagSchema).optional(),
     // Partial: only the listed asset classes are checked against
     // result.projectedWeights (post-trade household weights, as fractions).
     projectedWeights: z.record(ASSET_CLASS, z.number()).optional(),

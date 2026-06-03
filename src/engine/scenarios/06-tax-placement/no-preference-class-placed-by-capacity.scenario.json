@@ -1,0 +1,30 @@
+{
+  "name": "no-preference-class-placed-by-capacity",
+  "description": "Goal 6 (edge case): a class configured with no placement preference fills the largest-capacity account first and is never flagged as a spillover",
+  "principle": 6,
+  "accounts": [
+    { "id": "taxable", "name": "Schwab Brokerage", "institution": "Schwab", "type": "TAXABLE", "newCash": 700000 },
+    { "id": "ira", "name": "Fidelity Trad IRA", "institution": "Fidelity", "type": "TRADITIONAL_IRA", "newCash": 300000 }
+  ],
+  "holdings": [],
+  "strategy": {
+    "targets": {
+      "US_TOTAL_MARKET": 0.0, "US_LARGE_CAP": 1.0, "DEVELOPED_INTL": 0.0, "EMERGING_INTL": 0.0,
+      "FIXED_INCOME": 0.0, "ALTERNATIVES": 0.0, "CASH": 0.0
+    },
+    "placement": { "US_LARGE_CAP": [] },
+    "toleranceAbs": 0.0,
+    "toleranceRel": 0.25,
+    "minTradeUsd": 0
+  },
+  "expected": {
+    "trades": [
+      { "accountId": "taxable", "assetClass": "US_LARGE_CAP", "deltaUsd": 700000 },
+      { "accountId": "ira", "assetClass": "US_LARGE_CAP", "deltaUsd": 300000 }
+    ],
+    "absentFlags": [
+      { "kind": "PLACEMENT_SPILLOVER" }
+    ],
+    "netByAccount": { "taxable": 700000, "ira": 300000 }
+  }
+}

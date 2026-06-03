@@ -75,6 +75,7 @@ No TypeScript changes are ever required to add a fixture.
 |---|---|
 | `trades` | **Exhaustive.** The engine must emit exactly these trades (order-independent). Match on `accountId` + `assetClass` + `deltaUsd` (within rounding). Zero-dollar placeholder trades are ignored, so `"trades": []` means "no actionable trades". `inTaxableAccount` is optional and asserted when present. |
 | `flags` | **Presence (subset).** Each listed flag must appear in the result. Specify `kind` plus any flag-specific fields you want matched (e.g. `{ "kind": "REVISIT_PLACEMENT", "taxableShare": 0.3 }`); unlisted fields and other emitted flags are ignored. |
+| `absentFlags` | **Absence.** None of these flags may appear — e.g. asserting a class is *not* `WITHIN_TOLERANCE` (the relative band fired) or that no `PLACEMENT_SPILLOVER` was raised. Same matcher shape as `flags`. |
 | `projectedWeights` | **Partial.** Only the listed asset classes are checked against `result.projectedWeights` (post-trade household weights, as fractions of 1). |
 | `projectedDriftWithinTolerance` | **Derived boolean.** `true` iff every class's post-trade weight sits within its effective band `min(toleranceAbs, toleranceRel × target)`. |
 | `netByAccount` | **Per-account net trade delta** (sum of `deltaUsd`, within $2). The balance-preserving invariant: `0` for a pure rebalance, the account's contribution for a deployment. Only listed accounts are checked. |
@@ -103,9 +104,9 @@ as fixtures land.
 | 1. Locked accounts / positions | ✅ | ✅ | `01-locked-accounts/locked-account-zero-trades`, `…/mixed-locked-unlocked-positions`, `…/locked-account-guards-overweight-class` |
 | 2. Per-account class restrictions | ✅ | ✅ | `02-class-restrictions/allowed-asset-classes-honored`, `…/available-tickers-derived-restriction` |
 | 3. Balance-preserving per account | ✅ | ✅ | `03-balance-preserving/pure-rebalance-nets-to-zero`, `…/contribution-nets-to-newcash` |
-| 4. Household target allocation | ⬜ | ⬜ | — |
-| 5. Tolerance bands (5/25) | ✅ | ⬜ | `05-tolerance-bands/on-target-portfolio-no-op` |
-| 6. Tax-preferred placement | ⬜ | ✅ | `06-tax-placement/taxable-exceeds-fi-revisit-placement` |
+| 4. Household target allocation | ✅ | ✅ | `04-household-target/multi-account-hits-target`, `…/locked-account-drags-others-compensate` |
+| 5. Tolerance bands (5/25) | ✅ | ✅ | `05-tolerance-bands/on-target-portfolio-no-op`, `…/relative-band-fires-on-small-sleeve` |
+| 6. Tax-preferred placement | ✅ | ✅ | `06-tax-placement/bonds-taxable-equities-tax-advantaged`, `…/taxable-exceeds-fi-revisit-placement`, `…/no-preference-class-placed-by-capacity` |
 | 7. Minimize taxable sells | ⬜ | ⬜ | — |
 | 8. Proportional by remaining capacity | ⬜ | ⬜ | — |
 | 9. `concentrateClasses` first | ⬜ | ⬜ | — |
@@ -116,10 +117,3 @@ as fixtures land.
 
 `regressions/` — every future bug fix should add a scenario here that fails
 before the fix and passes after, named for the issue (e.g. `issue-57-….scenario.json`).
-## Starter fixtures
-
-| File | Verifies |
-|---|---|
-| `05-tolerance-bands/on-target-portfolio-no-op` | A no-op: a portfolio already at target produces no trades. |
-| `06-tax-placement/taxable-exceeds-fi-revisit-placement` | A flag emission: equities spill into taxable and `REVISIT_PLACEMENT` fires. |
-| `01-locked-accounts/locked-account-guards-overweight-class` | A locked-position guard: an over-weight class in a locked account is left untouched, surfacing `PROJECTED_OFF_TARGET`. |
