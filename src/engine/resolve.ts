@@ -36,11 +36,18 @@ function coveredClasses(
 // A trade is left without a ticker when:
 //   - No position in the account covers the class (greenfield buy — user picks fund).
 //   - Multiple positions in the account cover the class (ambiguous — user decides).
+//
+// strategyTargets — when provided, gates greenfield-buy promotion: child-class
+// buys are only collapsed to the parent when the strategy targets the parent
+// (all child weights are 0). When the strategy has individual child targets
+// (e.g. CRYPTO: 1.5%, PRECIOUS_METALS: 1%), trades stay at child level so the
+// trade list matches the granularity of the projected-weights pie chart.
 export function resolveTradeVehicles(
   trades: Trade[],
   positions: Position[],
   decompositions: Record<string, FundDecomposition>,
   classify: ClassifyFn,
+  strategyTargets?: Partial<Record<AssetClass, number>>,
 ): ResolvedTrade[] {
   const resolved: ResolvedTrade[] = [];
 
@@ -121,22 +128,27 @@ export function resolveTradeVehicles(
     }
 
     // Greenfield buy promotion: when ALL sibling child-class buys under a common
-    // parent are unresolved in this account, collapse them into one parent-level
-    // unresolved buy. This prevents the engine from recommending "buy $X CRYPTO +
-    // buy $Y PRECIOUS_METALS" for a user who has no sub-class holdings and should
-    // simply receive "buy $Z ALTERNATIVES".
+    // parent are unresolved in this account AND the strategy targets the class at
+    // the parent level (no individual child targets), collapse them into one
+    // parent-level unresolved buy.
     //
     // Mixed case (some siblings resolved, some not): leave as leaf-level trades —
     // the user has existing sub-class funds and there is no unambiguous parent ticker
     // to route the unresolved portion to.
-    const promoted = promoteGreenfieldBuys(unresolvable);
+    //
+    // Child-targeted case (strategy has CRYPTO: X%, PRECIOUS_METALS: Y%): leave as
+    // leaf-level trades so the trade list matches the granularity of the pie chart.
+    const promoted = promoteGreenfieldBuys(unresolvable, strategyTargets);
     for (const t of promoted) resolved.push({ ...t });
   }
 
   return resolved;
 }
 
-function promoteGreenfieldBuys(unresolvable: Trade[]): Trade[] {
+function promoteGreenfieldBuys(
+  unresolvable: Trade[],
+  strategyTargets?: Partial<Record<AssetClass, number>>,
+): Trade[] {
   // Only consider buy trades (deltaUsd > 0) for promotion.
   const buys = unresolvable.filter(t => t.deltaUsd > 0);
   const nonBuys = unresolvable.filter(t => t.deltaUsd <= 0);
@@ -157,8 +169,15 @@ function promoteGreenfieldBuys(unresolvable: Trade[]): Trade[] {
   const result: Trade[] = [...nonBuys, ...noParent];
   for (const [parent, group] of byParent) {
     const siblings = CLASS_HIERARCHY[parent]!.children;
-    if (group.length === siblings.length) {
-      // All siblings unresolved — promote to a single parent-level buy.
+    // Promote only when (a) ALL siblings are unresolved — the user has no
+    // sub-class holdings — AND (b) the strategy targets the parent class, not
+    // the children individually. When child-level targets are set (e.g.
+    // CRYPTO: 1.5%, PRECIOUS_METALS: 1%), trades must stay at child granularity
+    // so the trade list matches the projected-weights pie chart.
+    const childrenHaveTargets = strategyTargets != null &&
+      siblings.some(c => (strategyTargets[c] ?? 0) > 0);
+    if (group.length === siblings.length && !childrenHaveTargets) {
+      // All siblings unresolved + parent-level targeting — promote.
       result.push({
         ...group[0],
         assetClass: parent,
@@ -167,7 +186,7 @@ function promoteGreenfieldBuys(unresolvable: Trade[]): Trade[] {
         excludeTickers: undefined,
       });
     } else {
-      // Partial coverage — leave as individual leaf trades.
+      // Partial coverage OR child-level targets set — leave as individual leaf trades.
       result.push(...group);
     }
   }

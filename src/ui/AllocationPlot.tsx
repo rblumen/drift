@@ -137,7 +137,7 @@ export function AllocationPlot({
             x={diversification(targetWeights)} y={aggressiveness(targetWeights)} />
         </div>
         <p className="text-gray-400 leading-snug">
-          Aggressiveness = share in equities &amp; alternatives. Diversification = how evenly the
+          Aggressiveness = share in equities &amp; alternatives. <br/>Diversification = how evenly the
           allocation is spread across asset classes (normalized inverse Herfindahl).
         </p>
       </div>

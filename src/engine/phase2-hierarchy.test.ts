@@ -127,14 +127,30 @@ describe('greenfield buy promotion for promoted parents', () => {
     const accounts: Account[] = [{ id: 'ira', name: 'IRA', institution: 'F', type: 'TRADITIONAL_IRA', newCash: 20_000 }];
     const positions: Position[] = [{ accountId: 'ira', ticker: 'FXAIX', marketValue: 80_000 }];
     // Want 80% LC / 20% FI. The $20k cash should buy FIXED_INCOME at the parent level.
-    const r = rebalance(accounts, positions, strat({ US_LARGE_CAP: 0.8, FIXED_INCOME: 0.2 }));
+    const strategy = strat({ US_LARGE_CAP: 0.8, FIXED_INCOME: 0.2 });
+    const r = rebalance(accounts, positions, strategy);
     const buys = r.trades.filter(t => t.deltaUsd > 1);
-    const resolved = resolveTradeVehicles(buys, positions, {}, classify);
+    const resolved = resolveTradeVehicles(buys, positions, {}, classify, strategy.targets);
     const fiBuys = resolved.filter(t => t.assetClass === 'FIXED_INCOME');
     const childBuys = resolved.filter(t => childrenOf('FIXED_INCOME').includes(t.assetClass));
     expect(fiBuys.length).toBe(1);
     expect(childBuys.length).toBe(0);
     expect(fiBuys[0].deltaUsd).toBeCloseTo(20_000, 0);
+  });
+
+  it('targeting CRYPTO + PRECIOUS_METALS individually yields two child-level buys, not one Alternatives buy', () => {
+    // Strategy targets children directly — trade list must match pie chart granularity.
+    const accounts: Account[] = [{ id: 'ira', name: 'IRA', institution: 'F', type: 'ROTH_IRA', newCash: 25_000 }];
+    const positions: Position[] = [];
+    const strategy = strat({ CRYPTO: 0.015, PRECIOUS_METALS: 0.01, US_LARGE_CAP: 0.975 });
+    const r = rebalance(accounts, positions, strategy);
+    const buys = r.trades.filter(t => t.deltaUsd > 1);
+    const resolved = resolveTradeVehicles(buys, positions, {}, classify, strategy.targets);
+    // Must NOT have a collapsed ALTERNATIVES trade.
+    expect(resolved.some(t => t.assetClass === 'ALTERNATIVES')).toBe(false);
+    // Must have individual child trades.
+    expect(resolved.some(t => t.assetClass === 'CRYPTO')).toBe(true);
+    expect(resolved.some(t => t.assetClass === 'PRECIOUS_METALS')).toBe(true);
   });
 });
 

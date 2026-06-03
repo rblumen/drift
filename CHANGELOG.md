@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Trade list granularity matches pie chart** ([#36](https://github.com/rblumen/drift/issues/36)) — when the strategy targets child asset classes individually (e.g. `CRYPTO: 1.5%, PRECIOUS_METALS: 1%`), the trade card now shows separate child-level buy recommendations instead of a single collapsed parent-level "Alternatives" trade. The greenfield-buy promotion that collapses all-sibling unresolved buys to the parent is now gated on whether the strategy is operating at parent granularity; child-level targets suppress promotion so the trade list stays in sync with the projected-weights pie chart.
 - **Sub-class placement** ([#36](https://github.com/rblumen/drift/issues/36)) — the placement engine iterated a hardcoded class list for ordering and silently skipped any asset class not enumerated there, so a directly-targeted hierarchy sub-class (e.g. `CRYPTO`, `MUNI_BOND`) could be left unplaced with no trades generated. Placement now orders every asset class, using the hardcoded list only to break ties.
 - **Robustness to partial strategies** ([#36](https://github.com/rblumen/drift/issues/36)) — `rebalance` now normalizes its target map so a strategy object missing a class key treats it as 0% rather than producing `NaN` drift, which previously zeroed out every trade. Schema-parsed strategies were already complete; this hardens direct engine callers.
 
