@@ -18,7 +18,7 @@ import { rebalance } from './rebalance';
 import { DEFAULT_STRATEGY } from './strategy';
 import samplePortfolio from '../data/sample-portfolio.json';
 
-describe('PROJECTED_OFF_TARGET suppresses dust / un-actionable drift (issue #57)', () => {
+describe('Goal 5: PROJECTED_OFF_TARGET suppresses dust / un-actionable drift (issue #57)', () => {
   it('does not flag the sole OOT class when its offsets are frozen by 5/25', () => {
     // LC 54% (target 50%, drift 4% > 3% tol → OOT). FI 28% and ALT 18% each drift
     // 2% < 3% tol → within tolerance, frozen. The only way to trim LC is to buy

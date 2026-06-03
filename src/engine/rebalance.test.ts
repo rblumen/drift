@@ -54,7 +54,7 @@ const ZERO_TOL_STRATEGY = { ...DEFAULT_STRATEGY, toleranceAbs: 0 };
 
 // â”€â”€â”€ Â§9 base case: $200k taxable Â· $300k IRA Â· $500k 401k â†’ $1M â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-describe('base case â€” Â§9 worked example (greenfield $1M)', () => {
+describe('Goal 4: base case â€” Â§9 worked example (greenfield $1M)', () => {
   // Use ZERO_TOL_STRATEGY: ALTERNATIVES (2.5%) and EMERGING_INTL (3%) sit inside
   // the default 5% band, so they'd be suppressed with the default strategy. These
   // tests validate placement math, not tolerance behavior.
@@ -104,7 +104,7 @@ describe('base case â€” Â§9 worked example (greenfield $1M)', () => {
 // â”€â”€â”€ Â§9 spillover case: $300k taxable Â· $300k IRA Â· $400k 401k â†’ $1M â”€â”€â”€â”€â”€â”€â”€â”€
 // Taxable now exceeds the FI sleeve, so equities must land there.
 
-describe('spillover case â€” taxable > FI target', () => {
+describe('Goal 6: spillover case â€” taxable > FI target', () => {
   const ACCOUNTS_300K_TAXABLE: Account[] = [
     { id: 'schwab', name: 'Schwab Brokerage',   institution: 'Schwab',   type: 'TAXABLE',         newCash: 300_000 },
     { id: 'ira',    name: 'Fidelity Trad IRA',   institution: 'Fidelity', type: 'TRADITIONAL_IRA', newCash: 300_000 },
@@ -156,7 +156,7 @@ describe('spillover case â€” taxable > FI target', () => {
 // â”€â”€â”€ constrained 401k menu â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // 401k only has index-fund elections â€” no ALTERNATIVES ticker.
 
-describe('constrained 401k â€” no ALTERNATIVES in fund menu', () => {
+describe('Goal 2: constrained 401k â€” no ALTERNATIVES in fund menu', () => {
   const CONSTRAINED_ACCOUNTS: Account[] = [
     { id: 'schwab', name: 'Schwab Brokerage', institution: 'Schwab',   type: 'TAXABLE',         newCash: 200_000 },
     { id: 'ira',    name: 'Fidelity Trad IRA', institution: 'Fidelity', type: 'TRADITIONAL_IRA', newCash: 300_000 },
@@ -191,7 +191,7 @@ describe('constrained 401k â€” no ALTERNATIVES in fund menu', () => {
 
 // â”€â”€â”€ tolerance suppression â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-describe('tolerance â€” portfolio exactly at target', () => {
+describe('Goal 5: tolerance â€” portfolio exactly at target', () => {
   it('returns no trades', () => {
     const r = rebalance(ACCOUNTS_NO_CASH, ON_TARGET_POSITIONS, DEFAULT_STRATEGY);
     expect(r.trades).toHaveLength(0);
@@ -213,7 +213,7 @@ describe('tolerance â€” portfolio exactly at target', () => {
 // For small sleeves the relative band fires first; for large sleeves the absolute
 // band fires first.
 
-describe('5/25 rule â€” relative tolerance band', () => {
+describe('Goal 5: 5/25 rule â€” relative tolerance band', () => {
   // Two accounts, $1M household, simple two-class strategy.
   const TWO_ACCT: Account[] = [
     { id: 'ira',  name: 'IRA',  institution: 'Fidelity', type: 'TRADITIONAL_IRA' },
@@ -303,7 +303,7 @@ describe('5/25 rule â€” relative tolerance band', () => {
 
 // â”€â”€â”€ UNMAPPED_HOLDING â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-describe('UNMAPPED_HOLDING flag', () => {
+describe('Disclosure: UNMAPPED_HOLDING flag', () => {
   it('emits one flag per unrecognized ticker', () => {
     const r = rebalance(
       BASE_ACCOUNTS,
@@ -330,7 +330,7 @@ describe('UNMAPPED_HOLDING flag', () => {
 
 // â”€â”€â”€ minTradeUsd suppression â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-describe('minTradeUsd suppression', () => {
+describe('Goal 10: minTradeUsd suppression', () => {
   it('suppresses all trades when minTradeUsd exceeds every delta', () => {
     const strategy = { ...DEFAULT_STRATEGY, toleranceAbs: 0, minTradeUsd: 2_000_000 };
     const r = rebalance(BASE_ACCOUNTS, NO_POSITIONS, strategy);
@@ -348,7 +348,7 @@ describe('minTradeUsd suppression', () => {
 // With the tolerance-locking fix, Î£ trade deltas per account must equal newCash
 // (i.e. sells and buys within an account cancel out, leaving only cash deployment).
 
-describe('zero-net-balance invariant â€” tolerance with partial drift', () => {
+describe('Goal 3: zero-net-balance invariant â€” tolerance with partial drift', () => {
   // Positions that are CLOSE to Â§9 targets but not exact; some classes
   // are within the default 5% band, some are out of tolerance. The old code
   // would generate non-zero net deltas per account; the fixed code must not.
@@ -387,7 +387,7 @@ describe('zero-net-balance invariant â€” tolerance with partial drift', () 
 
 // â”€â”€â”€ locked accounts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-describe('locked accounts', () => {
+describe('Goal 1: locked accounts', () => {
   const LOCKED_IRA_ACCOUNTS: Account[] = [
     { id: 'schwab', name: 'Schwab Brokerage',   institution: 'Schwab',   type: 'TAXABLE',         newCash: 200_000 },
     { id: 'ira',    name: 'Fidelity Trad IRA',   institution: 'Fidelity', type: 'TRADITIONAL_IRA', newCash: 300_000, locked: true },
@@ -435,7 +435,7 @@ describe('locked accounts', () => {
 
 // â”€â”€â”€ locked positions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-describe('locked positions', () => {
+describe('Goal 1: locked positions', () => {
   // On-target portfolio except FZROX in 401k is locked.
   const LOCKED_POS_ACCOUNTS: Account[] = ACCOUNTS_NO_CASH;
   const BASE_LOCKED_POSITIONS: Position[] = [
@@ -534,7 +534,7 @@ describe('locked positions', () => {
 
 // â”€â”€â”€ concentrateClasses â€” fill designated account first â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-describe('concentrateClasses â€” fill designated account first', () => {
+describe('Goal 9: concentrateClasses â€” fill designated account first', () => {
   // Two IRAs: Roth IRA concentrates ALTERNATIVES.
   // The default strategy spreads ALTERNATIVES proportionally across all TA accounts;
   // with concentrateClasses the Roth must absorb as much as its capacity allows first.
@@ -579,7 +579,7 @@ describe('concentrateClasses â€” fill designated account first', () => {
 
 // â”€â”€â”€ allowedAssetClasses â€” explicit class whitelist â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-describe('allowedAssetClasses â€” explicit class whitelist', () => {
+describe('Goal 2: allowedAssetClasses â€” explicit class whitelist', () => {
   const EXPLICIT_CONSTRAINED: Account[] = [
     { id: 'schwab', name: 'Schwab',    institution: 'Schwab',   type: 'TAXABLE',         newCash: 200_000 },
     { id: 'ira',    name: 'Trad IRA',  institution: 'Fidelity', type: 'TRADITIONAL_IRA', newCash: 300_000 },
@@ -628,7 +628,7 @@ describe('allowedAssetClasses â€” explicit class whitelist', () => {
 // An account restricted to one asset class must not produce surplus-cash trades
 // (net-negative) when the offsetting class has no eligible home anywhere.
 
-describe('per-account net-zero â€” NO_ELIGIBLE_ACCOUNT with restricted account', () => {
+describe('Goal 3: per-account net-zero â€” NO_ELIGIBLE_ACCOUNT with restricted account', () => {
   // Roth holds US_LARGE_CAP; target shifts 50% to FIXED_INCOME.
   // Roth's allowedAssetClasses excludes FI â†’ NO_ELIGIBLE_ACCOUNT fires.
   // Before the step-7.5 fix, Roth would receive a sell-only trade for $50k LC
@@ -684,7 +684,7 @@ describe('per-account net-zero â€” NO_ELIGIBLE_ACCOUNT with restricted acco
 
 // â”€â”€â”€ TAXABLE_SALE flag â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-describe('TAXABLE_SALE flag', () => {
+describe('Goal 7: TAXABLE_SALE flag', () => {
   // Start with more FI than target in taxable â†’ engine must sell some.
   const OVER_FI_POSITIONS: Position[] = [
     { accountId: 'schwab', ticker: 'MUNY',  marketValue: 300_000 },  // $100k over target
@@ -730,7 +730,7 @@ describe('TAXABLE_SALE flag', () => {
 // other, the per-account net would become nonzero. Step 8.5 absorbs the residual
 // into the largest kept trade on the imbalanced side.
 
-describe('step 8.5 â€” minTradeUsd balance correction', () => {
+describe('Goal 3: step 8.5 â€” minTradeUsd balance correction', () => {
   // Single account; $75k existing positions (no new cash).
   // LC is over-weight, FI is under-weight, ALT is slightly over-weight.
   // With minTradeUsd = $10 000, the ALT sell ($1 250) is filtered out.
@@ -789,7 +789,7 @@ describe('step 8.5 â€” minTradeUsd balance correction', () => {
 
 // â”€â”€â”€ freeCash â€” household-level free cash distribution â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-describe('freeCash â€” household-level cash distribution', () => {
+describe('Goal 4: freeCash â€” household-level cash distribution', () => {
   // Two deposit-eligible accounts: $200k taxable, $300k IRA.
   const ACCOUNTS_NO_CASH_ELIGIBLE: Account[] = [
     { id: 'schwab', name: 'Schwab', institution: 'Schwab',   type: 'TAXABLE',         },
@@ -963,7 +963,7 @@ describe('freeCash â€” household-level cash distribution', () => {
 
 // â”€â”€â”€ plannedWithdrawal â€” drawdown / spending mode (issue #14) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-describe('plannedWithdrawal â€” drawdown', () => {
+describe('Goal 4: plannedWithdrawal â€” drawdown', () => {
   // schwab (taxable, eligible by default) $200k; ira (traditional, RESTRICTED by
   // default) $300k. Net trade delta per account == its (negative) withdrawal.
   const ACCOUNTS: Account[] = [
@@ -1091,7 +1091,7 @@ describe('plannedWithdrawal â€” drawdown', () => {
 // the redirect, the engine would sell equity in taxable (bad: triggers capital
 // gains). With step 7.7, the sell is moved to the TA account instead.
 
-describe('step 7.7 â€” redirectTaxableSells', () => {
+describe('Goal 7: step 7.7 â€” redirectTaxableSells', () => {
   // â”€â”€ shared fixture â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Household $200k: taxable $60k US_LARGE_CAP, Roth $80k US_LARGE_CAP + $60k FI.
   // Target 50% LC / 50% FI â†’ need to sell $40k LC and buy $40k FI.
@@ -1299,7 +1299,7 @@ describe('step 7.7 â€” redirectTaxableSells', () => {
 // additional accounts only when the first is exhausted.  Proportional spreading
 // across all same-bucket accounts is replaced by this "waterfall" logic.
 
-describe('account-count minimization â€” concentrate-then-spill (backlog #17)', () => {
+describe('Goal 11: account-count minimization â€” concentrate-then-spill (backlog #17)', () => {
   // â”€â”€ single-account fill â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // 401k ($500k) and IRA ($300k) are both TAX_ADVANTAGED.  ALTERNATIVES target
   // is $25k â€” easily fits inside either account alone.  The engine should send
@@ -1382,7 +1382,7 @@ describe('account-count minimization â€” concentrate-then-spill (backlog #1
 // removal (plus a compensating adjustment to the opposite-sign partner trade in
 // the same account) keeps every asset-class projected weight within toleranceAbs.
 
-describe('trade-count minimization â€” drop marginal trades (backlog #16)', () => {
+describe('Goal 10: trade-count minimization â€” drop marginal trades (backlog #16)', () => {
   // â”€â”€ small-account pair collapses when both classes stay within tolerance â”€â”€â”€
   //
   // Portfolio:
@@ -1514,7 +1514,7 @@ function assertAllOnTarget(
   ).toHaveLength(0);
 }
 
-describe('post-trade accuracy â€” stress scenarios', () => {
+describe('Goal 4: post-trade accuracy â€” stress scenarios', () => {
   // â”€â”€ S1: large single-class imbalance, 3 unconstrained accounts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Portfolio holds only SPY (US Large Cap). Every other class needs to be bought
   // from scratch. Verifies the full household rebalance reaches every target.
@@ -1785,7 +1785,7 @@ describe('post-trade accuracy â€” stress scenarios', () => {
 // class is the least constrained, so it is placed *after* classes with a required
 // home.
 
-describe('no-preference placement â€” empty bucket list', () => {
+describe('Goal 6: no-preference placement â€” empty bucket list', () => {
   it('places a no-preference class by capacity, largest account first, with no spillover flag', () => {
     // LC has no preference; taxable ($700k) is larger than the IRA ($300k).
     // Under a normal TAX_ADVANTAGED-first rule, LC would fill the IRA first and the
@@ -1867,7 +1867,7 @@ describe('no-preference placement â€” empty bucket list', () => {
 
 // â”€â”€â”€ Contribution-first funding summary (issue #3) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-describe('contributionSummary', () => {
+describe('Reporting: contributionSummary', () => {
   it('is all zeros for an empty portfolio', () => {
     const r = rebalance([], [], DEFAULT_STRATEGY);
     expect(r.contributionSummary).toEqual({ newCashDeployed: 0, buysUsd: 0, sellsUsd: 0, withdrawalRaised: 0 });
@@ -1927,7 +1927,7 @@ describe('contributionSummary', () => {
 
 // â”€â”€â”€ Tax-advantaged-first rebalancing toggle (issue #4) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-describe('tax-advantaged-first rebalancing', () => {
+describe('Goal 6: tax-advantaged-first rebalancing', () => {
   // Reuses the step 7.7 fully-redirectable scenario: taxable $60k large-cap +
   // Roth $80k large-cap + $60k fixed income, with a 50/50 LC/FI target.
   const ACCOUNTS: Account[] = [
@@ -1979,7 +1979,7 @@ describe('tax-advantaged-first rebalancing', () => {
 // sellable as a whole, with Step 8.7 enforcing the proportionality constraint
 // and routing compensating buys to keep per-account net invariants intact.
 
-describe('blended-fund sells â€” issue #40', () => {
+describe('Goal 4: blended-fund sells â€” issue #40', () => {
   // 60% US large cap, 30% INTL developed, 10% fixed income.
   const TDF_DECOMP = {
     US_LARGE_CAP:   0.60,
@@ -2254,7 +2254,7 @@ describe('blended-fund sells â€” issue #40', () => {
 
 // â”€â”€â”€ tax-adjusted allocation (issue #7) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-describe('tax-adjusted allocation â€” issue #7', () => {
+describe('Goal 4: tax-adjusted allocation â€” issue #7', () => {
   const TA_STRAT: Strategy = {
     ...DEFAULT_STRATEGY,
     toleranceAbs: 0,

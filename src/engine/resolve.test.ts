@@ -7,7 +7,7 @@ const classify = makeClassifier();
 
 // ─── single-class fund ───────────────────────────────────────────────────────
 
-describe('single-class fund resolution', () => {
+describe('Resolution (supports Goal 4): single-class fund maps to its asset class', () => {
   it('annotates a sell trade with the holding ticker', () => {
     const trades: Trade[] = [
       { accountId: 'ira', assetClass: 'US_LARGE_CAP', deltaUsd: -20_000, inTaxableAccount: false },
@@ -48,7 +48,7 @@ describe('single-class fund resolution', () => {
 
 // ─── blended fund merging (US_TOTAL_MARKET) ──────────────────────────────────
 
-describe('blended fund — US_TOTAL_MARKET merging', () => {
+describe('Resolution (supports Goal 4): blended fund merges into US_TOTAL_MARKET', () => {
   it('merges LC + MC + SC trades into one FSKAX trade', () => {
     const trades: Trade[] = [
       { accountId: 'ira', assetClass: 'US_LARGE_CAP', deltaUsd: -20_000, inTaxableAccount: false },
@@ -112,7 +112,7 @@ describe('blended fund — US_TOTAL_MARKET merging', () => {
 
 // ─── greenfield (no current positions) ───────────────────────────────────────
 
-describe('greenfield — no current positions', () => {
+describe('Resolution (supports Goal 4): greenfield with no current positions', () => {
   it('emits trade without ticker when no holding covers the class', () => {
     const trades: Trade[] = [
       { accountId: 'ira', assetClass: 'US_LARGE_CAP', deltaUsd: 50_000, inTaxableAccount: false },
@@ -135,7 +135,7 @@ describe('greenfield — no current positions', () => {
 
 // ─── ambiguous resolution (multiple tickers cover the same class) ─────────────
 
-describe('ambiguous resolution — multiple tickers cover the same class', () => {
+describe('Resolution (supports Goal 4): ambiguous — multiple tickers cover the same class', () => {
   it('emits trade without ticker when FXAIX and FSKAX both cover LC', () => {
     const trades: Trade[] = [
       { accountId: 'ira', assetClass: 'US_LARGE_CAP', deltaUsd: -20_000, inTaxableAccount: false },
@@ -169,7 +169,7 @@ describe('ambiguous resolution — multiple tickers cover the same class', () =>
 
 // ─── blended fund — explicit decomposition (issue #40) ──────────────────────
 
-describe('blended fund — decomposed ticker (#40)', () => {
+describe('Resolution (supports Goal 4): blended fund decomposed by ticker (#40)', () => {
   it('merges per-sub-class sells targeting the same blended-fund ticker', () => {
     const decomp = { US_LARGE_CAP: 0.60, DEVELOPED_INTL: 0.30, FIXED_INCOME: 0.10 };
     const trades: Trade[] = [
@@ -204,7 +204,7 @@ describe('blended fund — decomposed ticker (#40)', () => {
 
 // ─── multi-account trades ────────────────────────────────────────────────────
 
-describe('multi-account — each account resolved independently', () => {
+describe('Resolution (supports Goal 4): each account resolved independently', () => {
   it('resolves tickers per account without cross-contamination', () => {
     const trades: Trade[] = [
       { accountId: 'ira',    assetClass: 'US_LARGE_CAP', deltaUsd: -10_000, inTaxableAccount: false },

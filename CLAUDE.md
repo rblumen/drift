@@ -49,5 +49,9 @@ A local, browser-only tool that rebalances investment holdings across multiple a
 
 ## Commands
 - `npm run dev` — local dev server
-- `npm test` — Vitest
+- `npm test` — Vitest (run once)
+- `npm run test:watch` — Vitest in watch mode
+- `npm run test:ui` — interactive Vitest UI dashboard with live reload
+- `npm run test:report` — write a static HTML report to `html/index.html` (default reporter still prints)
+- `npm run test:coverage` — write an engine coverage report to `coverage/index.html`
 - `npm run build` — production build
