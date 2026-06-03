@@ -1,0 +1,24 @@
+{
+  "name": "sleeve-splits-largest-account-first",
+  "description": "Goal 8 (happy path): a class spanning two equally-eligible accounts is split by remaining capacity — the larger account is filled first, the remainder spills to the smaller",
+  "principle": 8,
+  "accounts": [
+    { "id": "big", "name": "Big Traditional IRA", "institution": "Fidelity", "type": "TRADITIONAL_IRA", "newCash": 700000 },
+    { "id": "small", "name": "Small Roth IRA", "institution": "Fidelity", "type": "ROTH_IRA", "newCash": 300000 }
+  ],
+  "holdings": [],
+  "strategy": {
+    "targets": { "US_TOTAL_MARKET": 0.0, "US_LARGE_CAP": 1.0, "DEVELOPED_INTL": 0.0, "EMERGING_INTL": 0.0, "FIXED_INCOME": 0.0, "ALTERNATIVES": 0.0, "CASH": 0.0 },
+    "placement": {},
+    "toleranceAbs": 0.0,
+    "toleranceRel": 0.25,
+    "minTradeUsd": 0
+  },
+  "expected": {
+    "requiredTrades": [
+      { "accountId": "big", "assetClass": "US_LARGE_CAP", "deltaUsd": 700000 },
+      { "accountId": "small", "assetClass": "US_LARGE_CAP", "deltaUsd": 300000 }
+    ],
+    "netByAccount": { "big": 700000, "small": 300000 }
+  }
+}

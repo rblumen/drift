@@ -1,0 +1,26 @@
+{
+  "name": "capacity-tie-resolved-deterministically",
+  "description": "Goal 8 (edge case): when two equally-eligible accounts have identical remaining capacity, a small sleeve is placed entirely in the first-listed account — the tie-break is deterministic, not split",
+  "principle": 8,
+  "accounts": [
+    { "id": "acct_a", "name": "First IRA", "institution": "Fidelity", "type": "TRADITIONAL_IRA", "newCash": 500000 },
+    { "id": "acct_b", "name": "Second Roth", "institution": "Fidelity", "type": "ROTH_IRA", "newCash": 500000 }
+  ],
+  "holdings": [],
+  "strategy": {
+    "targets": { "US_TOTAL_MARKET": 0.0, "US_LARGE_CAP": 0.975, "DEVELOPED_INTL": 0.0, "EMERGING_INTL": 0.0, "FIXED_INCOME": 0.0, "ALTERNATIVES": 0.025, "CASH": 0.0 },
+    "placement": {},
+    "toleranceAbs": 0.0,
+    "toleranceRel": 0.25,
+    "minTradeUsd": 0
+  },
+  "expected": {
+    "requiredTrades": [
+      { "accountId": "acct_a", "assetClass": "ALTERNATIVES", "deltaUsd": 25000 }
+    ],
+    "forbiddenTrades": [
+      { "accountId": "acct_b", "assetClass": "ALTERNATIVES" }
+    ],
+    "netByAccount": { "acct_a": 500000, "acct_b": 500000 }
+  }
+}

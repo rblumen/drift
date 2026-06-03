@@ -1,0 +1,34 @@
+{
+  "name": "concentrate-account-filled-first",
+  "description": "Goal 9 (happy path): a class with a concentrateClasses designation fills its designated account first, even ahead of larger eligible accounts in the same bucket",
+  "principle": 9,
+  "accounts": [
+    { "id": "schwab", "name": "Schwab Brokerage", "institution": "Schwab", "type": "TAXABLE", "newCash": 200000 },
+    { "id": "trad_ira", "name": "Fidelity Trad IRA", "institution": "Fidelity", "type": "TRADITIONAL_IRA", "newCash": 150000 },
+    { "id": "roth", "name": "Roth IRA", "institution": "Fidelity", "type": "ROTH_IRA", "newCash": 150000, "concentrateClasses": ["ALTERNATIVES"] },
+    { "id": "k401", "name": "Empower 401k", "institution": "Empower", "type": "FOUR_OH_ONE_K", "newCash": 500000 }
+  ],
+  "holdings": [],
+  "strategy": {
+    "targets": {
+      "US_TOTAL_MARKET": 0.0, "US_LARGE_CAP": 0.385, "US_MID_CAP": 0.144, "US_SMALL_CAP": 0.046,
+      "DEVELOPED_INTL": 0.17, "DEVELOPED_EUROPE": 0.0, "DEVELOPED_PACIFIC": 0.0, "EMERGING_INTL": 0.03,
+      "FIXED_INCOME": 0.2, "US_TREASURY": 0.0, "US_CORP_BOND": 0.0, "MUNI_BOND": 0.0, "TIPS": 0.0, "INTL_BOND": 0.0,
+      "REAL_ESTATE": 0.0, "ALTERNATIVES": 0.025, "CRYPTO": 0.0, "PRECIOUS_METALS": 0.0, "CASH": 0.0
+    },
+    "placement": {},
+    "toleranceAbs": 0.0,
+    "toleranceRel": 0.25,
+    "minTradeUsd": 250
+  },
+  "expected": {
+    "requiredTrades": [
+      { "accountId": "roth", "assetClass": "ALTERNATIVES", "deltaUsd": 25000 }
+    ],
+    "forbiddenTrades": [
+      { "accountId": "trad_ira", "assetClass": "ALTERNATIVES" },
+      { "accountId": "k401", "assetClass": "ALTERNATIVES" }
+    ],
+    "netByAccount": { "schwab": 200000, "trad_ira": 150000, "roth": 150000, "k401": 500000 }
+  }
+}

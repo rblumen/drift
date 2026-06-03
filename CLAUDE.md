@@ -42,6 +42,9 @@ A local, browser-only tool that rebalances investment holdings across multiple a
 - Keep the `[Unreleased]` section of `CHANGELOG.md` current. After any substantive change (new feature, bug fix, behavior change, notable refactor), add a brief entry under the appropriate subsection (`Added`, `Changed`, `Fixed`, `Removed`). Do this as part of the same commit as the code change — not as a separate step later.
 - Follow [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/) format. Entries should describe user-visible impact, not implementation detail (e.g. "Add wash-sale warning flag to Results panel" not "added WASH_SALE_RISK to engine flags map").
 
+## Test hygiene
+- **Every engine bug fix adds a regression scenario.** When you fix an engine bug, add a `*.scenario.json` fixture under `src/engine/scenarios/regressions/`, named for the issue (e.g. `issue-57-projected-off-target.scenario.json`). It must fail on the pre-fix engine and pass after — the scenario encodes the corrected behavior so the bug can never silently return. Add it in the same commit/PR as the fix. See `src/engine/scenarios/README.md` for the fixture format.
+
 ## Permissions
 - Read-only tools (grep, find, cat, file reads) within this repo require no permission prompt — use them freely.
 - Read-only git commands (`git status`, `git log`, `git diff`, `git branch`) require no permission prompt.

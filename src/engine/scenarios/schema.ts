@@ -42,6 +42,10 @@ const expectedSchema = z
   .object({
     // Exhaustive: the engine must emit exactly these trades (order-independent).
     trades: z.array(expectedTradeSchema).optional(),
+    // Presence (subset): each listed trade must appear (deltaUsd within
+    // tolerance). Use to pin a specific trade in a large set without
+    // enumerating all of them — the complement of forbiddenTrades.
+    requiredTrades: z.array(expectedTradeSchema).optional(),
     // Presence (subset): each listed flag must appear in the result. Other flags
     // the engine emits (e.g. WITHIN_TOLERANCE) are not asserted against.
     flags: z.array(expectedFlagSchema).optional(),

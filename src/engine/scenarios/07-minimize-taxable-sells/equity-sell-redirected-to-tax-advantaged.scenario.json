@@ -1,0 +1,33 @@
+{
+  "name": "equity-sell-redirected-to-tax-advantaged",
+  "description": "Goal 7 (happy path): an equity rebalance that would require selling in taxable is redirected entirely to the Roth, so the taxable account makes no sells and no TAXABLE_SALE fires",
+  "principle": 7,
+  "accounts": [
+    { "id": "taxable", "name": "Schwab Brokerage", "institution": "Schwab", "type": "TAXABLE" },
+    { "id": "roth", "name": "Roth IRA", "institution": "Fidelity", "type": "ROTH_IRA" }
+  ],
+  "holdings": [
+    { "accountId": "taxable", "ticker": "FXAIX", "marketValue": 60000 },
+    { "accountId": "roth", "ticker": "FXAIX", "marketValue": 80000 },
+    { "accountId": "roth", "ticker": "MUNY", "marketValue": 60000 }
+  ],
+  "strategy": {
+    "targets": { "US_TOTAL_MARKET": 0.0, "US_LARGE_CAP": 0.5, "DEVELOPED_INTL": 0.0, "EMERGING_INTL": 0.0, "FIXED_INCOME": 0.5, "ALTERNATIVES": 0.0, "CASH": 0.0 },
+    "placement": {},
+    "toleranceAbs": 0.0,
+    "toleranceRel": 0.25,
+    "minTradeUsd": 0,
+    "preferTaxAdvantagedRebalance": true
+  },
+  "expected": {
+    "absentFlags": [
+      { "kind": "TAXABLE_SALE" }
+    ],
+    "requiredTrades": [
+      { "accountId": "roth", "assetClass": "US_LARGE_CAP", "deltaUsd": -40000, "inTaxableAccount": false }
+    ],
+    "tradeCountByAccount": { "taxable": 0 },
+    "netByAccount": { "taxable": 0, "roth": 0 },
+    "projectedWeights": { "US_LARGE_CAP": 0.5, "FIXED_INCOME": 0.5 }
+  }
+}
