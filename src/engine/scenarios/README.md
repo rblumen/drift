@@ -116,3 +116,10 @@ as fixtures land.
 
 `regressions/` — every future bug fix should add a scenario here that fails
 before the fix and passes after, named for the issue (e.g. `issue-57-….scenario.json`).
+## Starter fixtures
+
+| File | Verifies |
+|---|---|
+| `05-tolerance-bands/on-target-portfolio-no-op` | A no-op: a portfolio already at target produces no trades. |
+| `06-tax-placement/taxable-exceeds-fi-revisit-placement` | A flag emission: equities spill into taxable and `REVISIT_PLACEMENT` fires. |
+| `01-locked-accounts/locked-account-guards-overweight-class` | A locked-position guard: an over-weight class in a locked account is left untouched, surfacing `PROJECTED_OFF_TARGET`. |
