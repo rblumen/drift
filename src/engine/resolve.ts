@@ -2,10 +2,16 @@ import type { AssetClass, FundDecomposition, Position, ResolvedTrade, Trade } fr
 import type { ClassifyFn } from './classify';
 import { CLASS_HIERARCHY, PARENT_CLASS } from './hierarchy';
 
-// Returns every asset class a ticker covers, accounting for hierarchy expansion
-// and explicit decompositions. Parent-class tickers (e.g. VTI → US_TOTAL_MARKET)
-// expand to their children so sub-class trades can be merged back to the parent
-// ticker. Blended funds (issue #40) expand via their decomposition — same merge path.
+// Returns every asset class a ticker can satisfy a trade for, accounting for the
+// hierarchy and explicit decompositions. A ticker covers its whole class *family*:
+//   • the class itself (a FIXED_INCOME fund like BND satisfies a FIXED_INCOME trade);
+//   • its children (a parent-class fund like VTI → US_TOTAL_MARKET satisfies the
+//     US_LARGE/MID/SMALL_CAP sub-class trades, which then merge back to VTI);
+//   • its parent (a child-class fund like MUNY → MUNI_BOND satisfies a parent-level
+//     FIXED_INCOME trade when the sleeve is held at the parent level).
+// Covering both directions lets a class be traded whether the user holds the broad
+// parent fund or a specific sub-class fund. Blended funds (issue #40) expand via
+// their decomposition instead — same merge path.
 function coveredClasses(
   ticker: string,
   classify: ClassifyFn,
@@ -15,7 +21,10 @@ function coveredClasses(
   if (decomp) return Object.keys(decomp) as AssetClass[];
   const ac = classify(ticker);
   if (ac === null) return [];
-  return CLASS_HIERARCHY[ac]?.children.slice() ?? [ac];
+  const fam = new Set<AssetClass>([ac, ...(CLASS_HIERARCHY[ac]?.children ?? [])]);
+  const parent = PARENT_CLASS[ac];
+  if (parent) fam.add(parent);
+  return [...fam];
 }
 
 // Annotates each Trade with the specific ticker to execute it against, where

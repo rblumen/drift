@@ -122,12 +122,17 @@ export function greedyPlace(
     return buckets.length;
   };
 
-  // Sort most-constrained classes first. Equal counts preserve PLACEMENT_TIEBREAK_ORDER.
+  // Sort most-constrained classes first, over EVERY asset class — not just the
+  // tiebreak list. PLACEMENT_TIEBREAK_ORDER only resolves ties for equal constraint
+  // counts; classes absent from it (e.g. the hierarchy sub-classes) still get placed,
+  // ordered after the listed ones (sentinel 999). Iterating the tiebreak list directly
+  // would silently drop any class not enumerated there.
   const tiebreakIndex = Object.fromEntries(PLACEMENT_TIEBREAK_ORDER.map((ac, i) => [ac, i]));
-  const sortedClasses = [...PLACEMENT_TIEBREAK_ORDER].sort(
+  const sortedClasses = [...ALL_ASSET_CLASSES].sort(
     (a, b) =>
       constraintCount(a) - constraintCount(b) ||
-      (tiebreakIndex[a] ?? 999) - (tiebreakIndex[b] ?? 999),
+      (tiebreakIndex[a] ?? 999) - (tiebreakIndex[b] ?? 999) ||
+      ALL_ASSET_CLASSES.indexOf(a) - ALL_ASSET_CLASSES.indexOf(b),
   );
 
   for (const ac of sortedClasses) {

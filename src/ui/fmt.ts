@@ -29,8 +29,16 @@ export const AC_LABEL: Record<string, string> = {
   US_MID_CAP:       'US Mid Cap',
   US_SMALL_CAP:     'US Small Cap',
   DEVELOPED_INTL:   'Developed Intl',
+  DEVELOPED_EUROPE: 'Developed Europe',
+  DEVELOPED_PACIFIC: 'Developed Pacific',
   EMERGING_INTL:    'Emerging Intl',
   FIXED_INCOME:     'Fixed Income',
+  US_TREASURY:      'US Treasury',
+  US_CORP_BOND:     'US Corporate Bond',
+  MUNI_BOND:        'Municipal Bond',
+  TIPS:             'TIPS',
+  INTL_BOND:        'International Bond',
+  REAL_ESTATE:      'Real Estate',
   ALTERNATIVES:     'Alternatives',
   CRYPTO:           'Crypto',
   PRECIOUS_METALS:  'Precious Metals',
@@ -79,8 +87,16 @@ export const AC_COLOR: Record<string, string> = {
   US_MID_CAP:       '#60a5fa', // blue-400
   US_SMALL_CAP:     '#93c5fd', // blue-300
   DEVELOPED_INTL:   '#38bdf8', // sky-400
+  DEVELOPED_EUROPE: '#0ea5e9', // sky-500
+  DEVELOPED_PACIFIC: '#7dd3fc', // sky-300
   EMERGING_INTL:    '#34d399', // emerald-400
   FIXED_INCOME:     '#fbbf24', // amber-400
+  US_TREASURY:      '#f59e0b', // amber-500
+  US_CORP_BOND:     '#fcd34d', // amber-300
+  MUNI_BOND:        '#ca8a04', // yellow-600
+  TIPS:             '#d97706', // amber-600
+  INTL_BOND:        '#fde68a', // amber-200
+  REAL_ESTATE:      '#14b8a6', // teal-500
   ALTERNATIVES:     '#f87171', // red-400
   CRYPTO:           '#fb923c', // orange-400
   PRECIOUS_METALS:  '#facc15', // yellow-400

@@ -2,7 +2,7 @@ import type { Account, AccountType, Position, Strategy, RebalanceResult, AssetCl
 import { ALL_ASSET_CLASSES } from './types';
 import { makeClassifier, type ClassifyFn } from './classify';
 import { rollup } from './rollup';
-import { consolidateParentClasses } from './hierarchy';
+import { consolidateParentClasses, childrenOf } from './hierarchy';
 import { accountBucket, greedyPlace } from './placement';
 import { fillOrdered } from './cashfill';
 import { EPSILON, effectiveTolerance, zeroByClass } from './utils';
@@ -480,6 +480,19 @@ export function rebalance(
   plannedWithdrawal: number = 0,
 ): RebalanceResult {
   const classify = makeClassifier(tickerOverrides);
+
+  // Normalize targets to a complete map over ALL_ASSET_CLASSES. A class omitted
+  // from strategy.targets means a 0% allocation; without this, reading an absent
+  // key yields `undefined`, and `Math.abs(weight - undefined)` is NaN — which would
+  // poison the tolerance check, target sizing, and placement scale, silently zeroing
+  // out every trade. Schema-parsed strategies are always complete (Zod fills 0
+  // defaults); this guards engine callers that build a partial targets object.
+  strategy = {
+    ...strategy,
+    targets: Object.fromEntries(
+      ALL_ASSET_CLASSES.map(ac => [ac, strategy.targets[ac] ?? 0]),
+    ) as Record<AssetClass, number>,
+  };
 
   const flags: Flag[] = [];
 
@@ -1129,8 +1142,12 @@ export function rebalance(
     .filter(a => accountBucket(a.type) === 'TAXABLE')
     .reduce((sum, a) => sum + (accountValues[a.id] ?? 0), 0);
   const taxableShare = taxableValue / householdValue;
-  if (taxableShare > strategy.targets.FIXED_INCOME) {
-    flags.push({ kind: 'REVISIT_PLACEMENT', taxableShare, fixedIncomeTarget: strategy.targets.FIXED_INCOME });
+  // Total fixed-income target = parent weight + any sub-class weights (the FI sleeve
+  // may be held at the parent level or subdivided into treasury/corp/muni/tips/intl).
+  const fixedIncomeTarget = (strategy.targets.FIXED_INCOME ?? 0)
+    + childrenOf('FIXED_INCOME').reduce((s, c) => s + (strategy.targets[c] ?? 0), 0);
+  if (taxableShare > fixedIncomeTarget) {
+    flags.push({ kind: 'REVISIT_PLACEMENT', taxableShare, fixedIncomeTarget });
   }
 
   // Step 10 — Projected weights after trades.
