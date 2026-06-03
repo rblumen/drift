@@ -1,0 +1,44 @@
+{
+  "name": "taxable-exceeds-fi-revisit-placement",
+  "description": "Goal 6: when taxable capacity exceeds the fixed-income target, equities spill into taxable and REVISIT_PLACEMENT fires",
+  "principle": 6,
+  "accounts": [
+    { "id": "schwab", "name": "Schwab Brokerage", "institution": "Schwab", "type": "TAXABLE", "newCash": 300000 },
+    { "id": "ira", "name": "Fidelity Trad IRA", "institution": "Fidelity", "type": "TRADITIONAL_IRA", "newCash": 300000 },
+    { "id": "k401", "name": "Empower 401k", "institution": "Empower", "type": "FOUR_OH_ONE_K", "newCash": 400000 }
+  ],
+  "holdings": [],
+  "strategy": {
+    "targets": {
+      "US_TOTAL_MARKET": 0.0,
+      "US_LARGE_CAP": 0.385,
+      "US_MID_CAP": 0.144,
+      "US_SMALL_CAP": 0.046,
+      "DEVELOPED_INTL": 0.17,
+      "DEVELOPED_EUROPE": 0.0,
+      "DEVELOPED_PACIFIC": 0.0,
+      "EMERGING_INTL": 0.03,
+      "FIXED_INCOME": 0.2,
+      "US_TREASURY": 0.0,
+      "US_CORP_BOND": 0.0,
+      "MUNI_BOND": 0.0,
+      "TIPS": 0.0,
+      "INTL_BOND": 0.0,
+      "REAL_ESTATE": 0.0,
+      "ALTERNATIVES": 0.025,
+      "CRYPTO": 0.0,
+      "PRECIOUS_METALS": 0.0,
+      "CASH": 0.0
+    },
+    "placement": {},
+    "toleranceAbs": 0.0,
+    "toleranceRel": 0.25,
+    "minTradeUsd": 250
+  },
+  "expected": {
+    "flags": [
+      { "kind": "REVISIT_PLACEMENT", "taxableShare": 0.3, "fixedIncomeTarget": 0.2 },
+      { "kind": "PLACEMENT_SPILLOVER", "bucket": "TAXABLE" }
+    ]
+  }
+}

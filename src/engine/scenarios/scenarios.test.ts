@@ -1,0 +1,177 @@
+// Scenario-based verification harness (issue #33).
+//
+// Globs every `*.scenario.json` under this directory, validates it against the
+// fixture schema, runs the engine, and asserts each `expected.*` field that is
+// present. Adding a new fixture requires ZERO code changes here — the glob picks
+// it up and it appears as its own named test, grouped by principle subfolder.
+
+import { describe, it, expect } from 'vitest';
+import { scenarioSchema, type Scenario, type ExpectedFlag } from './schema';
+import { rebalance } from '../rebalance';
+import { ALL_ASSET_CLASSES } from '../types';
+import type { Account, Position, Strategy, AssetClass, RebalanceResult } from '../types';
+
+// Vite's import.meta.glob loads all fixtures eagerly at collection time.
+const modules = import.meta.glob('./**/*.scenario.json', { eager: true }) as Record<
+  string,
+  { default: unknown }
+>;
+
+interface Case {
+  path: string;
+  folder: string;
+  title: string;
+  raw: unknown;
+}
+
+// Group fixtures by their principle subfolder (e.g. "01-locked-accounts") so the
+// HTML report nests them under a describe block per principle.
+const byFolder = new Map<string, Case[]>();
+for (const [path, mod] of Object.entries(modules)) {
+  const parts = path.replace(/^\.\//, '').split('/');
+  const folder = parts.length > 1 ? parts[0] : '(root)';
+  // Pull the title straight from the JSON (not the parsed schema) so a fixture
+  // that fails validation still shows a meaningful test name.
+  const raw = mod.default as Record<string, unknown>;
+  const title =
+    (typeof raw?.description === 'string' && raw.description) ||
+    (typeof raw?.name === 'string' && raw.name) ||
+    path;
+  const list = byFolder.get(folder) ?? [];
+  list.push({ path, folder, title, raw: mod.default });
+  byFolder.set(folder, list);
+}
+
+const round = (n: number, dp: number) => {
+  const f = 10 ** dp;
+  return Math.round(n * f) / f;
+};
+
+// Numbers within tolerance: absolute 0.01 or 0.5% of the expected magnitude,
+// whichever is looser. Covers both small fractions (taxableShare) and large
+// dollar amounts (amountUsd) without false negatives from float noise.
+const approxEq = (a: unknown, b: unknown): boolean => {
+  if (typeof a === 'number' && typeof b === 'number') {
+    return Math.abs(a - b) <= Math.max(0.01, Math.abs(b) * 0.005);
+  }
+  return a === b;
+};
+
+function flagMatches(actual: Record<string, unknown>, expected: ExpectedFlag): boolean {
+  if (actual.kind !== expected.kind) return false;
+  return Object.entries(expected).every(
+    ([k, v]) => k === 'kind' || approxEq(actual[k], v),
+  );
+}
+
+function assertScenario(s: Scenario, result: RebalanceResult): void {
+  const { expected } = s;
+
+  // ── trades — exhaustive (the engine must emit exactly these) ──────────────
+  if (expected.trades) {
+    const norm = (t: { accountId: string; assetClass: string; deltaUsd: number }) => ({
+      accountId: t.accountId,
+      assetClass: t.assetClass,
+      deltaUsd: round(t.deltaUsd, 2),
+    });
+    const sort = (a: ReturnType<typeof norm>, b: ReturnType<typeof norm>) =>
+      a.accountId.localeCompare(b.accountId) ||
+      a.assetClass.localeCompare(b.assetClass) ||
+      a.deltaUsd - b.deltaUsd;
+    // Drop zero-dollar trades: the engine can emit $0 placeholder entries that
+    // are not actionable orders, so `trades: []` reads as "no actionable trades".
+    const actual = result.trades.map(norm).filter(t => t.deltaUsd !== 0).sort(sort);
+    const want = expected.trades.map(norm).sort(sort);
+    expect(actual, `trades mismatch — ${s.description}`).toEqual(want);
+
+    // Optional per-trade inTaxableAccount assertion.
+    for (const et of expected.trades) {
+      if (et.inTaxableAccount === undefined) continue;
+      const hit = result.trades.find(
+        t => t.accountId === et.accountId && t.assetClass === et.assetClass,
+      );
+      expect(
+        hit?.inTaxableAccount,
+        `inTaxableAccount for ${et.accountId}/${et.assetClass} — ${s.description}`,
+      ).toBe(et.inTaxableAccount);
+    }
+  }
+
+  // ── flags — presence (subset) ─────────────────────────────────────────────
+  if (expected.flags) {
+    for (const ef of expected.flags) {
+      const found = (result.flags as unknown as Record<string, unknown>[]).some(af =>
+        flagMatches(af, ef),
+      );
+      if (!found) {
+        const sameKind = result.flags.filter(f => f.kind === ef.kind);
+        throw new Error(
+          `Expected flag not emitted — ${s.description}\n` +
+            `  expected: ${JSON.stringify(ef)}\n` +
+            `  actual flags of kind ${ef.kind}: ${JSON.stringify(sameKind, null, 2)}\n` +
+            `  all actual flags: ${JSON.stringify(result.flags, null, 2)}`,
+        );
+      }
+    }
+  }
+
+  // ── projectedWeights — partial (only listed classes) ──────────────────────
+  if (expected.projectedWeights) {
+    const want: Record<string, number> = {};
+    const actual: Record<string, number> = {};
+    for (const [ac, w] of Object.entries(expected.projectedWeights)) {
+      want[ac] = round(w as number, 4);
+      actual[ac] = round(result.projectedWeights[ac as AssetClass] ?? 0, 4);
+    }
+    expect(actual, `projectedWeights mismatch — ${s.description}`).toEqual(want);
+  }
+
+  // ── projectedDriftWithinTolerance — derived boolean ───────────────────────
+  if (expected.projectedDriftWithinTolerance !== undefined) {
+    const relTol = s.strategy.toleranceRel ?? 0.25;
+    const within = ALL_ASSET_CLASSES.every(ac => {
+      const target = result.targetWeights[ac] ?? 0;
+      const proj = result.projectedWeights[ac] ?? 0;
+      const effTol = Math.min(s.strategy.toleranceAbs, relTol * target);
+      return Math.abs(proj - target) <= effTol + 1e-9;
+    });
+    expect(
+      within,
+      `projectedDriftWithinTolerance mismatch — ${s.description}`,
+    ).toBe(expected.projectedDriftWithinTolerance);
+  }
+}
+
+if (byFolder.size === 0) {
+  // Guard: if the glob ever silently matches nothing, fail loudly rather than
+  // reporting a green suite with zero scenarios.
+  describe('scenarios', () => {
+    it('finds at least one *.scenario.json fixture', () => {
+      expect(byFolder.size).toBeGreaterThan(0);
+    });
+  });
+}
+
+for (const [folder, cases] of [...byFolder.entries()].sort()) {
+  describe(`Scenarios — ${folder}`, () => {
+    it.each(cases)('$title', (c: Case) => {
+      const parsed = scenarioSchema.safeParse(c.raw);
+      if (!parsed.success) {
+        throw new Error(
+          `Scenario failed schema validation (${c.path}):\n${parsed.error.toString()}`,
+        );
+      }
+      const s = parsed.data as Scenario;
+      const result = rebalance(
+        s.accounts as Account[],
+        s.holdings as Position[],
+        s.strategy as Strategy,
+        s.tickerOverrides ?? {},
+        s.decompositions ?? {},
+        s.freeCash ?? 0,
+        s.plannedWithdrawal ?? 0,
+      );
+      assertScenario(s, result);
+    });
+  });
+}

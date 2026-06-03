@@ -1,0 +1,35 @@
+{
+  "name": "locked-account-guards-overweight-class",
+  "description": "Goal 1: an over-weight class held entirely in a locked account is left untouched, surfacing PROJECTED_OFF_TARGET instead of a trade",
+  "principle": 1,
+  "accounts": [
+    { "id": "taxable", "name": "Taxable Brokerage", "institution": "Schwab", "type": "TAXABLE" },
+    { "id": "ira", "name": "Traditional IRA", "institution": "Fidelity", "type": "TRADITIONAL_IRA", "locked": true }
+  ],
+  "holdings": [
+    { "accountId": "ira", "ticker": "VOO", "marketValue": 70000 },
+    { "accountId": "taxable", "ticker": "BND", "marketValue": 30000 }
+  ],
+  "strategy": {
+    "targets": {
+      "US_TOTAL_MARKET": 0.0,
+      "US_LARGE_CAP": 0.5,
+      "DEVELOPED_INTL": 0.0,
+      "EMERGING_INTL": 0.0,
+      "FIXED_INCOME": 0.5,
+      "ALTERNATIVES": 0.0,
+      "CASH": 0.0
+    },
+    "placement": {},
+    "toleranceAbs": 0.05,
+    "toleranceRel": 0.25,
+    "minTradeUsd": 0
+  },
+  "expected": {
+    "trades": [],
+    "projectedDriftWithinTolerance": false,
+    "flags": [
+      { "kind": "PROJECTED_OFF_TARGET", "assetClass": "US_LARGE_CAP", "targetWeight": 0.5, "projectedWeight": 0.7 }
+    ]
+  }
+}

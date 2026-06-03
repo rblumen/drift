@@ -1,0 +1,55 @@
+{
+  "name": "on-target-portfolio-no-op",
+  "description": "Goal 5: a portfolio already at the target allocation generates zero trades",
+  "principle": 5,
+  "accounts": [
+    { "id": "schwab", "name": "Schwab Brokerage", "institution": "Schwab", "type": "TAXABLE" },
+    { "id": "ira", "name": "Fidelity Trad IRA", "institution": "Fidelity", "type": "TRADITIONAL_IRA" },
+    { "id": "k401", "name": "Empower 401k", "institution": "Empower", "type": "FOUR_OH_ONE_K" }
+  ],
+  "holdings": [
+    { "accountId": "schwab", "ticker": "MUNY", "marketValue": 200000 },
+    { "accountId": "ira", "ticker": "GLD", "marketValue": 9375 },
+    { "accountId": "ira", "ticker": "FPADX", "marketValue": 11250 },
+    { "accountId": "ira", "ticker": "FZILX", "marketValue": 63750 },
+    { "accountId": "ira", "ticker": "FZROX", "marketValue": 215625 },
+    { "accountId": "k401", "ticker": "GLD", "marketValue": 15625 },
+    { "accountId": "k401", "ticker": "VWO", "marketValue": 18750 },
+    { "accountId": "k401", "ticker": "VXUS", "marketValue": 106250 },
+    { "accountId": "k401", "ticker": "FSKAX", "marketValue": 359375 }
+  ],
+  "strategy": {
+    "targets": {
+      "US_TOTAL_MARKET": 0.0,
+      "US_LARGE_CAP": 0.385,
+      "US_MID_CAP": 0.144,
+      "US_SMALL_CAP": 0.046,
+      "DEVELOPED_INTL": 0.17,
+      "DEVELOPED_EUROPE": 0.0,
+      "DEVELOPED_PACIFIC": 0.0,
+      "EMERGING_INTL": 0.03,
+      "FIXED_INCOME": 0.2,
+      "US_TREASURY": 0.0,
+      "US_CORP_BOND": 0.0,
+      "MUNI_BOND": 0.0,
+      "TIPS": 0.0,
+      "INTL_BOND": 0.0,
+      "REAL_ESTATE": 0.0,
+      "ALTERNATIVES": 0.025,
+      "CRYPTO": 0.0,
+      "PRECIOUS_METALS": 0.0,
+      "CASH": 0.0
+    },
+    "placement": {},
+    "toleranceAbs": 0.05,
+    "toleranceRel": 0.25,
+    "minTradeUsd": 250
+  },
+  "expected": {
+    "trades": [],
+    "projectedDriftWithinTolerance": true,
+    "flags": [
+      { "kind": "WITHIN_TOLERANCE", "assetClass": "FIXED_INCOME" }
+    ]
+  }
+}
