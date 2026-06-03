@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { fillOrdered } from './cashfill';
 
-describe('fillOrdered', () => {
+describe('Goal 11: fillOrdered concentrates into the first account, then spills', () => {
   const uncapped = () => Infinity;
 
   it('concentrates the full amount into the first account when it has room', () => {
