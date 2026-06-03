@@ -42,6 +42,11 @@ A local, browser-only tool that rebalances investment holdings across multiple a
 - Keep the `[Unreleased]` section of `CHANGELOG.md` current. After any substantive change (new feature, bug fix, behavior change, notable refactor), add a brief entry under the appropriate subsection (`Added`, `Changed`, `Fixed`, `Removed`). Do this as part of the same commit as the code change — not as a separate step later.
 - Follow [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/) format. Entries should describe user-visible impact, not implementation detail (e.g. "Add wash-sale warning flag to Results panel" not "added WASH_SALE_RISK to engine flags map").
 
+## Permissions
+- Read-only tools (grep, find, cat, file reads) within this repo require no permission prompt — use them freely.
+- Read-only git commands (`git status`, `git log`, `git diff`, `git branch`) require no permission prompt.
+- `npm test` and `npm run build` require no permission prompt — they produce only local artifacts.
+
 ## Commands
 - `npm run dev` — local dev server
 - `npm test` — Vitest
