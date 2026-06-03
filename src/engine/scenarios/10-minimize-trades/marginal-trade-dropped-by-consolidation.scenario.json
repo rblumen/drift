@@ -1,0 +1,27 @@
+{
+  "name": "marginal-trade-dropped-by-consolidation",
+  "description": "Goal 10 (happy path): the consolidation pass drops a small account's two offsetting trades because removing them keeps every projected weight within tolerance, while the large account's corrective trades survive",
+  "principle": 10,
+  "accounts": [
+    { "id": "a1", "name": "Large IRA", "institution": "Fidelity", "type": "TRADITIONAL_IRA" },
+    { "id": "a2", "name": "Small Roth", "institution": "Fidelity", "type": "ROTH_IRA" }
+  ],
+  "holdings": [
+    { "accountId": "a1", "ticker": "FXAIX", "marketValue": 780000 },
+    { "accountId": "a1", "ticker": "MUNY", "marketValue": 120000 },
+    { "accountId": "a2", "ticker": "FXAIX", "marketValue": 80000 },
+    { "accountId": "a2", "ticker": "MUNY", "marketValue": 20000 }
+  ],
+  "strategy": {
+    "targets": { "US_TOTAL_MARKET": 0.0, "US_LARGE_CAP": 0.7, "DEVELOPED_INTL": 0.0, "EMERGING_INTL": 0.0, "FIXED_INCOME": 0.3, "ALTERNATIVES": 0.0, "CASH": 0.0 },
+    "placement": {},
+    "toleranceAbs": 0.05,
+    "toleranceRel": 0.25,
+    "minTradeUsd": 0
+  },
+  "expected": {
+    "tradeCountByAccount": { "a1": 2, "a2": 0 },
+    "netByAccount": { "a1": 0, "a2": 0 },
+    "projectedDriftWithinTolerance": true
+  }
+}

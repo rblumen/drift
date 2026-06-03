@@ -1,0 +1,26 @@
+{
+  "name": "issue-57-spurious-projected-off-target",
+  "description": "Regression (issue #57): the sole out-of-tolerance class cannot be rebalanced because its offsets are frozen by the 5/25 rule — this is correct, so no trades and no spurious PROJECTED_OFF_TARGET banner should appear",
+  "principle": [5, 4],
+  "accounts": [
+    { "id": "ira", "name": "Fidelity Trad IRA", "institution": "Fidelity", "type": "TRADITIONAL_IRA" }
+  ],
+  "holdings": [
+    { "accountId": "ira", "ticker": "FXAIX", "marketValue": 54000 },
+    { "accountId": "ira", "ticker": "MUNY", "marketValue": 28000 },
+    { "accountId": "ira", "ticker": "GLD", "marketValue": 18000 }
+  ],
+  "strategy": {
+    "targets": { "US_TOTAL_MARKET": 0.0, "US_LARGE_CAP": 0.5, "DEVELOPED_INTL": 0.0, "EMERGING_INTL": 0.0, "FIXED_INCOME": 0.3, "ALTERNATIVES": 0.2, "CASH": 0.0 },
+    "placement": {},
+    "toleranceAbs": 0.03,
+    "toleranceRel": 0.25,
+    "minTradeUsd": 250
+  },
+  "expected": {
+    "trades": [],
+    "absentFlags": [
+      { "kind": "PROJECTED_OFF_TARGET" }
+    ]
+  }
+}

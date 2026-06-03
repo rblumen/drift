@@ -111,10 +111,17 @@ as fixtures land.
 | 7. Minimize taxable sells | ✅ | ✅ | `07-minimize-taxable-sells/equity-sell-redirected-to-tax-advantaged`, `…/forced-taxable-sell-when-no-alternative` |
 | 8. Distribute by remaining capacity | ✅ | ✅ | `08-capacity-distribution/sleeve-splits-largest-account-first`, `…/capacity-tie-resolved-deterministically` |
 | 9. `concentrateClasses` first | ✅ | ✅ | `09-concentrate-classes/concentrate-account-filled-first`, `…/concentrate-account-too-small-spills` |
-| 10. Minimize trades | ⬜ | ⬜ | — |
-| 11. Minimize accounts touched | ⬜ | ⬜ | — |
+| 10. Minimize trades | ✅ | ✅ | `10-minimize-trades/marginal-trade-dropped-by-consolidation`, `…/trade-survives-when-drop-breaks-tolerance` |
+| 11. Minimize accounts touched | ✅ | ✅ | `11-minimize-accounts/sleeve-concentrates-in-one-account`, `…/capacity-forces-multi-account-split` |
+
+All eleven goals now have happy-path and edge-case coverage.
 
 ### Regression vault
 
-`regressions/` — every future bug fix should add a scenario here that fails
-before the fix and passes after, named for the issue (e.g. `issue-57-….scenario.json`).
+`regressions/` — every engine bug fix must add a scenario here that fails before
+the fix and passes after, named for the issue (see the *Test hygiene* rule in
+`CLAUDE.md`). Seeded with:
+
+| Fixture | Guards against |
+|---|---|
+| `regressions/issue-57-spurious-projected-off-target` | A sole out-of-tolerance class whose offsets are frozen by 5/25 must not raise a spurious `PROJECTED_OFF_TARGET` banner ([#57](https://github.com/rblumen/drift/issues/57)). |
