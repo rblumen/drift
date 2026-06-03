@@ -1,0 +1,98 @@
+# Scenario fixtures
+
+A **scenario** is a self-contained spec written as JSON: *given this realistic
+portfolio + strategy, the engine should produce these trades and flags.* Unlike
+unit tests (which prove a function behaves), scenarios prove the **tool**
+behaves, anchored to the goals in [`PRINCIPLES.md`](../../../PRINCIPLES.md).
+
+Each fixture is one `*.scenario.json` file. The harness
+([`scenarios.test.ts`](./scenarios.test.ts)) globs every fixture under this
+directory, validates it against [`schema.ts`](./schema.ts), runs the engine, and
+asserts each field present in `expected`.
+
+## Adding a scenario — zero code changes
+
+1. Pick (or create) a principle subfolder, named `NN-short-label` after the
+   PRINCIPLES.md goal number — e.g. `01-locked-accounts/`, `05-tolerance-bands/`,
+   `06-tax-placement/`.
+2. Drop a `*.scenario.json` file in it. The glob picks it up automatically; it
+   appears in the test run (and the HTML report from `npm run test:report`) as
+   its own named test, nested under a `Scenarios — NN-short-label` block.
+3. Run `npx vitest run src/engine/scenarios` (or `npm test`).
+
+No TypeScript changes are ever required to add a fixture.
+
+## Fixture format
+
+```jsonc
+{
+  // Short kebab-case identifier (fallback test title).
+  "name": "locked-account-guards-overweight-class",
+
+  // A full sentence describing the behavior under verification. This is the
+  // test name shown in the report and printed on failure — write it as a spec.
+  "description": "Goal 1: an over-weight class held entirely in a locked account is left untouched",
+
+  // The PRINCIPLES.md goal number(s). A single number, a list ([4, 6]), or a
+  // free-text label for supporting concerns that aren't a numbered goal.
+  "principle": 1,
+
+  // ── Engine inputs ────────────────────────────────────────────────────────
+  // Same shapes the app uses (see src/engine/types.ts). Validated by the
+  // canonical Zod schemas in src/ingest/schema.ts.
+  "accounts":  [ /* Account[] */ ],
+  "holdings":  [ /* Position[] — the engine's `positions` argument */ ],
+  "strategy":  { /* Strategy */ },
+
+  // Optional engine inputs (defaulted when omitted):
+  "tickerOverrides":   { "FOO": "US_LARGE_CAP" },
+  "decompositions":    { "FDKLX": { "US_LARGE_CAP": 0.6, "FIXED_INCOME": 0.4 } },
+  "freeCash":          0,
+  "plannedWithdrawal": 0,
+
+  // ── Assertions ───────────────────────────────────────────────────────────
+  // Every field is optional; an assertion runs only for a field that's present.
+  "expected": { /* … */ }
+}
+```
+
+### Tips
+
+- **Strategy `placement` can be `{}`.** The strategy schema backfills the full
+  default placement map for any class you omit, so `"placement": {}` is the
+  shortest way to use standard tax-placement rules. Override only the classes
+  you care about.
+- **`targets` must include** `US_TOTAL_MARKET`, `DEVELOPED_INTL`,
+  `EMERGING_INTL`, `FIXED_INCOME`, `ALTERNATIVES`, and `CASH` (the rest default
+  to `0`), and must sum to `1.0 ± 0.001`.
+- **Unknown keys are rejected.** The top-level object and `expected` are strict —
+  a typo'd field fails validation with a clear message rather than silently
+  passing.
+
+## The `expected` block
+
+| Field | Semantics |
+|---|---|
+| `trades` | **Exhaustive.** The engine must emit exactly these trades (order-independent). Match on `accountId` + `assetClass` + `deltaUsd` (within rounding). Zero-dollar placeholder trades are ignored, so `"trades": []` means "no actionable trades". `inTaxableAccount` is optional and asserted when present. |
+| `flags` | **Presence (subset).** Each listed flag must appear in the result. Specify `kind` plus any flag-specific fields you want matched (e.g. `{ "kind": "REVISIT_PLACEMENT", "taxableShare": 0.3 }`); unlisted fields and other emitted flags are ignored. |
+| `projectedWeights` | **Partial.** Only the listed asset classes are checked against `result.projectedWeights` (post-trade household weights, as fractions of 1). |
+| `projectedDriftWithinTolerance` | **Derived boolean.** `true` iff every class's post-trade weight sits within its effective band `min(toleranceAbs, toleranceRel × target)`. |
+
+Numeric comparisons use a small tolerance (absolute `0.01` or `0.5%` of the
+expected magnitude) to absorb floating-point noise.
+
+## Authoring expected values
+
+Write the scenario, set the `expected` fields to what you believe the engine
+*should* do, and run it. On a mismatch the harness prints the scenario
+description and a readable diff of actual vs expected — use that to either fix a
+genuine bug or to read off the real values when your intent was vague. Keep
+expected values **explicit** (no snapshots) so each fixture stays self-documenting.
+
+## Starter fixtures
+
+| File | Verifies |
+|---|---|
+| `05-tolerance-bands/on-target-portfolio-no-op` | A no-op: a portfolio already at target produces no trades. |
+| `06-tax-placement/taxable-exceeds-fi-revisit-placement` | A flag emission: equities spill into taxable and `REVISIT_PLACEMENT` fires. |
+| `01-locked-accounts/locked-account-guards-overweight-class` | A locked-position guard: an over-weight class in a locked account is left untouched, surfacing `PROJECTED_OFF_TARGET`. |
