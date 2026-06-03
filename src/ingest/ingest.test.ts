@@ -207,9 +207,27 @@ describe('parseSchwabCsv', () => {
     expect(muny!.marketValue).toBeCloseTo(200_012.90, 0);
   });
 
-  it('skips the Cash & Cash Investments row (ticker "--")', () => {
+  it('captures the Cash & Cash Investments row as a SCHWAB_CASH position (#54)', () => {
+    const r = parseSchwabCsv(schwabCsv, 'schwab-taxable');
+    const cash = r.positions.find(p => p.ticker === 'SCHWAB_CASH');
+    expect(cash).toBeDefined();
+    expect(cash!.marketValue).toBeCloseTo(12_750, 0);
+  });
+
+  it('SCHWAB_CASH classifies as CASH', async () => {
+    const { classifyTicker } = await import('../engine/classify');
+    expect(classifyTicker('SCHWAB_CASH')).toBe('CASH');
+  });
+
+  it('does not emit a position with a placeholder "--" ticker', () => {
     const r = parseSchwabCsv(schwabCsv, 'schwab-taxable');
     expect(r.positions.every(p => p.ticker !== '--')).toBe(true);
+  });
+
+  it('omits the cash row when its balance is $0', () => {
+    const zeroCash = schwabCsv.replace('"$12,750.00"', '"$0.00"');
+    const r = parseSchwabCsv(zeroCash, 'schwab-taxable');
+    expect(r.positions.some(p => p.ticker === 'SCHWAB_CASH')).toBe(false);
   });
 
   it('skips the Positions Total footer row', () => {
