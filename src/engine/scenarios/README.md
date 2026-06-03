@@ -77,6 +77,9 @@ No TypeScript changes are ever required to add a fixture.
 | `flags` | **Presence (subset).** Each listed flag must appear in the result. Specify `kind` plus any flag-specific fields you want matched (e.g. `{ "kind": "REVISIT_PLACEMENT", "taxableShare": 0.3 }`); unlisted fields and other emitted flags are ignored. |
 | `projectedWeights` | **Partial.** Only the listed asset classes are checked against `result.projectedWeights` (post-trade household weights, as fractions of 1). |
 | `projectedDriftWithinTolerance` | **Derived boolean.** `true` iff every class's post-trade weight sits within its effective band `min(toleranceAbs, toleranceRel × target)`. |
+| `netByAccount` | **Per-account net trade delta** (sum of `deltaUsd`, within $2). The balance-preserving invariant: `0` for a pure rebalance, the account's contribution for a deployment. Only listed accounts are checked. |
+| `tradeCountByAccount` | **Count of actionable (non-zero) trades per account.** Use to assert a locked account is untouched (`{ "ira": 0 }`) or that trades concentrate in one account. Only listed accounts are checked. |
+| `forbiddenTrades` | **Account/class pairs that must NOT be traded.** Each `{ "accountId", "assetClass" }` must have no actionable trade — e.g. a class excluded from an account by `allowedAssetClasses`/`availableTickers`, or barred from a bucket. |
 
 Numeric comparisons use a small tolerance (absolute `0.01` or `0.5%` of the
 expected magnitude) to absorb floating-point noise.
@@ -89,6 +92,30 @@ description and a readable diff of actual vs expected — use that to either fix
 genuine bug or to read off the real values when your intent was vague. Keep
 expected values **explicit** (no snapshots) so each fixture stays self-documenting.
 
+## Principle coverage checklist
+
+Tracks [#34](https://github.com/rblumen/drift/issues/34): every PRINCIPLES.md goal
+should have at least one happy-path and one edge-case scenario. Keep this current
+as fixtures land.
+
+| Goal | Happy path | Edge case | Fixtures |
+|---|:---:|:---:|---|
+| 1. Locked accounts / positions | ✅ | ✅ | `01-locked-accounts/locked-account-zero-trades`, `…/mixed-locked-unlocked-positions`, `…/locked-account-guards-overweight-class` |
+| 2. Per-account class restrictions | ✅ | ✅ | `02-class-restrictions/allowed-asset-classes-honored`, `…/available-tickers-derived-restriction` |
+| 3. Balance-preserving per account | ✅ | ✅ | `03-balance-preserving/pure-rebalance-nets-to-zero`, `…/contribution-nets-to-newcash` |
+| 4. Household target allocation | ⬜ | ⬜ | — |
+| 5. Tolerance bands (5/25) | ✅ | ⬜ | `05-tolerance-bands/on-target-portfolio-no-op` |
+| 6. Tax-preferred placement | ⬜ | ✅ | `06-tax-placement/taxable-exceeds-fi-revisit-placement` |
+| 7. Minimize taxable sells | ⬜ | ⬜ | — |
+| 8. Proportional by remaining capacity | ⬜ | ⬜ | — |
+| 9. `concentrateClasses` first | ⬜ | ⬜ | — |
+| 10. Minimize trades | ⬜ | ⬜ | — |
+| 11. Minimize accounts touched | ⬜ | ⬜ | — |
+
+### Regression vault
+
+`regressions/` — every future bug fix should add a scenario here that fails
+before the fix and passes after, named for the issue (e.g. `issue-57-….scenario.json`).
 ## Starter fixtures
 
 | File | Verifies |

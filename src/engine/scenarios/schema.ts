@@ -51,6 +51,20 @@ const expectedSchema = z
     // Whether every class's post-trade weight sits within its effective
     // tolerance band min(toleranceAbs, toleranceRel × target).
     projectedDriftWithinTolerance: z.boolean().optional(),
+    // Per-account net trade delta (sum of deltaUsd). The balance-preserving
+    // invariant (Goal 3): 0 for a pure rebalance, an account's contribution for
+    // a deployment. Only the listed accounts are checked.
+    netByAccount: z.record(z.string(), z.number()).optional(),
+    // Count of actionable (non-zero) trades per account. Use to assert a locked
+    // account is untouched ({ "ira": 0 }) or that trades concentrate in one
+    // account (Goal 1, Goal 11). Only the listed accounts are checked.
+    tradeCountByAccount: z.record(z.string(), z.number()).optional(),
+    // Account/class pairs that must NOT receive an actionable trade — e.g. a
+    // class excluded from an account by allowedAssetClasses or availableTickers
+    // (Goal 2), or a class barred from a bucket (Goal 6/9).
+    forbiddenTrades: z
+      .array(z.object({ accountId: z.string(), assetClass: ASSET_CLASS }).strict())
+      .optional(),
   })
   .strict();
 

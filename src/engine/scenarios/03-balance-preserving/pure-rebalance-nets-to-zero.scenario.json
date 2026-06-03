@@ -1,0 +1,36 @@
+{
+  "name": "pure-rebalance-nets-to-zero",
+  "description": "Goal 3 (happy path): with no new cash, every account's trades net to exactly $0 — buys are funded by sells within the same account",
+  "principle": 3,
+  "accounts": [
+    { "id": "schwab", "name": "Schwab Brokerage", "institution": "Schwab", "type": "TAXABLE" },
+    { "id": "ira", "name": "Fidelity Trad IRA", "institution": "Fidelity", "type": "TRADITIONAL_IRA" },
+    { "id": "k401", "name": "Empower 401k", "institution": "Empower", "type": "FOUR_OH_ONE_K" }
+  ],
+  "holdings": [
+    { "accountId": "schwab", "ticker": "MUNY", "marketValue": 210000 },
+    { "accountId": "ira", "ticker": "FZROX", "marketValue": 170000 },
+    { "accountId": "ira", "ticker": "FZILX", "marketValue": 80000 },
+    { "accountId": "ira", "ticker": "FPADX", "marketValue": 11250 },
+    { "accountId": "ira", "ticker": "GLD", "marketValue": 9375 },
+    { "accountId": "k401", "ticker": "FSKAX", "marketValue": 319375 },
+    { "accountId": "k401", "ticker": "VXUS", "marketValue": 106250 },
+    { "accountId": "k401", "ticker": "VWO", "marketValue": 18750 },
+    { "accountId": "k401", "ticker": "GLD", "marketValue": 15625 }
+  ],
+  "strategy": {
+    "targets": {
+      "US_TOTAL_MARKET": 0.0, "US_LARGE_CAP": 0.385, "US_MID_CAP": 0.144, "US_SMALL_CAP": 0.046,
+      "DEVELOPED_INTL": 0.17, "DEVELOPED_EUROPE": 0.0, "DEVELOPED_PACIFIC": 0.0, "EMERGING_INTL": 0.03,
+      "FIXED_INCOME": 0.2, "US_TREASURY": 0.0, "US_CORP_BOND": 0.0, "MUNI_BOND": 0.0, "TIPS": 0.0, "INTL_BOND": 0.0,
+      "REAL_ESTATE": 0.0, "ALTERNATIVES": 0.025, "CRYPTO": 0.0, "PRECIOUS_METALS": 0.0, "CASH": 0.0
+    },
+    "placement": {},
+    "toleranceAbs": 0.0,
+    "toleranceRel": 0.25,
+    "minTradeUsd": 250
+  },
+  "expected": {
+    "netByAccount": { "schwab": 0, "ira": 0, "k401": 0 }
+  }
+}
