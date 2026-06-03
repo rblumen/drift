@@ -1,0 +1,23 @@
+"Positions for All-Accounts as of 09:00 AM ET, 01/01/2025"
+
+Roth_Contributory_IRA ...001
+"Symbol","Description","Qty (Quantity)","Price","Price Chng $ (Price Change $)","Price Chng % (Price Change %)","Mkt Val (Market Value)","Day Chng $ (Day Change $)","Day Chng % (Day Change %)","Cost Basis","Gain $ (Gain/Loss $)","Gain % (Gain/Loss %)","Reinvest?","Reinvest Capital Gains?","% of Acct (% of Account)","Asset Type",
+"SCHF","SCHWAB INTERNATIONAL EQUITY ETF","193.5985","$28.02","$0.15","0.54%","$5,424.63","$29.04","0.54%","$4,089.81","$1,334.82","32.64%","Yes","N/A","12.19%","ETFs & Closed End Funds",
+"SWTSX","SCHWAB TOTAL STOCK MARKET INDEX","901.654","$18.36","$0.04","0.22%","$16,554.37","$36.07","0.22%","$13,149.84","$3,404.53","25.89%","Yes","Yes","37.2%","Mutual Fund",
+"Cash & Cash Investments","--","--","--","--","--","$19,862.05","$0.00","0%","--","--","--","--","--","44.63%","Cash and Money Market",
+"Positions Total","","--","--","--","--","$41,841.05","$74.40","0.17%","$17,239.65","$4,739.35","23.97%","--","--","--","--",
+
+
+Comm_Prop_with_Right_of_Survivorship ...985
+"Symbol","Description","Qty (Quantity)","Price","Price Chng $ (Price Change $)","Price Chng % (Price Change %)","Mkt Val (Market Value)","Day Chng $ (Day Change $)","Day Chng % (Day Change %)","Cost Basis","Gain $ (Gain/Loss $)","Gain % (Gain/Loss %)","Reinvest?","Reinvest Capital Gains?","% of Acct (% of Account)","Asset Type",
+"MUNY","VANGUARD NEW YORK TAX-EXEMPT BOND ETF SHARES","630","$103.45","$0.20","0.19%","$65,173.50","$126.00","0.19%","$64,695.15","$478.35","0.74%","No","N/A","25.94%","ETFs & Closed End Funds",
+"SWTSX","SCHWAB TOTAL STOCK MARKET INDEX","3,204.945","$18.36","$0.04","0.22%","$58,842.79","$128.20","0.22%","$48,210.20","$10,632.59","22.05%","Yes","Yes","23.42%","Mutual Fund",
+"SWYXX","SCHWAB NY MUNICIPAL MONEY INV","32.72","$1.00","$0.00","0%","$32.72","$0.00","0%","$32.72","$0.00","0%","Yes","Yes","0.01%","Cash and Money Market",
+"Cash & Cash Investments","--","--","--","--","--","$127,223.79","$0.00","0%","--","--","--","--","--","50.63%","Cash and Money Market",
+"Positions Total","","--","--","--","--","$251,272.80","$254.20","0.1%","$112,938.07","$11,110.94","9.84%","--","--","--","--",
+
+
+Contributory ...159
+"Symbol","Description","Qty (Quantity)","Price","Price Chng $ (Price Change $)","Price Chng % (Price Change %)","Mkt Val (Market Value)","Day Chng $ (Day Change $)","Day Chng % (Day Change %)","Cost Basis","Gain $ (Gain/Loss $)","Gain % (Gain/Loss %)","Reinvest?","Reinvest Capital Gains?","% of Acct (% of Account)","Asset Type",
+"Cash & Cash Investments","--","--","--","--","--","$0.02","$0.00","0%","--","--","--","--","--","100%","Cash and Money Market",
+"Positions Total","","--","--","--","--","$0.02","$0.00","0%","$0.00","$0.00","0%","--","--","--","--",

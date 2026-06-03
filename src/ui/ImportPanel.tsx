@@ -1,9 +1,9 @@
 import { useRef, useState, useEffect, type ReactNode } from 'react';
 import type { Account, AssetClass, Position } from '../engine/types';
 import { ALL_ASSET_CLASSES } from '../engine/types';
-import { parseSchwabCsv } from '../ingest/adapters/schwab';
+import { parseSchwabMultiCsv } from '../ingest/adapters/schwab';
 import { parseFidelityMultiCsv } from '../ingest/adapters/fidelity';
-import type { FidelityMultiResult } from '../ingest/adapters/fidelity';
+import type { MultiAccountResult } from '../ingest/csv';
 import { parseEmpowerCsv, parseEmpowerTotals } from '../ingest/adapters/empower';
 import { AC_LABEL, ACCT_TYPE_COLOR, ACCT_TYPE_LABEL, fmtUsd } from './fmt';
 import { PieChart } from './PieChart';
@@ -18,7 +18,7 @@ interface Props {
 }
 
 const ADAPTER_META: { id: Adapter; label: string; hint: string }[] = [
-  { id: 'schwab',        label: 'Schwab CSV',      hint: 'Accounts → Positions tab → Export' },
+  { id: 'schwab',        label: 'Schwab CSV',      hint: 'Accounts → Positions tab → Export (single account or All-Accounts)' },
   { id: 'fidelity',      label: 'Fidelity CSV',     hint: 'Accounts & Trade → Portfolio → Download (CSV)' },
   { id: 'empower',       label: 'Empower CSV',      hint: 'Copy your "My Investments" table and save as CSV' },
   { id: 'empower-totals',label: 'Empower Totals',   hint: 'Enter dollar totals from the Investments → Holdings → Allocation view' },
@@ -135,9 +135,9 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
   const [parseErrors,   setParseErrors]   = useState<string[]>([]);
   const [manualRow,     setManualRow]     = useState({ ticker: '', marketValue: '', price: '' });
   const [empowerTotals, setEmpowerTotals] = useState<Partial<Record<AssetClass, string>>>({});
-  // Fidelity multi-account flow.
-  const [fidelityMulti,   setFidelityMulti]   = useState<FidelityMultiResult | null>(null);
-  const [fidelityMapping, setFidelityMapping] = useState<Record<string, string>>({});
+  // Multi-account flow (Fidelity and Schwab all-accounts exports).
+  const [multiAccount,  setMultiAccount]  = useState<MultiAccountResult | null>(null);
+  const [accountMapping, setAccountMapping] = useState<Record<string, string>>({});
   // Set of account IDs whose position rows are collapsed.
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const fileRef = useRef<HTMLInputElement>(null);
@@ -156,8 +156,8 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
     if (acct) setAdapter(defaultAdapter(acct.institution));
     setPreview(null);
     setParseErrors([]);
-    setFidelityMulti(null);
-    setFidelityMapping({});
+    setMultiAccount(null);
+    setAccountMapping({});
   }, [accountId]);
 
   // Keep accountId in sync if accounts list changes (e.g. first account added).
@@ -173,8 +173,13 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
     if (!file) return;
     const text = await readFile(file);
 
-    if (adapter === 'fidelity') {
-      const multiResult = parseFidelityMultiCsv(text);
+    // Schwab and Fidelity exports can both carry multiple accounts in one file,
+    // so they share the discover-then-map flow. A file with a single account
+    // skips the mapping step and previews against the selected account.
+    if (adapter === 'fidelity' || adapter === 'schwab') {
+      const multiResult = adapter === 'fidelity'
+        ? parseFidelityMultiCsv(text)
+        : parseSchwabMultiCsv(text);
       setParseErrors(multiResult.errors);
 
       if (multiResult.discovered.length <= 1) {
@@ -182,7 +187,7 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
         const num = multiResult.discovered[0]?.accountNumber;
         const raw = num ? (multiResult.positionsByNumber[num] ?? []) : [];
         setPreview(raw.map(p => ({ ...p, accountId })));
-        setFidelityMulti(null);
+        setMultiAccount(null);
       } else {
         // Multiple accounts — show the mapping step.
         // Auto-match by name similarity so common cases need no manual selection.
@@ -195,13 +200,11 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
           );
           initMapping[disc.accountNumber] = match?.id ?? '';
         }
-        setFidelityMulti(multiResult);
-        setFidelityMapping(initMapping);
+        setMultiAccount(multiResult);
+        setAccountMapping(initMapping);
       }
     } else {
-      const result = adapter === 'schwab'
-        ? parseSchwabCsv(text, accountId)
-        : parseEmpowerCsv(text, accountId);
+      const result = parseEmpowerCsv(text, accountId);
       setParseErrors(result.errors);
       setPreview(result.positions);
     }
@@ -216,19 +219,19 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
     setParseErrors([]);
   }
 
-  function confirmFidelityMulti() {
-    if (!fidelityMulti) return;
+  function confirmMultiImport() {
+    if (!multiAccount) return;
     let updated = positions;
-    for (const disc of fidelityMulti.discovered) {
-      const appId = fidelityMapping[disc.accountNumber];
+    for (const disc of multiAccount.discovered) {
+      const appId = accountMapping[disc.accountNumber];
       if (!appId) continue;
-      const remapped = (fidelityMulti.positionsByNumber[disc.accountNumber] ?? [])
+      const remapped = (multiAccount.positionsByNumber[disc.accountNumber] ?? [])
         .map(p => ({ ...p, accountId: appId }));
       updated = mergePositions(updated, remapped, appId);
     }
     setPositions(updated);
-    setFidelityMulti(null);
-    setFidelityMapping({});
+    setMultiAccount(null);
+    setAccountMapping({});
     setParseErrors([]);
   }
 
@@ -324,7 +327,7 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
         </p>
 
         <HelpSection title="Which format to use">
-          <HelpDef term="Schwab CSV">Accounts → Positions tab → Export (top-right link). Exports all positions in the selected account.</HelpDef>
+          <HelpDef term="Schwab CSV">Accounts → Positions tab → Export (top-right link). Works with both a single-account export and the All-Accounts export — for All-Accounts the app detects each account in the file and lets you map them to your registered accounts.</HelpDef>
           <HelpDef term="Fidelity CSV">Accounts &amp; Trade → Portfolio → Download (CSV). The app detects multiple accounts in a single file and lets you map each to a registered account.</HelpDef>
           <HelpDef term="Empower CSV">Copy the "My Investments" table and save as a <code>.csv</code> file. Works best when Empower shows individual fund-level holdings.</HelpDef>
           <HelpDef term="Empower Totals">Enter dollar amounts per asset class from Empower's Allocation/Holdings view. Fastest path when you don't need individual ticker detail — trade recommendations will be at the asset-class level only.</HelpDef>
@@ -364,7 +367,7 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
             {ADAPTER_META.map(m => (
               <button
                 key={m.id}
-                onClick={() => { setAdapter(m.id); setPreview(null); setParseErrors([]); setFidelityMulti(null); setFidelityMapping({}); }}
+                onClick={() => { setAdapter(m.id); setPreview(null); setParseErrors([]); setMultiAccount(null); setAccountMapping({}); }}
                 className={`px-3 py-1.5 text-sm rounded-md border transition-colors
                   ${adapter === m.id
                     ? 'bg-indigo-600 text-white border-indigo-600'
@@ -379,7 +382,7 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
 
       {/* Step 2 — Import widget */}
 
-      {isCsvAdapter && !preview && !fidelityMulti && (
+      {isCsvAdapter && !preview && !multiAccount && (
         <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center space-y-3">
           <p className="text-sm text-gray-500">{adapterHint}</p>
           <input ref={fileRef} type="file" accept=".csv" onChange={handleFile} className="hidden" />
@@ -398,20 +401,20 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
         </div>
       )}
 
-      {/* Fidelity multi-account mapping step */}
-      {fidelityMulti && (
+      {/* Multi-account mapping step (Fidelity / Schwab all-accounts) */}
+      {multiAccount && (
         <div className="border border-indigo-200 rounded-lg p-4 space-y-4 bg-indigo-50">
           <div>
             <h3 className="text-sm font-semibold text-indigo-800">
-              Map Fidelity accounts → your accounts
+              Map imported accounts → your accounts
             </h3>
             <p className="text-xs text-indigo-600 mt-0.5">
-              {fidelityMulti.discovered.length} accounts found in the file. Route each one to an account you've added, or skip it.
+              {multiAccount.discovered.length} accounts found in the file. Route each one to an account you've added, or skip it.
             </p>
           </div>
           <div className="space-y-2">
-            {fidelityMulti.discovered.map(disc => {
-              const posCount = fidelityMulti.positionsByNumber[disc.accountNumber]?.length ?? 0;
+            {multiAccount.discovered.map(disc => {
+              const posCount = multiAccount.positionsByNumber[disc.accountNumber]?.length ?? 0;
               return (
                 <div key={disc.accountNumber} className="flex items-center gap-3">
                   <div className="flex-1 min-w-0">
@@ -422,8 +425,8 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
                   </div>
                   <span className="text-gray-400 text-sm shrink-0">→</span>
                   <select
-                    value={fidelityMapping[disc.accountNumber] ?? ''}
-                    onChange={e => setFidelityMapping({ ...fidelityMapping, [disc.accountNumber]: e.target.value })}
+                    value={accountMapping[disc.accountNumber] ?? ''}
+                    onChange={e => setAccountMapping({ ...accountMapping, [disc.accountNumber]: e.target.value })}
                     className="border border-gray-300 rounded px-2 py-1.5 text-sm bg-white min-w-44"
                   >
                     <option value="">— skip —</option>
@@ -437,14 +440,14 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
           </div>
           <div className="flex gap-2">
             <button
-              onClick={confirmFidelityMulti}
-              disabled={!fidelityMulti.discovered.some(d => fidelityMapping[d.accountNumber])}
+              onClick={confirmMultiImport}
+              disabled={!multiAccount.discovered.some(d => accountMapping[d.accountNumber])}
               className="bg-indigo-600 text-white text-sm px-4 py-1.5 rounded-md hover:bg-indigo-700 disabled:opacity-40"
             >
               Confirm import
             </button>
             <button
-              onClick={() => { setFidelityMulti(null); setFidelityMapping({}); setParseErrors([]); }}
+              onClick={() => { setMultiAccount(null); setAccountMapping({}); setParseErrors([]); }}
               className="text-gray-500 text-sm px-3 py-1.5 rounded-md hover:bg-gray-100"
             >
               Cancel

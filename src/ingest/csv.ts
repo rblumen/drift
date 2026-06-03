@@ -15,6 +15,27 @@ export interface CsvParseResult {
   errors:    string[];
 }
 
+// ── Multi-account ingest ────────────────────────────────────────────────────
+// Shared shape for adapters that discover several accounts in one export
+// (Fidelity's per-row Account Number column; Schwab's all-accounts section
+// blocks). The caller maps each discovered account to a real app account ID
+// before committing positions — until then `accountId` holds the placeholder
+// account number used as the `positionsByNumber` key.
+
+/** One account discovered inside a broker export. */
+export interface DiscoveredAccount {
+  accountNumber: string;
+  accountName:   string;
+}
+
+export interface MultiAccountResult {
+  /** Accounts found in the file, in order of first appearance. */
+  discovered:        DiscoveredAccount[];
+  /** Positions grouped by placeholder account number. */
+  positionsByNumber: Record<string, Position[]>;
+  errors:            string[];
+}
+
 // Strip currency symbols, commas, and whitespace then parse as float.
 // Handles "$1,234.56", "1234.56", "1,234", and negative values "$-50.00".
 export function parseMoney(raw: string | undefined): number {
