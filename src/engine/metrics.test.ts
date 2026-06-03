@@ -34,6 +34,38 @@ describe('aggressiveness', () => {
     // 60/40 of a 0.5-total portfolio still reads 60% aggressive.
     expect(aggressiveness(w({ US_LARGE_CAP: 0.3, FIXED_INCOME: 0.2 }))).toBeCloseTo(0.6);
   });
+
+  it('is stable across FIXED_INCOME split/merge — FI children count as defensive', () => {
+    // 60% equity / 40% bonds expressed at parent level.
+    const parent = aggressiveness(w({ US_LARGE_CAP: 0.6, FIXED_INCOME: 0.4 }));
+    // Same allocation with FIXED_INCOME split into sub-classes.
+    const split = aggressiveness(w({
+      US_LARGE_CAP:  0.6,
+      US_TREASURY:   0.14,
+      US_CORP_BOND:  0.10,
+      MUNI_BOND:     0.08,
+      TIPS:          0.04,
+      INTL_BOND:     0.04,
+    }));
+    expect(split).toBeCloseTo(parent, 5);
+  });
+
+  it('counts DEVELOPED_EUROPE and DEVELOPED_PACIFIC as growth', () => {
+    // Splitting DEVELOPED_INTL into sub-regions should not change aggressiveness.
+    const parent = aggressiveness(w({ DEVELOPED_INTL: 0.5, FIXED_INCOME: 0.5 }));
+    const split  = aggressiveness(w({ DEVELOPED_EUROPE: 0.31, DEVELOPED_PACIFIC: 0.19, FIXED_INCOME: 0.5 }));
+    expect(split).toBeCloseTo(parent, 5);
+  });
+
+  it('counts REAL_ESTATE as growth', () => {
+    expect(aggressiveness(w({ REAL_ESTATE: 1 }))).toBe(1);
+  });
+
+  it('counts CRYPTO and PRECIOUS_METALS as growth', () => {
+    const parent = aggressiveness(w({ ALTERNATIVES: 0.5, FIXED_INCOME: 0.5 }));
+    const split  = aggressiveness(w({ CRYPTO: 0.3, PRECIOUS_METALS: 0.2, FIXED_INCOME: 0.5 }));
+    expect(split).toBeCloseTo(parent, 5);
+  });
 });
 
 describe('diversification', () => {

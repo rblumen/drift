@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Aggressiveness stable across split/merge** ([#61](https://github.com/rblumen/drift/issues/61)) — toggling a parent class between split and merged no longer causes a jump in the "X% growth · Y% defensive" gauge or the AllocationPlot aggressiveness axis. Both now derive the defensive set from the hierarchy (`FIXED_INCOME` + all sub-classes + `CASH`), so whether bonds are held at the parent level or split into Treasury/Muni/TIPS/etc., and whether Developed Intl is split into Europe/Pacific sub-regions, the reading is the same.
+
 - **Strategy: "merge" reappears after split** ([#59](https://github.com/rblumen/drift/issues/59)) — clicking **split** on a parent class (Alternatives, Fixed Income, Developed Intl) distributed its weight into sub-class targets but then permanently hid the **merge** link, leaving no way to undo the split. The merge button is now suppressed only when a child class is *held* in the portfolio (you can't hide real positions); a split that only set targets with no current holdings is always reversible.
 
 ### Added

@@ -487,12 +487,12 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights, taxAdjust
   }));
 
   // Risk-profile score: growth assets vs defensive, derived from live weights.
-  const GROWTH_CLASSES = new Set<AssetClass>([
-    'US_TOTAL_MARKET', 'US_LARGE_CAP', 'US_MID_CAP', 'US_SMALL_CAP',
-    'DEVELOPED_INTL', 'EMERGING_INTL', 'ALTERNATIVES', 'CRYPTO', 'PRECIOUS_METALS',
-  ]);
+  // Defensive = FIXED_INCOME + all its hierarchy sub-classes + CASH.
+  // Growth = everything else (equities, alternatives, real estate, intl sub-regions).
+  // Derived from the hierarchy so toggling split/merge never changes the reading.
+  const FI_FAMILY = new Set<AssetClass>(['FIXED_INCOME', ...childrenOf('FIXED_INCOME')]);
   const growthPct    = ALL_ASSET_CLASSES
-    .filter(ac => GROWTH_CLASSES.has(ac))
+    .filter(ac => !FI_FAMILY.has(ac) && ac !== 'CASH')
     .reduce((s, ac) => s + (parseFloat(weights[ac]) || 0), 0);
   const defensivePct = Math.max(0, 100 - growthPct);
 
