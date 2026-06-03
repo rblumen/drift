@@ -9,7 +9,7 @@ function w(partial: Partial<Record<AssetClass, number>>): Record<AssetClass, num
   ) as Record<AssetClass, number>;
 }
 
-describe('aggressiveness', () => {
+describe('Metrics (non-goal display concern): portfolio aggressiveness score', () => {
   it('is 1 when all-equity', () => {
     expect(aggressiveness(w({ US_TOTAL_MARKET: 1 }))).toBe(1);
   });
@@ -68,7 +68,7 @@ describe('aggressiveness', () => {
   });
 });
 
-describe('diversification', () => {
+describe('Metrics (non-goal display concern): portfolio diversification score', () => {
   it('is 0 when concentrated in a single class', () => {
     expect(diversification(w({ US_TOTAL_MARKET: 1 }))).toBe(0);
   });

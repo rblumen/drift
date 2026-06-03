@@ -26,7 +26,7 @@ function pos(overrides: Partial<Position> = {}): Position {
   };
 }
 
-describe('positionTaxFactor', () => {
+describe('Tax adjustment (supports Goal 4, issue #7): positionTaxFactor', () => {
   it('returns 1.0 for Roth, HSA, 529, OTHER', () => {
     for (const t of ['ROTH_IRA', 'HSA', 'FIVE_TWENTY_NINE', 'OTHER'] as const) {
       expect(positionTaxFactor(pos(), acct(t), TA)).toBe(1.0);
@@ -73,7 +73,7 @@ describe('positionTaxFactor', () => {
   });
 });
 
-describe('positionAfterTaxValue', () => {
+describe('Tax adjustment (supports Goal 4, issue #7): positionAfterTaxValue', () => {
   it('multiplies marketValue by the factor', () => {
     expect(positionAfterTaxValue(pos({ costBasis: 2000 }), acct('TAXABLE'), TA))
       .toBeCloseTo(8_800);
@@ -84,7 +84,7 @@ describe('positionAfterTaxValue', () => {
   });
 });
 
-describe('contributionTaxFactor', () => {
+describe('Tax adjustment (supports Goal 4, issue #7): contributionTaxFactor', () => {
   it('Roth/HSA/529/Taxable/OTHER all 1.0 (new buys have B=V)', () => {
     for (const t of ['ROTH_IRA', 'HSA', 'FIVE_TWENTY_NINE', 'TAXABLE', 'OTHER'] as const) {
       expect(contributionTaxFactor(t, TA)).toBe(1.0);
@@ -96,7 +96,7 @@ describe('contributionTaxFactor', () => {
   });
 });
 
-describe('findMissingCostBasis', () => {
+describe('Tax adjustment (supports Goal 4, issue #7): findMissingCostBasis', () => {
   const accounts: Account[] = [
     { id: 'tax', name: 'Tax', institution: 'x', type: 'TAXABLE' },
     { id: 'roth', name: 'Roth', institution: 'x', type: 'ROTH_IRA' },

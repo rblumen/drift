@@ -32,7 +32,7 @@ function strat(partial: Partial<Record<AssetClass, number>>, over: Partial<Strat
 
 // ─── hierarchy shape ───────────────────────────────────────────────────────────
 
-describe('Phase 2 hierarchy shape', () => {
+describe('Hierarchy (supports Goal 4): parent/child asset-class shape', () => {
   it('FIXED_INCOME and DEVELOPED_INTL are parents; REAL_ESTATE is a standalone leaf', () => {
     expect(isParentClass('FIXED_INCOME')).toBe(true);
     expect(isParentClass('DEVELOPED_INTL')).toBe(true);
@@ -66,7 +66,7 @@ describe('Phase 2 hierarchy shape', () => {
 
 // ─── rollup four-map propagation ─────────────────────────────────────────────────
 
-describe('rollup redistributes promoted-parent holdings to children (four-map)', () => {
+describe('Hierarchy (supports Goal 4): rollup redistributes promoted-parent holdings to children', () => {
   it('a broad FIXED_INCOME fund (BND) splits into bond sub-classes by default weights', () => {
     const accounts: Account[] = [{ id: 'ira', name: 'IRA', institution: 'F', type: 'TRADITIONAL_IRA' }];
     const positions: Position[] = [{ accountId: 'ira', ticker: 'BND', marketValue: 100_000 }];
@@ -100,7 +100,7 @@ describe('rollup redistributes promoted-parent holdings to children (four-map)',
 
 // ─── consolidation: parent-held target absorbs child holdings, no spurious trades ─
 
-describe('consolidation — sub-class holding against a parent FIXED_INCOME target', () => {
+describe('Hierarchy (supports Goal 4): sub-class holding consolidates against a parent FIXED_INCOME target', () => {
   it('holding a muni fund (MUB) against a parent FIXED_INCOME target produces no spurious trades', () => {
     const accounts: Account[] = [
       { id: 'tax', name: 'Taxable', institution: 'S', type: 'TAXABLE' },
@@ -122,7 +122,7 @@ describe('consolidation — sub-class holding against a parent FIXED_INCOME targ
 
 // ─── greenfield buy promotion ────────────────────────────────────────────────────
 
-describe('greenfield buy promotion for promoted parents', () => {
+describe('Hierarchy (supports Goal 4): greenfield buy promotion for promoted parents', () => {
   it('targeting FIXED_INCOME with no bond holdings yields one parent-level buy, not five', () => {
     const accounts: Account[] = [{ id: 'ira', name: 'IRA', institution: 'F', type: 'TRADITIONAL_IRA', newCash: 20_000 }];
     const positions: Position[] = [{ accountId: 'ira', ticker: 'FXAIX', marketValue: 80_000 }];
@@ -156,7 +156,7 @@ describe('greenfield buy promotion for promoted parents', () => {
 
 // ─── resolve family coverage ─────────────────────────────────────────────────────
 
-describe('resolve — a held sub-class fund satisfies a parent-level trade', () => {
+describe('Hierarchy (supports Goal 10): a held sub-class fund satisfies a parent-level trade', () => {
   it('a parent FIXED_INCOME sell resolves to the held muni ticker (MUNY → MUNI_BOND)', () => {
     const positions: Position[] = [{ accountId: 'tax', ticker: 'MUNY', marketValue: 300_000 }];
     const trades = [{ accountId: 'tax', assetClass: 'FIXED_INCOME' as AssetClass, deltaUsd: -100_000, inTaxableAccount: true }];
@@ -168,7 +168,7 @@ describe('resolve — a held sub-class fund satisfies a parent-level trade', () 
 
 // ─── migration: parent targets preserved unless migrateSplit ─────────────────────
 
-describe('schema migration — held-at-parent targets are preserved', () => {
+describe('Hierarchy (supports Goal 4): schema migration preserves held-at-parent targets', () => {
   it('a saved parent-level FIXED_INCOME target is NOT auto-split into bond children', () => {
     const saved = { ...DEFAULT_STRATEGY, targets: targets({ US_LARGE_CAP: 0.8, FIXED_INCOME: 0.2 }) };
     const parsed = parseStrategy(saved);
@@ -203,7 +203,7 @@ describe('schema migration — held-at-parent targets are preserved', () => {
 
 // ─── placement: muni in taxable, other bonds sheltered ───────────────────────────
 
-describe('placement — subdivided fixed income places by tax treatment', () => {
+describe('Goal 6: subdivided fixed income places by tax treatment', () => {
   it('munis land in taxable while treasuries shelter in tax-advantaged', () => {
     const accounts: Account[] = [
       { id: 'tax', name: 'Taxable', institution: 'S', type: 'TAXABLE',         newCash: 50_000 },
@@ -224,7 +224,7 @@ describe('placement — subdivided fixed income places by tax treatment', () => 
 
 // ─── REVISIT_PLACEMENT sums FI children ──────────────────────────────────────────
 
-describe('REVISIT_PLACEMENT uses the summed fixed-income target', () => {
+describe('Goal 6: REVISIT_PLACEMENT uses the summed fixed-income target', () => {
   it('does not fire when the subdivided FI target covers the taxable share', () => {
     // All wealth in a taxable account; FI target expressed at the child level summing to 1.0.
     const accounts: Account[] = [{ id: 'tax', name: 'Taxable', institution: 'S', type: 'TAXABLE' }];
@@ -238,7 +238,7 @@ describe('REVISIT_PLACEMENT uses the summed fixed-income target', () => {
 
 // ─── robustness: partial targets must not zero out trades ─────────────────────────
 
-describe('rebalance is robust to a partial targets object', () => {
+describe('Hierarchy (supports Goal 4): rebalance is robust to a partial targets object', () => {
   it('a targets object missing the new keys still rebalances (no NaN poisoning)', () => {
     const accounts: Account[] = [{ id: 'ira', name: 'IRA', institution: 'F', type: 'TRADITIONAL_IRA' }];
     const positions: Position[] = [
@@ -262,7 +262,7 @@ describe('rebalance is robust to a partial targets object', () => {
 
 // ─── standalone consolidation unit ───────────────────────────────────────────────
 
-describe('consolidateParentClasses folds promoted-parent children', () => {
+describe('Hierarchy (supports Goal 4): consolidateParentClasses folds promoted-parent children', () => {
   it('folds MUNI_BOND into FIXED_INCOME when the target is at the parent level', () => {
     const t = targets({ FIXED_INCOME: 0.2, US_LARGE_CAP: 0.8 });
     const cv = { ...Object.fromEntries((Object.keys(t) as AssetClass[]).map(ac => [ac, 0])) } as Record<AssetClass, number>;
