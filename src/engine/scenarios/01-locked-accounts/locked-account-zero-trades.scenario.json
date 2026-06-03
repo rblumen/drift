@@ -1,0 +1,27 @@
+{
+  "name": "locked-account-zero-trades",
+  "description": "Goal 1 (happy path): a locked account generates zero trades while the rest of the household rebalances around it",
+  "principle": 1,
+  "accounts": [
+    { "id": "taxable", "name": "Taxable Brokerage", "institution": "Schwab", "type": "TAXABLE", "newCash": 50000 },
+    { "id": "ira", "name": "Traditional IRA", "institution": "Fidelity", "type": "TRADITIONAL_IRA", "locked": true }
+  ],
+  "holdings": [
+    { "accountId": "ira", "ticker": "VOO", "marketValue": 50000 }
+  ],
+  "strategy": {
+    "targets": { "US_TOTAL_MARKET": 0.0, "US_LARGE_CAP": 0.5, "DEVELOPED_INTL": 0.0, "EMERGING_INTL": 0.0, "FIXED_INCOME": 0.5, "ALTERNATIVES": 0.0, "CASH": 0.0 },
+    "placement": {},
+    "toleranceAbs": 0.0,
+    "toleranceRel": 0.25,
+    "minTradeUsd": 0
+  },
+  "expected": {
+    "trades": [
+      { "accountId": "taxable", "assetClass": "FIXED_INCOME", "deltaUsd": 50000 }
+    ],
+    "tradeCountByAccount": { "ira": 0 },
+    "netByAccount": { "taxable": 50000, "ira": 0 },
+    "projectedDriftWithinTolerance": true
+  }
+}

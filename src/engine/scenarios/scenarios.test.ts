@@ -126,6 +126,52 @@ function assertScenario(s: Scenario, result: RebalanceResult): void {
     expect(actual, `projectedWeights mismatch — ${s.description}`).toEqual(want);
   }
 
+  // ── netByAccount — balance-preserving invariant ───────────────────────────
+  if (expected.netByAccount) {
+    for (const [accountId, want] of Object.entries(expected.netByAccount)) {
+      const net = result.trades
+        .filter(t => t.accountId === accountId)
+        .reduce((sum, t) => sum + t.deltaUsd, 0);
+      // $2 slack absorbs proportional-split rounding.
+      expect(
+        Math.abs(net - want) <= 2,
+        `netByAccount[${accountId}] = ${net.toFixed(2)}, expected ≈ ${want} — ${s.description}`,
+      ).toBe(true);
+    }
+  }
+
+  // ── tradeCountByAccount — actionable (non-zero) trade count ────────────────
+  if (expected.tradeCountByAccount) {
+    for (const [accountId, want] of Object.entries(expected.tradeCountByAccount)) {
+      const count = result.trades.filter(
+        t => t.accountId === accountId && round(t.deltaUsd, 2) !== 0,
+      ).length;
+      expect(
+        count,
+        `tradeCountByAccount[${accountId}] — ${s.description}`,
+      ).toBe(want);
+    }
+  }
+
+  // ── forbiddenTrades — account/class pairs that must not be traded ──────────
+  if (expected.forbiddenTrades) {
+    for (const fb of expected.forbiddenTrades) {
+      const hit = result.trades.find(
+        t =>
+          t.accountId === fb.accountId &&
+          t.assetClass === fb.assetClass &&
+          round(t.deltaUsd, 2) !== 0,
+      );
+      if (hit) {
+        throw new Error(
+          `Forbidden trade was emitted — ${s.description}\n` +
+            `  forbidden: ${JSON.stringify(fb)}\n` +
+            `  actual: ${JSON.stringify(hit)}`,
+        );
+      }
+    }
+  }
+
   // ── projectedDriftWithinTolerance — derived boolean ───────────────────────
   if (expected.projectedDriftWithinTolerance !== undefined) {
     const relTol = s.strategy.toleranceRel ?? 0.25;

@@ -1,0 +1,28 @@
+{
+  "name": "mixed-locked-unlocked-positions",
+  "description": "Goal 1 (edge case): when an account holds both locked and unlocked lots of the same class, only the unlocked portion is sold",
+  "principle": 1,
+  "accounts": [
+    { "id": "taxable", "name": "Taxable Brokerage", "institution": "Schwab", "type": "TAXABLE" }
+  ],
+  "holdings": [
+    { "accountId": "taxable", "ticker": "VOO", "marketValue": 50000, "locked": true },
+    { "accountId": "taxable", "ticker": "VOO", "marketValue": 30000 },
+    { "accountId": "taxable", "ticker": "BND", "marketValue": 20000 }
+  ],
+  "strategy": {
+    "targets": { "US_TOTAL_MARKET": 0.0, "US_LARGE_CAP": 0.5, "DEVELOPED_INTL": 0.0, "EMERGING_INTL": 0.0, "FIXED_INCOME": 0.5, "ALTERNATIVES": 0.0, "CASH": 0.0 },
+    "placement": {},
+    "toleranceAbs": 0.0,
+    "toleranceRel": 0.25,
+    "minTradeUsd": 0
+  },
+  "expected": {
+    "trades": [
+      { "accountId": "taxable", "assetClass": "US_LARGE_CAP", "deltaUsd": -30000 },
+      { "accountId": "taxable", "assetClass": "FIXED_INCOME", "deltaUsd": 30000 }
+    ],
+    "netByAccount": { "taxable": 0 },
+    "projectedWeights": { "US_LARGE_CAP": 0.5, "FIXED_INCOME": 0.5 }
+  }
+}
