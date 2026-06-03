@@ -11,8 +11,9 @@ const PLACEMENT_BUCKETS = ['TAXABLE', 'TAX_ADVANTAGED', 'EDUCATION'] as const;
 
 const ASSET_CLASSES = [
   'US_TOTAL_MARKET', 'US_LARGE_CAP', 'US_MID_CAP', 'US_SMALL_CAP',
-  'DEVELOPED_INTL', 'EMERGING_INTL',
-  'FIXED_INCOME', 'ALTERNATIVES', 'CRYPTO', 'PRECIOUS_METALS', 'CASH',
+  'DEVELOPED_INTL', 'DEVELOPED_EUROPE', 'DEVELOPED_PACIFIC', 'EMERGING_INTL',
+  'FIXED_INCOME', 'US_TREASURY', 'US_CORP_BOND', 'MUNI_BOND', 'TIPS', 'INTL_BOND',
+  'REAL_ESTATE', 'ALTERNATIVES', 'CRYPTO', 'PRECIOUS_METALS', 'CASH',
 ] as const;
 
 export const positionSchema = z.object({
@@ -51,8 +52,16 @@ const targetsSchema = z.object({
   US_MID_CAP:       z.number().min(0).max(1).optional().default(0),
   US_SMALL_CAP:     z.number().min(0).max(1).optional().default(0),
   DEVELOPED_INTL:   z.number().min(0).max(1),
+  DEVELOPED_EUROPE: z.number().min(0).max(1).optional().default(0),
+  DEVELOPED_PACIFIC: z.number().min(0).max(1).optional().default(0),
   EMERGING_INTL:    z.number().min(0).max(1),
   FIXED_INCOME:     z.number().min(0).max(1),
+  US_TREASURY:      z.number().min(0).max(1).optional().default(0),
+  US_CORP_BOND:     z.number().min(0).max(1).optional().default(0),
+  MUNI_BOND:        z.number().min(0).max(1).optional().default(0),
+  TIPS:             z.number().min(0).max(1).optional().default(0),
+  INTL_BOND:        z.number().min(0).max(1).optional().default(0),
+  REAL_ESTATE:      z.number().min(0).max(1).optional().default(0),
   ALTERNATIVES:     z.number().min(0).max(1),
   CRYPTO:           z.number().min(0).max(1).optional().default(0),
   PRECIOUS_METALS:  z.number().min(0).max(1).optional().default(0),
@@ -60,8 +69,11 @@ const targetsSchema = z.object({
 }).refine(
   t => {
     const sum = t.US_TOTAL_MARKET + (t.US_LARGE_CAP ?? 0) + (t.US_MID_CAP ?? 0) + (t.US_SMALL_CAP ?? 0)
-              + t.DEVELOPED_INTL + t.EMERGING_INTL
-              + t.FIXED_INCOME + t.ALTERNATIVES + (t.CRYPTO ?? 0) + (t.PRECIOUS_METALS ?? 0) + t.CASH;
+              + t.DEVELOPED_INTL + (t.DEVELOPED_EUROPE ?? 0) + (t.DEVELOPED_PACIFIC ?? 0) + t.EMERGING_INTL
+              + t.FIXED_INCOME + (t.US_TREASURY ?? 0) + (t.US_CORP_BOND ?? 0) + (t.MUNI_BOND ?? 0)
+              + (t.TIPS ?? 0) + (t.INTL_BOND ?? 0)
+              + (t.REAL_ESTATE ?? 0)
+              + t.ALTERNATIVES + (t.CRYPTO ?? 0) + (t.PRECIOUS_METALS ?? 0) + t.CASH;
     return Math.abs(sum - 1.0) <= 0.001;
   },
   { message: 'Target weights must sum to 1.0 (±0.001)' },
@@ -74,8 +86,19 @@ const DEFAULT_PLACEMENT: Record<string, string[]> = {
   US_MID_CAP:       ['TAX_ADVANTAGED', 'TAXABLE'],
   US_SMALL_CAP:     ['TAX_ADVANTAGED', 'TAXABLE'],
   DEVELOPED_INTL:   ['TAX_ADVANTAGED', 'TAXABLE'],
+  DEVELOPED_EUROPE: ['TAX_ADVANTAGED', 'TAXABLE'],
+  DEVELOPED_PACIFIC: ['TAX_ADVANTAGED', 'TAXABLE'],
   EMERGING_INTL:    ['TAX_ADVANTAGED', 'TAXABLE'],
+  // FIXED_INCOME parent → taxable (muni intent). Subdivided: munis stay taxable;
+  // taxable-coupon sleeves (treasury/corp/tips/intl) shelter in tax-advantaged.
   FIXED_INCOME:     ['TAXABLE'],
+  US_TREASURY:      ['TAX_ADVANTAGED', 'TAXABLE'],
+  US_CORP_BOND:     ['TAX_ADVANTAGED'],
+  MUNI_BOND:        ['TAXABLE'],
+  TIPS:             ['TAX_ADVANTAGED'],
+  INTL_BOND:        ['TAX_ADVANTAGED'],
+  // REITs — non-qualified dividends → shelter.
+  REAL_ESTATE:      ['TAX_ADVANTAGED'],
   ALTERNATIVES:     ['TAX_ADVANTAGED'],
   CRYPTO:           ['TAX_ADVANTAGED'],
   PRECIOUS_METALS:  ['TAX_ADVANTAGED'],
@@ -94,10 +117,16 @@ const migrateStrategyTargets = (raw: unknown): unknown => {
   let r = raw as Record<string, unknown>;
 
   // 1. Targets migration — generic over all parent classes.
+  //    Only *synthetic* parents (migrateSplit: true, e.g. US_TOTAL_MARKET) auto-split
+  //    a parent-level target into children on load. Parents that are legitimately held
+  //    at the parent level (FIXED_INCOME, DEVELOPED_INTL, ALTERNATIVES) are preserved
+  //    as-is; their children surface only via the visibility rule or an explicit split
+  //    in the Strategy panel, so simple portfolios aren't force-subdivided on upgrade.
   const targets = r['targets'];
   if (typeof targets === 'object' && targets !== null) {
     let t = targets as Record<string, number>;
     for (const [parent, group] of Object.entries(CLASS_HIERARCHY)) {
+      if (!group!.migrateSplit) continue;
       const parentVal = t[parent] ?? 0;
       const childSum = group!.children.reduce((s, c) => s + (t[c] ?? 0), 0);
       if (parentVal > 0.001 && childSum < 0.001) {

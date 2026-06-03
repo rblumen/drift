@@ -2,11 +2,31 @@ import type { AssetClass, Strategy } from './types';
 
 export interface ClassGroup {
   readonly children: readonly AssetClass[];
-  // Default split weights used when migrating a parent-level target to child targets
-  // (e.g. when loading an old save that only has ALTERNATIVES: 0.10 and no sub-class
-  // entries). Must sum to 1.0. Weights also govern the rollup redistribution of
-  // parent-class holdings into child-class currentValue buckets.
+  // Default split weights. Two uses:
+  //   1. Rollup redistribution of parent-class *holdings* into child-class
+  //      currentValue buckets (always applied — see rollup.ts).
+  //   2. Migration of a parent-level *target* into child targets, but ONLY when
+  //      `migrateSplit` is true (see below).
+  // Must sum to 1.0.
   readonly defaultWeights: Readonly<Record<string, number>>;
+  // When true, a parent-level target is auto-split into child targets on load
+  // (schema migration). Reserve this for *synthetic* parents that are never held
+  // at the parent level — US_TOTAL_MARKET is always expressed as its cap children,
+  // so an old save with US_TOTAL_MARKET: 0.575 must split.
+  //
+  // When false/omitted (the default), a parent target is preserved as-is on load.
+  // The class is held at the parent level; its children surface only via the
+  // visibility rule (held or individually targeted) and the user opts into the
+  // split explicitly in the Strategy panel. This keeps simple portfolios from
+  // being force-subdivided on upgrade (e.g. a 20% FIXED_INCOME sleeve should not
+  // silently fan out into five bond sub-classes the user never asked for).
+  //
+  // Note: rollup redistribution and `consolidateParentClasses` still operate
+  // generically regardless of this flag — a parent-level holding (e.g. BND) is
+  // redistributed to children for leaf-granular reasoning, then folded back to the
+  // parent at drift time when the target sits at the parent level. The flag governs
+  // *targets* only.
+  readonly migrateSplit?: boolean;
 }
 
 /**
@@ -23,6 +43,26 @@ export const CLASS_HIERARCHY: Partial<Record<AssetClass, ClassGroup>> = {
     children: ['US_LARGE_CAP', 'US_MID_CAP', 'US_SMALL_CAP'],
     // Russell index cap weights: Russell 1000 (LC), Russell Midcap (MC), Russell 2000 (SC).
     defaultWeights: { US_LARGE_CAP: 0.67, US_MID_CAP: 0.25, US_SMALL_CAP: 0.08 },
+    // Synthetic parent — a portfolio holds total-market funds, but the *target* is
+    // always the cap split, so split parent targets on migration.
+    migrateSplit: true,
+  },
+  // Developed-ex-US, sliced by region (MSCI EAFE ≈ Europe 62 / Pacific 38). Held at
+  // the parent level by default (most holders own one broad fund like VXUS/VEA).
+  DEVELOPED_INTL: {
+    children: ['DEVELOPED_EUROPE', 'DEVELOPED_PACIFIC'],
+    defaultWeights: { DEVELOPED_EUROPE: 0.62, DEVELOPED_PACIFIC: 0.38 },
+  },
+  // Fixed income, sliced by sector. Anchored on the Bloomberg US Aggregate
+  // (Treasury ≈ ⅓, with MBS folded into US_TREASURY for v1), plus a muni sleeve
+  // (the taxable-account vehicle) and TIPS/INTL the Agg omits. Held at the parent
+  // level by default; sub-classing exists so munis place in taxable and the rest
+  // shelter in tax-advantaged.
+  FIXED_INCOME: {
+    children: ['US_TREASURY', 'US_CORP_BOND', 'MUNI_BOND', 'TIPS', 'INTL_BOND'],
+    defaultWeights: {
+      US_TREASURY: 0.35, US_CORP_BOND: 0.25, MUNI_BOND: 0.20, TIPS: 0.10, INTL_BOND: 0.10,
+    },
   },
   ALTERNATIVES: {
     children: ['CRYPTO', 'PRECIOUS_METALS'],

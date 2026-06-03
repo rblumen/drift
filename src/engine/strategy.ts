@@ -20,24 +20,46 @@ export const DEFAULT_STRATEGY: Strategy = {
     US_LARGE_CAP:     0.385,
     US_MID_CAP:       0.144,
     US_SMALL_CAP:     0.046,
+    // DEVELOPED_INTL held at the parent level (Europe/Pacific children stay 0 until
+    // the user splits or holds a regional fund — see CLASS_HIERARCHY.migrateSplit).
     DEVELOPED_INTL:   0.17,
+    DEVELOPED_EUROPE: 0.0,
+    DEVELOPED_PACIFIC: 0.0,
     EMERGING_INTL:    0.03,
+    // FIXED_INCOME held at the parent level; bond sub-classes stay 0 until opted into.
     FIXED_INCOME:     0.20,
+    US_TREASURY:      0.0,
+    US_CORP_BOND:     0.0,
+    MUNI_BOND:        0.0,
+    TIPS:             0.0,
+    INTL_BOND:        0.0,
+    // REAL_ESTATE — standalone top-level sleeve (REITs); off by default.
+    REAL_ESTATE:      0.0,
     ALTERNATIVES:     0.025,
     CRYPTO:           0.0,
     PRECIOUS_METALS:  0.0,
     CASH:             0.0,
   },
   placement: {
-    // FIXED_INCOME first — held as NY tax-free munis (e.g. MUNY) in taxable.
+    // FIXED_INCOME parent — held as NY tax-free munis (e.g. MUNY) in taxable.
     FIXED_INCOME:     ['TAXABLE'],
+    // Bond sub-classes: munis stay taxable; taxable-coupon sleeves shelter.
+    MUNI_BOND:        ['TAXABLE'],
+    US_TREASURY:      ['TAX_ADVANTAGED', 'TAXABLE'],
+    US_CORP_BOND:     ['TAX_ADVANTAGED'],
+    TIPS:             ['TAX_ADVANTAGED'],
+    INTL_BOND:        ['TAX_ADVANTAGED'],
     // Alternatives — crypto/metals; collectibles tax treatment favors IRA.
     ALTERNATIVES:     ['TAX_ADVANTAGED'],
     CRYPTO:           ['TAX_ADVANTAGED'],
     PRECIOUS_METALS:  ['TAX_ADVANTAGED'],
+    // REITs — non-qualified dividends → shelter in tax-advantaged.
+    REAL_ESTATE:      ['TAX_ADVANTAGED'],
     // Equities prefer tax-advantaged; spill to taxable when capacity is exhausted.
     EMERGING_INTL:    ['TAX_ADVANTAGED', 'TAXABLE'],
     DEVELOPED_INTL:   ['TAX_ADVANTAGED', 'TAXABLE'],
+    DEVELOPED_EUROPE: ['TAX_ADVANTAGED', 'TAXABLE'],
+    DEVELOPED_PACIFIC: ['TAX_ADVANTAGED', 'TAXABLE'],
     US_TOTAL_MARKET:  ['TAX_ADVANTAGED', 'TAXABLE'],
     US_LARGE_CAP:     ['TAX_ADVANTAGED', 'TAXABLE'],
     US_MID_CAP:       ['TAX_ADVANTAGED', 'TAXABLE'],

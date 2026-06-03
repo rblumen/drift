@@ -1480,14 +1480,15 @@ function assertAllOnTarget(
 ) {
   const tol = strategy.toleranceAbs + 0.001; // tiny rounding buffer
   for (const ac of ALL_ASSET_CLASSES) {
+    const tgt = strategy.targets[ac] ?? 0;
     // Only check OOT classes â€” within-tolerance classes intentionally stay at current.
     const isWithinTolNow =
-      Math.abs(r.currentWeights[ac] - strategy.targets[ac]) <= strategy.toleranceAbs;
+      Math.abs(r.currentWeights[ac] - tgt) <= strategy.toleranceAbs;
     if (isWithinTolNow) continue;
     expect(
-      Math.abs(r.projectedWeights[ac] - strategy.targets[ac]),
+      Math.abs(r.projectedWeights[ac] - tgt),
       `${ac}: projected ${(r.projectedWeights[ac] * 100).toFixed(2)}% should be within ` +
-      `${(strategy.toleranceAbs * 100).toFixed(1)}% of target ${(strategy.targets[ac] * 100).toFixed(2)}%`,
+      `${(strategy.toleranceAbs * 100).toFixed(1)}% of target ${(tgt * 100).toFixed(2)}%`,
     ).toBeLessThanOrEqual(tol);
   }
   expect(
@@ -1595,10 +1596,11 @@ describe('post-trade accuracy â€” stress scenarios', () => {
 
     // Classes with no PROJECTED_OFF_TARGET flag must be within tolerance.
     for (const ac of ALL_ASSET_CLASSES) {
+      const tgt = strategy.targets[ac] ?? 0;
       const hasPOT = r.flags.some(f => f.kind === 'PROJECTED_OFF_TARGET' && f.assetClass === ac);
-      const withinNow = Math.abs(r.currentWeights[ac] - strategy.targets[ac]) <= strategy.toleranceAbs;
+      const withinNow = Math.abs(r.currentWeights[ac] - tgt) <= strategy.toleranceAbs;
       if (!hasPOT && !withinNow) {
-        expect(Math.abs(r.projectedWeights[ac] - strategy.targets[ac])).toBeLessThanOrEqual(strategy.toleranceAbs + 0.001);
+        expect(Math.abs(r.projectedWeights[ac] - tgt)).toBeLessThanOrEqual(strategy.toleranceAbs + 0.001);
       }
     }
   });

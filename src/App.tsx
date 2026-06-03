@@ -103,8 +103,8 @@ export default function App() {
 
   const resolvedTrades = useMemo(() => {
     const classify = makeClassifier(tickerOverrides);
-    return resolveTradeVehicles(result.trades, positions, decompositions, classify);
-  }, [result.trades, positions, decompositions, tickerOverrides]);
+    return resolveTradeVehicles(result.trades, positions, decompositions, classify, strategy.targets);
+  }, [result.trades, positions, decompositions, tickerOverrides, strategy.targets]);
 
   const unmappedCount = result.flags.filter(f => f.kind === 'UNMAPPED_HOLDING').length;
 
