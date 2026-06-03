@@ -1683,17 +1683,19 @@ describe('post-trade accuracy â€” stress scenarios', () => {
     }
   });
 
-  // â”€â”€ S7: minTradeUsd suppresses needed trade â†’ PROJECTED_OFF_TARGET â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  it('S7: minTradeUsd too large â€” PROJECTED_OFF_TARGET fires when adjustment is suppressed', () => {
-    // $10k portfolio; LC needs $500 sell, FI needs $500 buy.
-    // minTradeUsd = $1000 â†’ both trades filtered. Portfolio stays at current.
-    // |50% - 55%| = 5% > toleranceAbs (0%) â†’ PROJECTED_OFF_TARGET for both.
+  // -- S7: minTradeUsd larger than the needed trade -> drift tolerated, no flag -----
+  it('S7: minTradeUsd larger than the needed trade -- residual drift is tolerated, no PROJECTED_OFF_TARGET', () => {
+    // $10k portfolio; LC needs a $500 sell, FI a $500 buy. minTradeUsd = $1000, so
+    // both trades fall below the threshold and are filtered out. Because the user has
+    // opted out of trades smaller than $1000, the residual <$1000 drift is not
+    // actionable and is tolerated rather than flagged (issue #57). |50% - 55%| = 5%
+    // exceeds the 0% tolerance band, but the $500 dollar gap is below minTradeUsd.
     const accts: Account[] = [
       { id: 'ira', name: 'IRA', institution: 'Fidelity', type: 'TRADITIONAL_IRA' },
     ];
     const positions: Position[] = [
-      { accountId: 'ira', ticker: 'FXAIX', marketValue: 5_500 },  // LC â€” 55%, target 50%
-      { accountId: 'ira', ticker: 'MUNY',  marketValue: 4_500 },  // FI â€” 45%, target 50%
+      { accountId: 'ira', ticker: 'FXAIX', marketValue: 5_500 },  // LC -- 55%, target 50%
+      { accountId: 'ira', ticker: 'MUNY',  marketValue: 4_500 },  // FI -- 45%, target 50%
     ];
     const strategy = {
       ...ZERO_TOL_STRATEGY,
@@ -1706,8 +1708,9 @@ describe('post-trade accuracy â€” stress scenarios', () => {
     };
     const r = rebalance(accts, positions, strategy);
     expect(r.trades).toHaveLength(0);  // both trades suppressed
-    expect(r.flags.some(f => f.kind === 'PROJECTED_OFF_TARGET' && f.assetClass === 'US_LARGE_CAP')).toBe(true);
-    expect(r.flags.some(f => f.kind === 'PROJECTED_OFF_TARGET' && f.assetClass === 'FIXED_INCOME')).toBe(true);
+    // The drift each class would need to close ($500) is below minTradeUsd, so the
+    // engine cannot act on it and does not flag it.
+    expect(r.flags.filter(f => f.kind === 'PROJECTED_OFF_TARGET')).toHaveLength(0);
   });
 
   // â”€â”€ S8: locked account â€” unlocked accounts reach target, locked stays put â”€â”€â”€â”€â”€
