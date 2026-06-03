@@ -17,7 +17,7 @@
 
 import Papa from 'papaparse';
 import { parseCsv, parseMoney } from '../csv';
-import type { CsvParseResult } from '../csv';
+import type { CsvParseResult, DiscoveredAccount, MultiAccountResult } from '../csv';
 import { positionSchema } from '../schema';
 import type { Position } from '../../engine/types';
 
@@ -62,26 +62,11 @@ export function parseFidelityCsv(csvText: string, accountId: string): CsvParseRe
 
 // ── Multi-account adapter ─────────────────────────────────────────────────────
 
-/** One account discovered inside a Fidelity CSV. */
-export interface FidelityDiscoveredAccount {
-  accountNumber: string;
-  accountName:   string;
-}
-
-/**
- * Result of parsing a Fidelity CSV that may contain multiple accounts.
- *
- * `positionsByNumber` keys are the raw Fidelity account numbers (e.g.
- * "X12-345678"). Each position has `accountId` set to that account number as
- * a placeholder — callers must remap to real app account IDs before storing.
- */
-export interface FidelityMultiResult {
-  /** Accounts found in the file, in order of first appearance. */
-  discovered:        FidelityDiscoveredAccount[];
-  /** Positions grouped by Fidelity account number (placeholder accountId). */
-  positionsByNumber: Record<string, Position[]>;
-  errors:            string[];
-}
+// Fidelity reuses the shared multi-account shape. `positionsByNumber` keys are
+// the raw Fidelity account numbers (e.g. "X12-345678"); each position's
+// `accountId` is that number as a placeholder until the caller remaps it.
+export type FidelityDiscoveredAccount = DiscoveredAccount;
+export type FidelityMultiResult       = MultiAccountResult;
 
 export function parseFidelityMultiCsv(csvText: string): FidelityMultiResult {
   const normalised = stripFooter(csvText);   // also normalises \r\n → \n

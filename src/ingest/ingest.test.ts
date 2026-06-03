@@ -1,12 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { parsePosition, parseStrategy, safeParseStrategy, safeParsePosition, parsePortfolio, parseAccount } from './schema';
 import { parseCsv, parseMoney } from './csv';
-import { parseSchwabCsv } from './adapters/schwab';
+import { parseSchwabCsv, parseSchwabMultiCsv } from './adapters/schwab';
 import { parseFidelityCsv, parseFidelityMultiCsv } from './adapters/fidelity';
 import { parseEmpowerCsv, parseEmpowerTotals, EMPOWER_TICKER } from './adapters/empower';
 import { DEFAULT_STRATEGY } from '../engine/strategy';
 
 import schwabCsv from '../data/fixtures/schwab-sample.csv?raw';
+import schwabMultiCsv from '../data/fixtures/schwab-multi-sample.csv?raw';
 import fidelityCsv from '../data/fixtures/fidelity-sample.csv?raw';
 import fidelityMultiCsv from '../data/fixtures/fidelity-multi-sample.csv?raw';
 import empowerCsv from '../data/fixtures/empower-sample.csv?raw';
@@ -245,6 +246,69 @@ describe('parseSchwabCsv', () => {
     const r = parseSchwabCsv(schwabCsv, 'schwab-taxable');
     const muny = r.positions.find(p => p.ticker === 'MUNY');
     expect(muny?.costBasis).toBeCloseTo(198_000, 0);
+  });
+});
+
+// ─── Schwab multi-account (all-accounts) adapter ──────────────────────────────
+
+describe('parseSchwabMultiCsv', () => {
+  it('discovers three accounts from the all-accounts fixture', () => {
+    const r = parseSchwabMultiCsv(schwabMultiCsv);
+    expect(r.discovered).toHaveLength(3);
+    expect(r.errors).toHaveLength(0);
+  });
+
+  it('preserves account order of first appearance', () => {
+    const r = parseSchwabMultiCsv(schwabMultiCsv);
+    expect(r.discovered[0].accountNumber).toBe('...001');
+    expect(r.discovered[1].accountNumber).toBe('...985');
+    expect(r.discovered[2].accountNumber).toBe('...159');
+  });
+
+  it('parses account names (underscores → spaces, suffix stripped)', () => {
+    const r = parseSchwabMultiCsv(schwabMultiCsv);
+    expect(r.discovered[0].accountName).toBe('Roth Contributory IRA');
+    expect(r.discovered[1].accountName).toBe('Comm Prop with Right of Survivorship');
+    expect(r.discovered[2].accountName).toBe('Contributory');
+  });
+
+  it('groups positions under each account, skipping footer rows', () => {
+    const r = parseSchwabMultiCsv(schwabMultiCsv);
+    // ...001: SCHF, SWTSX, plus SCHWAB_CASH
+    expect(r.positionsByNumber['...001'].map(p => p.ticker).sort())
+      .toEqual(['SCHF', 'SCHWAB_CASH', 'SWTSX']);
+    // ...985: MUNY, SWTSX, SWYXX, plus SCHWAB_CASH
+    expect(r.positionsByNumber['...985']).toHaveLength(4);
+  });
+
+  it('captures each account\'s free cash as SCHWAB_CASH (#54 + #55)', () => {
+    const r = parseSchwabMultiCsv(schwabMultiCsv);
+    const cash985 = r.positionsByNumber['...985'].find(p => p.ticker === 'SCHWAB_CASH');
+    expect(cash985?.marketValue).toBeCloseTo(127_223.79, 2);
+    // A tiny residual-cash account is still captured.
+    const cash159 = r.positionsByNumber['...159'].find(p => p.ticker === 'SCHWAB_CASH');
+    expect(cash159?.marketValue).toBeCloseTo(0.02, 2);
+  });
+
+  it('parses market value and cost basis per position', () => {
+    const r = parseSchwabMultiCsv(schwabMultiCsv);
+    const muny = r.positionsByNumber['...985'].find(p => p.ticker === 'MUNY');
+    expect(muny?.marketValue).toBeCloseTo(65_173.50, 2);
+    expect(muny?.costBasis).toBeCloseTo(64_695.15, 2);
+  });
+
+  it('uses the masked account number as placeholder accountId', () => {
+    const r = parseSchwabMultiCsv(schwabMultiCsv);
+    expect(r.positionsByNumber['...001'].every(p => p.accountId === '...001')).toBe(true);
+  });
+
+  it('handles a single-account export (one discovered account)', () => {
+    const r = parseSchwabMultiCsv(schwabCsv);
+    expect(r.discovered).toHaveLength(1);
+    expect(r.discovered[0].accountName).toBe('XXXX-1234');
+    const tickers = r.positionsByNumber[r.discovered[0].accountNumber].map(p => p.ticker);
+    expect(tickers).toContain('MUNY');
+    expect(tickers).toContain('SCHWAB_CASH');
   });
 });
 
