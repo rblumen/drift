@@ -20,6 +20,16 @@ const SCHWAB_COLUMNS = {
 
 const SCHWAB_SKIP_ROWS = 1;
 
+// Schwab reports swept free cash on a "Cash & Cash Investments" row whose Symbol
+// column is that label rather than a tradable ticker. Re-label it to SCHWAB_CASH
+// (mapped to the CASH asset class in assetclass-map.json) so the balance is
+// captured instead of dropped (#54).
+const SCHWAB_CASH_LABEL  = 'Cash & Cash Investments';
+const SCHWAB_CASH_TICKER = 'SCHWAB_CASH';
+
 export function parseSchwabCsv(csvText: string, accountId: string): CsvParseResult {
-  return parseCsv(csvText, accountId, SCHWAB_COLUMNS, { skipRows: SCHWAB_SKIP_ROWS });
+  return parseCsv(csvText, accountId, SCHWAB_COLUMNS, {
+    skipRows: SCHWAB_SKIP_ROWS,
+    cashRow: { label: SCHWAB_CASH_LABEL, ticker: SCHWAB_CASH_TICKER },
+  });
 }

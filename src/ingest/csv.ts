@@ -27,11 +27,17 @@ export function parseMoney(raw: string | undefined): number {
 // skipRows: strip this many lines from the top before passing to papaparse.
 // Use it for broker files that prepend metadata rows before the column header.
 // papaparse's skipEmptyLines handles blank lines within the remaining text.
+//
+// cashRow: a broker's swept free-cash line (e.g. Schwab's "Cash & Cash
+// Investments") carries a real dollar balance but its label column isn't a
+// tradable ticker, so the space/placeholder filter below would drop it (#54).
+// When a row's ticker equals cashRow.label, re-label it to cashRow.ticker — a
+// synthetic symbol that classifies as CASH — so the balance is preserved.
 export function parseCsv(
   csvText: string,
   accountId: string,
   columnMap: ColumnMap,
-  opts?: { skipRows?: number },
+  opts?: { skipRows?: number; cashRow?: { label: string; ticker: string } },
 ): CsvParseResult {
   // Normalise line endings before splitting so skipRows works on Windows exports.
   const normalised = csvText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
@@ -52,11 +58,17 @@ export function parseCsv(
     .map(e => `CSV parse error: ${e.message}`);
 
   for (const [i, row] of data.entries()) {
+    const rawTicker   = row[columnMap.ticker]?.trim();
+    // Swept free-cash row: re-label to the synthetic CASH ticker (#54).
+    const isCashRow   = !!opts?.cashRow && rawTicker === opts.cashRow.label;
     // Strip broker footnote markers (e.g. "FDRXX**" → "FDRXX").
-    const ticker      = row[columnMap.ticker]?.trim().replace(/\*+$/, '');
+    const ticker      = isCashRow ? opts!.cashRow!.ticker : rawTicker?.replace(/\*+$/, '');
     const marketValue = parseMoney(row[columnMap.marketValue]);
     const price       = columnMap.price ? parseMoney(row[columnMap.price]) : undefined;
-    const description = columnMap.description ? row[columnMap.description]?.trim() : undefined;
+    // The cash row's description column is a placeholder ('--'); use the label.
+    const description = isCashRow
+      ? opts!.cashRow!.label
+      : columnMap.description ? row[columnMap.description]?.trim() : undefined;
     const costBasis   = columnMap.costBasis ? parseMoney(row[columnMap.costBasis]) : undefined;
 
     // Skip subtotal/footer rows: no ticker, placeholder '--', NaN value, $0 or
