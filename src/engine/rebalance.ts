@@ -1177,20 +1177,49 @@ export function rebalance(
   //
   // For every class that was out-of-tolerance before trades, check that the
   // projected weight now falls within the effective per-class tolerance of the
-  // target. If it doesn't, a hard constraint prevented the engine from reaching
-  // the target:
+  // *reachable* target. If it doesn't, a hard constraint prevented the engine
+  // from reaching it:
   //   • NO_ELIGIBLE_ACCOUNT — no account can hold this class
   //   • Locked positions exceed the class target — cannot reduce below the lock
   //   • minTradeUsd suppressed the needed trade — threshold is too large
   //
-  // Emits PROJECTED_OFF_TARGET so the UI can surface this visibly rather than
-  // leaving the user to notice the "After trades" column is still off.
+  // The reachable target is the nominal target × `scale`, not the nominal target
+  // itself. When within-tolerance classes are frozen (Principle 5), the engine
+  // distributes the remaining free capacity across out-of-tolerance classes in
+  // proportion to their targets (Step 5), so each fully-placeable class settles
+  // at target × scale. Comparing against the nominal target would spuriously flag
+  // a class whose only "drift" is this expected freeze artifact — e.g. the sole
+  // OOT class can't be rebalanced because the offsetting classes it would trade
+  // against are all within tolerance and untouchable. That is not a hard
+  // constraint, so it must not raise the "target not reachable" banner (issue #57).
+  //
+  // A deviation only flags when it is BOTH out of band AND large enough to act on:
+  //   1. |projected − reachableTarget| exceeds the per-class 5/25 effective band, and
+  //   2. correcting it would take a trade of at least `minTradeUsd`.
+  // The second gate reuses the user's own "ignore trades below" threshold to ignore
+  // small absolute deviations. A class targeted at 0% makes the relative band collapse
+  // to 0.25 × 0 = 0, so any residual the engine can't trade away — a sub-minTradeUsd
+  // sweep, float noise, a tiny locked sliver — would otherwise flag even though the
+  // engine correctly drove the class toward zero (issue #57). Since the user has opted
+  // out of trades that small, a residual below the threshold is expected, not a hard
+  // constraint, so it raises no banner. Deviations at or above the threshold that the
+  // engine still couldn't close (no eligible account, a locked position above target,
+  // or a minTradeUsd set large enough to block a genuinely material trade) do flag.
+  //
+  // Emits PROJECTED_OFF_TARGET so the UI can surface genuine constraints visibly
+  // rather than leaving the user to notice the "After trades" column is still off.
   // In TA mode the check operates on TA projected weights vs targets (targets
-  // are interpreted as TA weights when tax adjustment is enabled).
+  // are interpreted as TA weights when tax adjustment is enabled); `scale` and
+  // `householdValue` are in the same space, so target × scale and the dollar
+  // conversion stay consistent with the trades' minTradeUsd filter.
   const checkProjected = (taEnabled && taProjectedWeights) ? taProjectedWeights : nominalProjectedWeights;
   for (const ac of ALL_ASSET_CLASSES) {
     if (withinTolerance.has(ac)) continue;
-    if (Math.abs(checkProjected[ac] - strategy.targets[ac]) > effectiveTolerance(ac, strategy)) {
+    const reachableTarget = strategy.targets[ac] * scale;
+    const deviation = Math.abs(checkProjected[ac] - reachableTarget);
+    const outOfBand = deviation > effectiveTolerance(ac, strategy);
+    const actionable = deviation * householdValue >= strategy.minTradeUsd;
+    if (outOfBand && actionable) {
       flags.push({
         kind: 'PROJECTED_OFF_TARGET',
         assetClass: ac,
