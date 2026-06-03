@@ -1,0 +1,28 @@
+{
+  "name": "locked-account-drags-others-compensate",
+  "description": "Goal 4 (edge case): a locked account over-weight in one class is treated as immovable, and the unlocked accounts compensate so the household still hits the class target",
+  "principle": 4,
+  "accounts": [
+    { "id": "schwab", "name": "Schwab Brokerage", "institution": "Schwab", "type": "TAXABLE", "newCash": 200000 },
+    { "id": "ira", "name": "Fidelity Trad IRA", "institution": "Fidelity", "type": "TRADITIONAL_IRA", "locked": true },
+    { "id": "k401", "name": "Empower 401k", "institution": "Empower", "type": "FOUR_OH_ONE_K", "newCash": 500000 }
+  ],
+  "holdings": [
+    { "accountId": "ira", "ticker": "FZILX", "marketValue": 100000 }
+  ],
+  "strategy": {
+    "targets": {
+      "US_TOTAL_MARKET": 0.0, "US_LARGE_CAP": 0.5, "DEVELOPED_INTL": 0.17, "EMERGING_INTL": 0.0,
+      "FIXED_INCOME": 0.25, "ALTERNATIVES": 0.08, "CASH": 0.0
+    },
+    "placement": {},
+    "toleranceAbs": 0.0,
+    "toleranceRel": 0.25,
+    "minTradeUsd": 250
+  },
+  "expected": {
+    "projectedWeights": { "DEVELOPED_INTL": 0.17 },
+    "netByAccount": { "schwab": 200000, "k401": 500000 },
+    "tradeCountByAccount": { "ira": 0 }
+  }
+}

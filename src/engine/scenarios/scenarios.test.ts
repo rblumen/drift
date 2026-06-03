@@ -115,6 +115,22 @@ function assertScenario(s: Scenario, result: RebalanceResult): void {
     }
   }
 
+  // ── absentFlags — none of these may be emitted ────────────────────────────
+  if (expected.absentFlags) {
+    for (const ef of expected.absentFlags) {
+      const hit = (result.flags as unknown as Record<string, unknown>[]).find(af =>
+        flagMatches(af, ef),
+      );
+      if (hit) {
+        throw new Error(
+          `Flag should be absent but was emitted — ${s.description}\n` +
+            `  forbidden: ${JSON.stringify(ef)}\n` +
+            `  actual: ${JSON.stringify(hit)}`,
+        );
+      }
+    }
+  }
+
   // ── projectedWeights — partial (only listed classes) ──────────────────────
   if (expected.projectedWeights) {
     const want: Record<string, number> = {};
