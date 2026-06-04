@@ -4,6 +4,10 @@ import { parseCsv, parseMoney } from './csv';
 import { parseSchwabCsv, parseSchwabMultiCsv } from './adapters/schwab';
 import { parseFidelityCsv, parseFidelityMultiCsv } from './adapters/fidelity';
 import { parseEmpowerCsv, parseEmpowerTotals, EMPOWER_TICKER } from './adapters/empower';
+import { parseVanguardCsv, parseVanguardMultiCsv } from './adapters/vanguard';
+import { parseEtradeCsv } from './adapters/etrade';
+import { parseMerrillCsv, parseMerrillMultiCsv } from './adapters/merrill';
+import { detectFormat } from './detect';
 import { DEFAULT_STRATEGY } from '../engine/strategy';
 
 import schwabCsv from '../data/fixtures/schwab-sample.csv?raw';
@@ -11,6 +15,11 @@ import schwabMultiCsv from '../data/fixtures/schwab-multi-sample.csv?raw';
 import fidelityCsv from '../data/fixtures/fidelity-sample.csv?raw';
 import fidelityMultiCsv from '../data/fixtures/fidelity-multi-sample.csv?raw';
 import empowerCsv from '../data/fixtures/empower-sample.csv?raw';
+import vanguardCsv from '../data/fixtures/vanguard-sample.csv?raw';
+import vanguardMultiCsv from '../data/fixtures/vanguard-multi-sample.csv?raw';
+import etradeCsv from '../data/fixtures/etrade-sample.csv?raw';
+import merrillCsv from '../data/fixtures/merrill-sample.csv?raw';
+import merrillMultiCsv from '../data/fixtures/merrill-multi-sample.csv?raw';
 
 // ─── parseMoney ──────────────────────────────────────────────────────────────
 
@@ -508,5 +517,216 @@ describe('parseEmpowerTotals', () => {
     expect(classifyTicker('EMPOWER_FI')).toBe('FIXED_INCOME');
     expect(classifyTicker('EMPOWER_ALT')).toBe('ALTERNATIVES');
     expect(classifyTicker('EMPOWER_CASH')).toBe('CASH');
+  });
+});
+
+// ─── Vanguard adapter ─────────────────────────────────────────────────────────
+
+describe('parseVanguardCsv', () => {
+  it('returns four positions from the sample fixture', () => {
+    const r = parseVanguardCsv(vanguardCsv, 'vanguard-brokerage');
+    expect(r.positions).toHaveLength(4);
+    expect(r.errors).toHaveLength(0);
+  });
+
+  it('parses VTI market value, price, and description', () => {
+    const r = parseVanguardCsv(vanguardCsv, 'vanguard-brokerage');
+    const vti = r.positions.find(p => p.ticker === 'VTI');
+    expect(vti).toBeDefined();
+    expect(vti!.marketValue).toBeCloseTo(19_830.50, 2);
+    expect(vti!.price).toBeCloseTo(198.305, 3);
+    expect(vti!.description).toBe('VANGUARD TOTAL STOCK MARKET ETF');
+  });
+
+  it('captures the VMFXX money-market line (classifies as CASH)', async () => {
+    const r = parseVanguardCsv(vanguardCsv, 'vanguard-brokerage');
+    const cash = r.positions.find(p => p.ticker === 'VMFXX');
+    expect(cash?.marketValue).toBeCloseTo(1_500, 2);
+    const { classifyTicker } = await import('../engine/classify');
+    expect(classifyTicker('VMFXX')).toBe('CASH');
+  });
+
+  it('attaches the supplied accountId (trailing comma column ignored)', () => {
+    const r = parseVanguardCsv(vanguardCsv, 'vanguard-brokerage');
+    expect(r.positions.every(p => p.accountId === 'vanguard-brokerage')).toBe(true);
+  });
+
+  it('rejects the legacy mutual-fund export (no Symbol column)', () => {
+    const legacy = [
+      'Fund Account Number,Fund Name,Price,Shares,Total Value,',
+      '0584-12345678,Vanguard Total Bond Market Index Fund Admiral Shares,9.49,10,94.90,',
+    ].join('\n');
+    const r = parseVanguardCsv(legacy, 'vanguard-brokerage');
+    expect(r.positions).toHaveLength(0);
+    expect(r.errors[0]).toMatch(/legacy Vanguard mutual-fund/i);
+  });
+});
+
+describe('parseVanguardMultiCsv', () => {
+  it('discovers two accounts separated by a blank line', () => {
+    const r = parseVanguardMultiCsv(vanguardMultiCsv);
+    expect(r.discovered).toHaveLength(2);
+    expect(r.errors).toHaveLength(0);
+  });
+
+  it('preserves account order and falls back to the number as the name', () => {
+    const r = parseVanguardMultiCsv(vanguardMultiCsv);
+    expect(r.discovered[0].accountNumber).toBe('11112222');
+    // Vanguard's CSV has no account-name column, so name == number.
+    expect(r.discovered[0].accountName).toBe('11112222');
+    expect(r.discovered[1].accountNumber).toBe('33334444');
+  });
+
+  it('groups positions under each account', () => {
+    const r = parseVanguardMultiCsv(vanguardMultiCsv);
+    expect(r.positionsByNumber['11112222'].map(p => p.ticker).sort())
+      .toEqual(['VMFXX', 'VTI']);
+    expect(r.positionsByNumber['33334444'].map(p => p.ticker).sort())
+      .toEqual(['BND', 'VXUS']);
+  });
+
+  it('uses the account number as placeholder accountId', () => {
+    const r = parseVanguardMultiCsv(vanguardMultiCsv);
+    expect(r.positionsByNumber['33334444'].every(p => p.accountId === '33334444')).toBe(true);
+  });
+
+  it('single-account file returns one discovered account', () => {
+    const r = parseVanguardMultiCsv(vanguardCsv);
+    expect(r.discovered).toHaveLength(1);
+    expect(r.discovered[0].accountNumber).toBe('12345678');
+  });
+});
+
+// ─── E*TRADE adapter ──────────────────────────────────────────────────────────
+
+describe('parseEtradeCsv', () => {
+  it('finds the positions header past the variable-length preamble', () => {
+    const r = parseEtradeCsv(etradeCsv, 'etrade-brokerage');
+    // VTI, VXUS, ETRADE_CASH — the TOTAL and Generated-at rows are dropped.
+    expect(r.positions).toHaveLength(3);
+    expect(r.errors).toHaveLength(0);
+  });
+
+  it('parses VTI market value from the "Value $" column and price from "Last Price $"', () => {
+    const r = parseEtradeCsv(etradeCsv, 'etrade-brokerage');
+    const vti = r.positions.find(p => p.ticker === 'VTI');
+    expect(vti?.marketValue).toBeCloseTo(200_770, 0);
+    expect(vti?.price).toBeCloseTo(200.77, 2);
+  });
+
+  it('drops the TOTAL subtotal row', () => {
+    const r = parseEtradeCsv(etradeCsv, 'etrade-brokerage');
+    expect(r.positions.some(p => p.ticker === 'TOTAL')).toBe(false);
+  });
+
+  it('captures the CASH sweep row as ETRADE_CASH (classifies as CASH)', async () => {
+    const r = parseEtradeCsv(etradeCsv, 'etrade-brokerage');
+    const cash = r.positions.find(p => p.ticker === 'ETRADE_CASH');
+    expect(cash?.marketValue).toBeCloseTo(1_225, 0);
+    const { classifyTicker } = await import('../engine/classify');
+    expect(classifyTicker('ETRADE_CASH')).toBe('CASH');
+  });
+
+  it('does not mistake the preamble filter row (Symbol,Security type(s)) for the header', () => {
+    const r = parseEtradeCsv(etradeCsv, 'etrade-brokerage');
+    expect(r.positions.map(p => p.ticker).sort()).toEqual(['ETRADE_CASH', 'VTI', 'VXUS']);
+  });
+
+  it('errors clearly when no positions header is present', () => {
+    const r = parseEtradeCsv('just,some,preamble\nwith,no,header', 'etrade-brokerage');
+    expect(r.positions).toHaveLength(0);
+    expect(r.errors[0]).toMatch(/could not find the positions header/i);
+  });
+});
+
+// ─── Merrill Edge adapter ─────────────────────────────────────────────────────
+
+describe('parseMerrillCsv', () => {
+  it('returns three positions from the sample fixture', () => {
+    const r = parseMerrillCsv(merrillCsv, 'merrill-brokerage');
+    expect(r.positions).toHaveLength(3);
+    expect(r.errors).toHaveLength(0);
+  });
+
+  it('parses value (commas stripped), price, and description', () => {
+    const r = parseMerrillCsv(merrillCsv, 'merrill-brokerage');
+    const vti = r.positions.find(p => p.ticker === 'VTI');
+    expect(vti?.marketValue).toBeCloseTo(19_830, 0);
+    expect(vti?.price).toBeCloseTo(198.30, 2);
+    expect(vti?.description).toBe('VANGUARD TOTAL STOCK MARKET ETF');
+  });
+
+  it('attaches the supplied accountId', () => {
+    const r = parseMerrillCsv(merrillCsv, 'merrill-brokerage');
+    expect(r.positions.every(p => p.accountId === 'merrill-brokerage')).toBe(true);
+  });
+});
+
+describe('parseMerrillMultiCsv', () => {
+  it('discovers two accounts by Account #', () => {
+    const r = parseMerrillMultiCsv(merrillMultiCsv);
+    expect(r.discovered).toHaveLength(2);
+    expect(r.errors).toHaveLength(0);
+  });
+
+  it('captures the Account Nickname as the account name', () => {
+    const r = parseMerrillMultiCsv(merrillMultiCsv);
+    expect(r.discovered[0]).toMatchObject({ accountNumber: '99X-11111', accountName: 'Joint Brokerage' });
+    expect(r.discovered[1]).toMatchObject({ accountNumber: '99X-22222', accountName: 'Roth IRA' });
+  });
+
+  it('groups positions under each account', () => {
+    const r = parseMerrillMultiCsv(merrillMultiCsv);
+    expect(r.positionsByNumber['99X-11111'].map(p => p.ticker).sort()).toEqual(['BND', 'VTI']);
+    expect(r.positionsByNumber['99X-22222'].map(p => p.ticker).sort()).toEqual(['VWIUX', 'VXUS']);
+  });
+
+  it('single-account file returns one discovered account', () => {
+    const r = parseMerrillMultiCsv(merrillCsv);
+    expect(r.discovered).toHaveLength(1);
+    expect(r.discovered[0].accountNumber).toBe('99X-12345');
+  });
+});
+
+// ─── Content-based format detection ──────────────────────────────────────────
+
+describe('detectFormat', () => {
+  it('detects Schwab (single and all-accounts exports)', () => {
+    expect(detectFormat(schwabCsv)).toBe('schwab');
+    expect(detectFormat(schwabMultiCsv)).toBe('schwab');
+  });
+
+  it('detects Fidelity (single and multi-account exports)', () => {
+    expect(detectFormat(fidelityCsv)).toBe('fidelity');
+    expect(detectFormat(fidelityMultiCsv)).toBe('fidelity');
+  });
+
+  it('detects Vanguard (single and multi-account exports)', () => {
+    expect(detectFormat(vanguardCsv)).toBe('vanguard');
+    expect(detectFormat(vanguardMultiCsv)).toBe('vanguard');
+  });
+
+  it('detects E*TRADE past its preamble', () => {
+    expect(detectFormat(etradeCsv)).toBe('etrade');
+  });
+
+  it('detects Merrill Edge (single and multi-account exports)', () => {
+    expect(detectFormat(merrillCsv)).toBe('merrill');
+    expect(detectFormat(merrillMultiCsv)).toBe('merrill');
+  });
+
+  it('detects Empower transposed layout', () => {
+    expect(detectFormat(empowerCsv)).toBe('empower');
+  });
+
+  it('returns null for an unrecognised file', () => {
+    expect(detectFormat('Foo,Bar,Baz\n1,2,3')).toBeNull();
+    expect(detectFormat('')).toBeNull();
+  });
+
+  it('does not confuse Vanguard and Fidelity (both carry "Account Number")', () => {
+    // Vanguard uses "Investment Name"/"Total Value"; Fidelity "Description"/"Current Value".
+    expect(detectFormat(vanguardCsv)).not.toBe('fidelity');
+    expect(detectFormat(fidelityCsv)).not.toBe('vanguard');
   });
 });

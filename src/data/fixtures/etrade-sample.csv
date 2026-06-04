@@ -1,0 +1,17 @@
+Account Summary,,,,,,,,,
+Account,Net Account Value,Total Gain $,Total Gain %,Day's Gain Unrealized $,Day's Gain Unrealized %,Available For Withdrawal,Marginable Securities,Non-Marginable Securities,
+"Individual Brokerage -####",230000.00,30000.00,15.0,-500.00,-0.2,230000.00,230000.00,0.0,
+,,,,,,,,,
+,,,,,,,,,
+View Summary - All Positions,,,,,,,,,
+Filters applied: ,,,,,,,,,
+Symbol,Security type(s),Sort by,Sort order,,,,,,
+,All,Symbol,Asc,,,,,,
+,,,,,,,,,
+Symbol,Last Price $,Change $,Change %,Quantity,Price Paid $,Day's Gain $,Total Gain $,Total Gain %,Value $
+VTI,200.77,-4.31,-2.1,1000.0000,180.8802,-1017.61,3326.14,14.40,200770.00
+VXUS,56.01,0.10,0.18,500.0000,52.00,50.00,2005.00,7.71,28005.00
+CASH,,,,,,,,,1225.00
+TOTAL,,,,,,,,,230000.00
+,,,,,,,,,
+Generated at Feb 14 2026 03:12 PM ET,,,,,,,,,
