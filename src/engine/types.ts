@@ -284,4 +284,12 @@ export type Flag =
    *  tax-adjusted allocation is enabled. The engine fell back to B = V (no
    *  haircut, conservative) for this position. Filling in basis will produce a
    *  more accurate after-tax view and may shift the recommended trades. */
-  | { kind: 'MISSING_COST_BASIS'; accountId: string; ticker: string };
+  | { kind: 'MISSING_COST_BASIS'; accountId: string; ticker: string }
+  /** Wash sale (#5): the engine recommends selling an asset class in a taxable
+   *  account while buying the same class in another account in the same run.
+   *  If the taxable sale realizes a loss, the IRS wash-sale rule disallows it
+   *  (applies across IRA/401k and spouse accounts too). Emitted conservatively:
+   *  suppressed only when cost basis is known for the sold class and the sale is
+   *  a gain (no loss to disallow); kept when basis is missing/implausible. One
+   *  flag per taxable-account × class × buy-account triple. */
+  | { kind: 'WASH_SALE_RISK'; taxableAccountId: string; assetClass: AssetClass; buyAccountId: string };

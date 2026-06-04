@@ -1,0 +1,34 @@
+{
+  "name": "issue-5-wash-sale-cross-account",
+  "description": "Issue #5: a taxable account restricted to fixed income still holds an equity fund; the engine sells it in taxable and rebuys the same class in the IRA, so WASH_SALE_RISK fires for that class with the taxable sell account and the IRA buy account",
+  "principle": "Issue #5 — wash-sale cross-account warning",
+  "accounts": [
+    { "id": "taxable", "name": "Schwab Brokerage", "institution": "Schwab", "type": "TAXABLE", "allowedAssetClasses": ["FIXED_INCOME"] },
+    { "id": "ira", "name": "Traditional IRA", "institution": "Fidelity", "type": "TRADITIONAL_IRA" }
+  ],
+  "holdings": [
+    { "accountId": "taxable", "ticker": "FXAIX", "marketValue": 10000 },
+    { "accountId": "taxable", "ticker": "FXNAX", "marketValue": 10000 },
+    { "accountId": "ira", "ticker": "FXAIX", "marketValue": 30000 },
+    { "accountId": "ira", "ticker": "FXNAX", "marketValue": 50000 }
+  ],
+  "strategy": {
+    "targets": { "US_TOTAL_MARKET": 0.0, "US_LARGE_CAP": 0.6, "DEVELOPED_INTL": 0.0, "EMERGING_INTL": 0.0, "FIXED_INCOME": 0.4, "ALTERNATIVES": 0.0, "CASH": 0.0 },
+    "placement": {},
+    "toleranceAbs": 0.0,
+    "toleranceRel": 0.25,
+    "minTradeUsd": 0,
+    "preferTaxAdvantagedRebalance": false
+  },
+  "expected": {
+    "requiredTrades": [
+      { "accountId": "taxable", "assetClass": "US_LARGE_CAP", "deltaUsd": -10000, "inTaxableAccount": true },
+      { "accountId": "ira", "assetClass": "US_LARGE_CAP", "deltaUsd": 30000, "inTaxableAccount": false }
+    ],
+    "flags": [
+      { "kind": "WASH_SALE_RISK", "taxableAccountId": "taxable", "assetClass": "US_LARGE_CAP", "buyAccountId": "ira" }
+    ],
+    "netByAccount": { "taxable": 0, "ira": 0 },
+    "projectedWeights": { "US_LARGE_CAP": 0.6, "FIXED_INCOME": 0.4 }
+  }
+}

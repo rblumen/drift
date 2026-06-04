@@ -1,0 +1,33 @@
+{
+  "name": "issue-5-wash-sale-suppressed-on-gain",
+  "description": "Issue #5: identical cross-account same-class sell/buy as the risk scenario, but the taxable equity lot has a known cost basis below market value (a gain). With no loss to disallow, WASH_SALE_RISK is suppressed while the trades are unchanged",
+  "principle": "Issue #5 — wash-sale cross-account warning",
+  "accounts": [
+    { "id": "taxable", "name": "Schwab Brokerage", "institution": "Schwab", "type": "TAXABLE", "allowedAssetClasses": ["FIXED_INCOME"] },
+    { "id": "ira", "name": "Traditional IRA", "institution": "Fidelity", "type": "TRADITIONAL_IRA" }
+  ],
+  "holdings": [
+    { "accountId": "taxable", "ticker": "FXAIX", "marketValue": 10000, "costBasis": 4000 },
+    { "accountId": "taxable", "ticker": "FXNAX", "marketValue": 10000 },
+    { "accountId": "ira", "ticker": "FXAIX", "marketValue": 30000 },
+    { "accountId": "ira", "ticker": "FXNAX", "marketValue": 50000 }
+  ],
+  "strategy": {
+    "targets": { "US_TOTAL_MARKET": 0.0, "US_LARGE_CAP": 0.6, "DEVELOPED_INTL": 0.0, "EMERGING_INTL": 0.0, "FIXED_INCOME": 0.4, "ALTERNATIVES": 0.0, "CASH": 0.0 },
+    "placement": {},
+    "toleranceAbs": 0.0,
+    "toleranceRel": 0.25,
+    "minTradeUsd": 0,
+    "preferTaxAdvantagedRebalance": false
+  },
+  "expected": {
+    "requiredTrades": [
+      { "accountId": "taxable", "assetClass": "US_LARGE_CAP", "deltaUsd": -10000, "inTaxableAccount": true },
+      { "accountId": "ira", "assetClass": "US_LARGE_CAP", "deltaUsd": 30000, "inTaxableAccount": false }
+    ],
+    "absentFlags": [
+      { "kind": "WASH_SALE_RISK" }
+    ],
+    "netByAccount": { "taxable": 0, "ira": 0 }
+  }
+}

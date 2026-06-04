@@ -12,6 +12,7 @@ import {
   positionTaxFactor,
   contributionTaxFactor,
   findMissingCostBasis,
+  taxableClassSaleIsKnownGain,
 } from './taxAdjust';
 
 // ── Tax-adjusted allocation (issue #7) ───────────────────────────────────────
@@ -1142,6 +1143,35 @@ export function rebalance(
   for (const trade of trades) {
     if (trade.deltaUsd < 0 && trade.inTaxableAccount && trade.assetClass !== 'CASH') {
       flags.push({ kind: 'TAXABLE_SALE', accountId: trade.accountId, assetClass: trade.assetClass, amountUsd: Math.abs(trade.deltaUsd) });
+    }
+  }
+
+  // Wash-sale cross-account warning (issue #5). Selling an asset class at a loss
+  // in a taxable account while buying the *same* class in any other account in the
+  // same run disallows the loss under the IRS wash-sale rule (across IRA/401k and
+  // spouse accounts too). We flag conservatively: emit unless cost basis is known
+  // for the sold class and the sale is a gain (no loss to disallow). Exact-class
+  // match only — parent/child "substantially identical" matching is out of scope
+  // for v1. Uses originalPositions (nominal basis & value). De-duped to one flag
+  // per taxable-account × class × buy-account triple.
+  const washSeen = new Set<string>();
+  for (const sell of trades) {
+    if (sell.deltaUsd >= 0 || !sell.inTaxableAccount || sell.assetClass === 'CASH') continue;
+    if (taxableClassSaleIsKnownGain(sell.accountId, sell.assetClass, originalPositions, classify, decompositions)) {
+      continue;   // realizes a gain — no loss for the wash-sale rule to disallow
+    }
+    for (const buy of trades) {
+      if (buy.deltaUsd <= 0 || buy.assetClass !== sell.assetClass) continue;
+      if (buy.accountId === sell.accountId) continue;   // same account — not cross-account
+      const key = `${sell.accountId}|${sell.assetClass}|${buy.accountId}`;
+      if (washSeen.has(key)) continue;
+      washSeen.add(key);
+      flags.push({
+        kind: 'WASH_SALE_RISK',
+        taxableAccountId: sell.accountId,
+        assetClass: sell.assetClass,
+        buyAccountId: buy.accountId,
+      });
     }
   }
 
