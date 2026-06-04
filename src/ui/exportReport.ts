@@ -248,7 +248,7 @@ function script(reportId: string): string {
 function buildHtml(result: RebalanceResult, accounts: Account[], resolvedTrades: ResolvedTrade[], freeCash: number, plannedWithdrawal: number, now: Date): string {
   const {
     householdValue, currentWeights, targetWeights, projectedWeights,
-    currentValueByAccount, withdrawalByAccount, trades, flags,
+    nativeValueByAccount, projectedNativeValueByAccount, withdrawalByAccount, trades, flags,
   } = result;
 
   const dateStr = now.toLocaleDateString('en-US', {
@@ -423,18 +423,14 @@ function buildHtml(result: RebalanceResult, accounts: Account[], resolvedTrades:
   let tradeIndex = 0;
 
   const accountSections = accounts.map(acct => {
-    // Raw trades for accurate per-class pie projection.
-    const acctRawTrades = trades.filter(t => t.accountId === acct.id);
     // Resolved trades for the checklist (merged blended-fund rows with tickers).
     const acctTrades = resolvedTrades
       .filter(t => t.accountId === acct.id)
       .sort((a, b) => Math.abs(b.deltaUsd) - Math.abs(a.deltaUsd));
-    const before = buildSlices(currentValueByAccount[acct.id] ?? {} as Record<AssetClass, number>);
-
-    const afterByClass = { ...currentValueByAccount[acct.id] } as Record<AssetClass, number>;
-    for (const ac of ALL_ASSET_CLASSES) afterByClass[ac] ??= 0;
-    for (const t of acctRawTrades) afterByClass[t.assetClass] += t.deltaUsd;
-    const after = buildSlices(afterByClass);
+    // Before / After pies use the holdings lens (issue #78): granularity matches
+    // what's actually held, not the engine's redistributed allocation lens.
+    const before = buildSlices(nativeValueByAccount[acct.id] ?? {} as Record<AssetClass, number>);
+    const after  = buildSlices(projectedNativeValueByAccount[acct.id] ?? {} as Record<AssetClass, number>);
 
     // Skip accounts with no positions and no trades.
     if (before.length === 0 && acctTrades.length === 0) return '';

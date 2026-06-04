@@ -2,6 +2,8 @@ import type { Account, AccountType, Position, Strategy, RebalanceResult, AssetCl
 import { ALL_ASSET_CLASSES } from './types';
 import { makeClassifier, type ClassifyFn } from './classify';
 import { rollup } from './rollup';
+import { resolveTradeVehicles } from './resolve';
+import { nativeAllocationByAccount, projectedNativeAllocationByAccount } from './nativeAllocation';
 import { consolidateParentClasses, childrenOf } from './hierarchy';
 import { accountBucket, greedyPlace } from './placement';
 import { fillOrdered } from './cashfill';
@@ -668,12 +670,15 @@ export function rebalance(
 
   if (householdValue === 0) {
     const zeros = zeroByClass();
+    const nativeValueByAccount = nativeAllocationByAccount(originalAccounts, originalPositions, classify, decompositions);
     return {
       householdValue: 0,
       currentWeights: zeros,
       targetWeights: strategy.targets,
       projectedWeights: zeros,
       currentValueByAccount,
+      nativeValueByAccount,
+      projectedNativeValueByAccount: projectedNativeAllocationByAccount(nativeValueByAccount, [], classify, decompositions),
       withdrawalByAccount,
       trades: [],
       flags,
@@ -1247,12 +1252,24 @@ export function rebalance(
     resultCurrentValueByAccount = nomRoll.currentValueByAccount;
   }
 
+  // Holdings-lens per-account maps for display (issue #78). Always built from the
+  // nominal originals so the granularity matches what the user holds — independent
+  // of the engine's allocation-lens redistribution. `trades` are nominal here, so
+  // resolving them against the original positions yields the post-trade holdings.
+  const nativeValueByAccount = nativeAllocationByAccount(originalAccounts, originalPositions, classify, decompositions);
+  const resolvedForDisplay = resolveTradeVehicles(trades, originalPositions, decompositions, classify, strategy.targets);
+  const projectedNativeValueByAccount = projectedNativeAllocationByAccount(
+    nativeValueByAccount, resolvedForDisplay, classify, decompositions,
+  );
+
   return {
     householdValue: resultHouseholdValue,
     currentWeights: nominalCurrentWeights,
     targetWeights: strategy.targets,
     projectedWeights: nominalProjectedWeights,
     currentValueByAccount: resultCurrentValueByAccount,
+    nativeValueByAccount,
+    projectedNativeValueByAccount,
     withdrawalByAccount,
     trades,
     flags,
