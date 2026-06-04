@@ -10,7 +10,8 @@
 // disabled (they return 1.0 / unaltered values). The engine guards on
 // strategy.taxAdjustment?.enabled before invoking the scaling pipeline.
 
-import type { Account, AccountType, Position, Strategy } from './types';
+import type { Account, AccountType, AssetClass, FundDecomposition, Position, Strategy } from './types';
+import type { ClassifyFn } from './classify';
 
 /**
  * Per-position tax-adjustment factor (0..1]. Multiply marketValue by this to get
@@ -103,6 +104,49 @@ export function findMissingCostBasis(
     }
   }
   return out;
+}
+
+/**
+ * Wash-sale gain test (issue #5). Returns true only when we can confirm that
+ * selling `assetClass` in account `accountId` realizes a *gain* — meaning there
+ * is no loss for the wash-sale rule to disallow, so the warning can be safely
+ * suppressed.
+ *
+ * Conservative by construction — returns false (i.e. "keep the warning") unless
+ * every contributing holding has a usable cost basis and the aggregate is a gain:
+ *   • Only plain (non-blended) positions whose classified class equals
+ *     `assetClass` are considered. Blended funds (in `decompositions`) split
+ *     across classes with no per-class basis, so a class held via a blended fund
+ *     counts as unknown → keep the warning.
+ *   • If no such position exists, or any contributing position lacks a usable
+ *     basis (undefined, NaN, or negative), basis is unknown → keep the warning.
+ *   • Otherwise suppress only when aggregate marketValue > aggregate costBasis.
+ *
+ * Pass nominal (pre-tax-scaling) positions so marketValue and costBasis line up.
+ */
+export function taxableClassSaleIsKnownGain(
+  accountId: string,
+  assetClass: AssetClass,
+  positions: Position[],
+  classify: ClassifyFn,
+  decompositions: Record<string, FundDecomposition>,
+): boolean {
+  let sumV = 0;
+  let sumB = 0;
+  let sawPosition = false;
+  for (const p of positions) {
+    if (p.accountId !== accountId) continue;
+    if (decompositions[p.ticker.toUpperCase()]) continue;   // blended — per-class basis unknown
+    if (classify(p.ticker) !== assetClass) continue;
+    if (p.marketValue <= 0) continue;
+    const B = p.costBasis;
+    if (B === undefined || !Number.isFinite(B) || B < 0) return false;  // basis unknown
+    sawPosition = true;
+    sumV += p.marketValue;
+    sumB += B;
+  }
+  if (!sawPosition) return false;
+  return sumV > sumB;
 }
 
 function clamp01(x: number): number {

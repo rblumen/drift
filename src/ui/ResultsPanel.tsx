@@ -171,6 +171,31 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
   return null;
 }
 
+// ── Wash-sale warning (consolidated single banner, issue #5) ──────────────────
+// WASH_SALE_RISK flags are rendered as one banner at the top of Results rather
+// than one banner per pair, since a single run can produce several. Each pair is
+// listed as a row.
+function WashSaleBanner({ flags, accounts }: { flags: Flag[]; accounts: Account[] }) {
+  const acctName = (id: string) => accounts.find(a => a.id === id)?.name ?? id;
+  const risks = flags.filter((f): f is Extract<Flag, { kind: 'WASH_SALE_RISK' }> => f.kind === 'WASH_SALE_RISK');
+  if (risks.length === 0) return null;
+  return (
+    <div className="bg-red-50 border border-red-300 rounded-lg px-4 py-3 text-sm text-red-800">
+      <strong>Possible wash sale.</strong>{' '}
+      Selling in a taxable account and buying the same asset class in another account within 30 days
+      may trigger the wash-sale rule, disallowing the loss. Consult your tax advisor.
+      <ul className="mt-2 list-disc list-inside space-y-1">
+        {risks.map((f, i) => (
+          <li key={i}>
+            {AC_LABEL[f.assetClass]}: selling in <em>{acctName(f.taxableAccountId)}</em>,
+            buying in <em>{acctName(f.buyAccountId)}</em>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 // ── Household allocation table row ────────────────────────────────────────────
 
 function AllocationRow({
@@ -592,6 +617,11 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plann
             A sell lands in a taxable account. No gain estimate is provided in this version — review
             manually for capital gain implications before executing.
           </HelpDef>
+          <HelpDef term="WASH_SALE_RISK (red)">
+            A taxable sale and a buy of the same asset class in another account occur in the same run.
+            If the taxable sale is a loss, the IRS wash-sale rule disallows it (across IRAs, 401ks, and
+            spouse accounts too). Suppressed when cost basis shows the sale is a gain. Consult your tax advisor.
+          </HelpDef>
           <HelpDef term="PLACEMENT_SPILLOVER (blue)">
             An asset class couldn't fully fit in its preferred bucket and spilled to a secondary one.
             This is informational; the engine handled it automatically.
@@ -632,6 +662,9 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plann
           Review every trade, especially taxable sells, before placing any orders.
         </p>
       </HelpBox>
+
+      {/* Wash-sale warning — single consolidated banner at the top (issue #5) */}
+      <WashSaleBanner flags={flags} accounts={accounts} />
 
       {/* Priority flags */}
       {importantFlags.length > 0 && (
