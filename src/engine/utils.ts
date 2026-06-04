@@ -15,3 +15,14 @@ export function effectiveTolerance(ac: AssetClass, strategy: Strategy): number {
   const rel = strategy.toleranceRel ?? 0.25;
   return Math.min(strategy.toleranceAbs, rel * strategy.targets[ac]);
 }
+
+/** Target band for rebalancing (issue #42): a tightened fraction of the trigger
+ *  tolerance used by the trade-count-minimization pass as its acceptance band, so
+ *  rebalanced classes land near ideal rather than at the trigger edge. The trigger
+ *  band (effectiveTolerance) still governs *whether* to act; this governs *how
+ *  close* to settle. Defaults to half the trigger band (rebalanceTargetFraction
+ *  ?? 0.5); a fraction of 1.0 collapses it back to the trigger band. */
+export function targetTolerance(ac: AssetClass, strategy: Strategy): number {
+  const fraction = strategy.rebalanceTargetFraction ?? 0.5;
+  return fraction * effectiveTolerance(ac, strategy);
+}

@@ -7,7 +7,7 @@ import { nativeAllocationByAccount, projectedNativeAllocationByAccount } from '.
 import { consolidateParentClasses, childrenOf } from './hierarchy';
 import { accountBucket, greedyPlace } from './placement';
 import { fillOrdered } from './cashfill';
-import { EPSILON, effectiveTolerance, zeroByClass } from './utils';
+import { EPSILON, effectiveTolerance, targetTolerance, zeroByClass } from './utils';
 import {
   positionTaxFactor,
   contributionTaxFactor,
@@ -970,13 +970,19 @@ export function rebalance(
   // Step 8.6 — Trade-count minimization (backlog #16).
   //
   // After balance correction, greedily drop the smallest remaining trades whose
-  // removal keeps all projected weights within toleranceAbs.  When a trade is
-  // dropped, the per-account net invariant is restored by shrinking the largest
-  // opposite-sign trade in the same account by the same amount (the "comp"
-  // trade).  Both the dropped class and the comp class are checked against
-  // toleranceAbs before committing.  The loop repeats until no more trades can
-  // be dropped (convergence is guaranteed because the trade list strictly shrinks
-  // each successful iteration).
+  // removal keeps all projected weights within the *target* band (issue #42).  When
+  // a trade is dropped, the per-account net invariant is restored by shrinking the
+  // largest opposite-sign trade in the same account by the same amount (the "comp"
+  // trade).  Both the dropped class and the comp class are checked against the
+  // target band before committing.  The loop repeats until no more trades can be
+  // dropped (convergence is guaranteed because the trade list strictly shrinks each
+  // successful iteration).
+  //
+  // The acceptance band here is targetTolerance, NOT effectiveTolerance: the trigger
+  // band decides whether to rebalance a class at all (step 2); once we do, we want to
+  // land near ideal rather than at the trigger edge, so consolidation may only drop a
+  // trade if the class still sits within the tighter target band (half the trigger by
+  // default). This leaves drift headroom before the next rebalance re-triggers (#42).
   //
   // Only runs when toleranceAbs > 0 — with zero tolerance every trade is needed
   // to hit the exact target weights. (Effective per-class tolerance can still be 0
@@ -996,11 +1002,11 @@ export function rebalance(
       for (let i = 0; i < trades.length; i++) {
         const t = trades[i];
 
-        // Would dropping t push t's class out of tolerance (5/25 rule, per-class)?
+        // Would dropping t push t's class outside the target band (issue #42)?
         const newProjAC = projVal[t.assetClass] - t.deltaUsd;
         if (
           Math.abs(newProjAC / householdValue - strategy.targets[t.assetClass]) >
-          effectiveTolerance(t.assetClass, strategy)
+          targetTolerance(t.assetClass, strategy)
         ) continue;
 
         // Find the largest opposite-sign trade in the same account to absorb the
@@ -1022,12 +1028,12 @@ export function rebalance(
           Math.abs(compNewDelta) < strategy.minTradeUsd
         ) continue;
 
-        // Would adjusting comp push its class out of tolerance (5/25 rule, per-class)?
+        // Would adjusting comp push its class outside the target band (issue #42)?
         // Adjusting comp by t.deltaUsd shifts projected[comp.assetClass] by t.deltaUsd.
         const newProjComp = projVal[comp.assetClass] + t.deltaUsd;
         if (
           Math.abs(newProjComp / householdValue - strategy.targets[comp.assetClass]) >
-          effectiveTolerance(comp.assetClass, strategy)
+          targetTolerance(comp.assetClass, strategy)
         ) continue;
 
         // Commit the drop.
@@ -1220,6 +1226,11 @@ export function rebalance(
   // are interpreted as TA weights when tax adjustment is enabled); `scale` and
   // `householdValue` are in the same space, so target × scale and the dollar
   // conversion stay consistent with the trades' minTradeUsd filter.
+  //
+  // This diagnostic uses effectiveTolerance (the trigger band), not the tighter
+  // target band from step 8.6 (issue #42): it flags only genuine hard constraints
+  // that left a class outside the band the user cares about acting on. The target
+  // band is an internal "aim closer" goal, not a banner-worthy failure threshold.
   const checkProjected = (taEnabled && taProjectedWeights) ? taProjectedWeights : nominalProjectedWeights;
   for (const ac of ALL_ASSET_CLASSES) {
     if (withinTolerance.has(ac)) continue;

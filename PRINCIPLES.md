@@ -23,7 +23,7 @@ Buys and sells within an account must net to that account's `newCash` (zero if n
 Target weights apply to all accounts combined, not per-account. This is the core design principle of the tool.
 
 **5. Suppress trivial drift (Bogleheads 5/25 rule).**
-Classes within their *effective* tolerance band are left alone entirely — no trades are generated for them in any account. The effective band is the tighter of two thresholds: an absolute band (`±toleranceAbs`) and a relative band (`±toleranceRel × target`). For large sleeves the absolute band wins; for small sleeves the relative band fires first.
+Classes within their *effective* tolerance band are left alone entirely — no trades are generated for them in any account. The effective band is the tighter of two thresholds: an absolute band (`±toleranceAbs`) and a relative band (`±toleranceRel × target`). For large sleeves the absolute band wins; for small sleeves the relative band fires first. This band is the *trigger* — it decides **whether** a class has drifted enough to rebalance. How close to ideal the engine then lands is a separate, tighter *target* band (Goal 10).
 
 **6. Place asset classes in their tax-preferred buckets.**
 Most-constrained classes (fewest eligible bucket options) are placed first. If a preferred bucket is full, a class spills into the next preferred bucket, then into any eligible account. Spillover is flagged. A class configured with an empty bucket list ("no preference") is the least constrained — it is placed last, freely across whichever accounts have the most capacity, and its placement is never flagged as spillover.
@@ -46,7 +46,7 @@ Within the same placement bucket, accounts designated to concentrate a class are
 ## Low-Priority / Simplicity Objectives
 
 **10. Minimize the number of trades.**
-Prefer solutions that achieve the target allocation with fewer individual buy/sell orders. Dust trades below `minTradeUsd` are always suppressed. After balance correction, a consolidation pass greedily drops marginal trades whose removal keeps every projected weight within its effective tolerance band — `min(toleranceAbs, toleranceRel × target)` per class (step 8.6, `rebalance.ts`).
+Prefer solutions that achieve the target allocation with fewer individual buy/sell orders. Dust trades below `minTradeUsd` are always suppressed. After balance correction, a consolidation pass greedily drops marginal trades whose removal keeps every projected weight within its *target* tolerance band (step 8.6, `rebalance.ts`). The target band is a tightened fraction of the trigger band from Goal 5 — `rebalanceTargetFraction × min(toleranceAbs, toleranceRel × target)` per class, defaulting to half. This deliberately keeps a few more trades than the trigger band would allow so a rebalance lands close to ideal, leaving drift headroom before it re-triggers (issue #42), rather than parking classes at the trigger edge.
 
 **11. Minimize the number of accounts touched.**
 Prefer concentrating trades in fewer accounts when the allocation outcome is otherwise equivalent. `greedyPlace` fills the largest-capacity eligible account first and spills to additional accounts only when that one is exhausted (concentrate-then-spill, `placement.ts`).

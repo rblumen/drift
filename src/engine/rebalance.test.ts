@@ -2324,3 +2324,81 @@ describe('Goal 4: tax-adjusted allocation â€” issue #7', () => {
   });
 });
 
+// ─── Goal 10 / issue #42: rebalance target band tighter than the trigger ──────
+//
+// The trigger band (toleranceAbs / toleranceRel) decides WHETHER a class has
+// drifted enough to rebalance. rebalanceTargetFraction decides HOW CLOSE to ideal
+// it lands once it does — the trade-count-minimization pass (step 8.6) may only
+// drop a corrective trade if the class still sits within the tighter target band.
+//
+// Fixture: household $150k across a taxable + a traditional IRA. US_LARGE_CAP is
+// 25k underweight and EMERGING_INTL is 25k overweight (each drifts 16.7pp, well
+// past the 5pp trigger); FIXED_INCOME (held as munis) is exactly on target. The
+// full correction is a 25k LARGE-for-EM swap: 20k fits in the IRA (tax-preferred)
+// and 5k spills to the taxable account. Whether the engine keeps that small
+// taxable spill is what the target band controls.
+describe('Goal 10 / issue #42: rebalance lands within the target band, not the trigger edge', () => {
+  const ACCTS: Account[] = [
+    { id: 'tax', name: 'Taxable',         institution: 'Schwab',   type: 'TAXABLE' },
+    { id: 'ira', name: 'Traditional IRA', institution: 'Fidelity', type: 'TRADITIONAL_IRA' },
+  ];
+  const HOLDINGS: Position[] = [
+    { accountId: 'tax', ticker: 'VOO', marketValue: 20_000 },
+    { accountId: 'tax', ticker: 'VWO', marketValue: 35_000 },
+    { accountId: 'tax', ticker: 'MUB', marketValue: 45_000 },
+    { accountId: 'ira', ticker: 'VOO', marketValue: 30_000 },
+    { accountId: 'ira', ticker: 'VWO', marketValue: 20_000 },
+  ];
+  // toleranceRel = 1.0 so the 5pp absolute band always wins (keeps the math about
+  // the absolute band, not the relative one). targets sum to 1.0.
+  const STRAT = (rebalanceTargetFraction?: number): Strategy => ({
+    targets: Object.fromEntries(ALL_ASSET_CLASSES.map(ac => [ac, 0])) as Record<AssetClass, number>,
+    placement: {
+      US_LARGE_CAP: ['TAX_ADVANTAGED', 'TAXABLE'],
+      EMERGING_INTL: ['TAX_ADVANTAGED', 'TAXABLE'],
+      FIXED_INCOME: ['TAXABLE'],
+    } as Strategy['placement'],
+    toleranceAbs: 0.05,
+    toleranceRel: 1.0,
+    minTradeUsd: 100,
+    ...(rebalanceTargetFraction !== undefined ? { rebalanceTargetFraction } : {}),
+  });
+  const withTargets = (s: Strategy): Strategy => ({
+    ...s,
+    targets: { ...s.targets, US_LARGE_CAP: 0.5, EMERGING_INTL: 0.2, FIXED_INCOME: 0.3 },
+  });
+
+  it('default (half band): drives US_LARGE_CAP / EMERGING_INTL exactly to target, keeping the small taxable spill', () => {
+    const r = rebalance(ACCTS, HOLDINGS, withTargets(STRAT()));
+    // Both out-of-tolerance classes land on target (0pp drift), not at the edge.
+    expect(near(r.projectedWeights.US_LARGE_CAP * 150_000, 75_000)).toBe(true);
+    expect(near(r.projectedWeights.EMERGING_INTL * 150_000, 30_000)).toBe(true);
+    // The 5k taxable swap is retained (not consolidated away).
+    expect(near(tradeFor(r.trades, 'tax', 'US_LARGE_CAP')?.deltaUsd ?? 0, 5_000)).toBe(true);
+    expect(near(tradeFor(r.trades, 'tax', 'EMERGING_INTL')?.deltaUsd ?? 0, -5_000)).toBe(true);
+    // Per-account net is balance-preserving (no new cash).
+    expect(near(accountSum(r.trades, 'tax'), 0)).toBe(true);
+    expect(near(accountSum(r.trades, 'ira'), 0)).toBe(true);
+  });
+
+  it('fraction = 1.0 reproduces pre-#42 behavior: consolidation drops the spill, leaving 3.33pp drift', () => {
+    const r = rebalance(ACCTS, HOLDINGS, withTargets(STRAT(1.0)));
+    // Only the IRA leg survives; the taxable spill is consolidated away because
+    // the resulting 3.33pp drift is still within the 5pp trigger band.
+    expect(tradeFor(r.trades, 'tax', 'US_LARGE_CAP')).toBeUndefined();
+    expect(near(r.projectedWeights.US_LARGE_CAP * 150_000, 70_000)).toBe(true); // 46.67%
+    expect(near(r.projectedWeights.EMERGING_INTL * 150_000, 35_000)).toBe(true); // 23.33%
+    // Drift exceeds the half band (2.5pp) but stays inside the trigger band (5pp).
+    expect(Math.abs(r.projectedWeights.US_LARGE_CAP - 0.5)).toBeGreaterThan(0.025);
+    expect(Math.abs(r.projectedWeights.US_LARGE_CAP - 0.5)).toBeLessThan(0.05);
+  });
+
+  it('tighter fraction keeps a result at least as close to target as a looser one', () => {
+    const dev = (frac: number) => {
+      const r = rebalance(ACCTS, HOLDINGS, withTargets(STRAT(frac)));
+      return Math.abs(r.projectedWeights.US_LARGE_CAP - 0.5);
+    };
+    expect(dev(0.5)).toBeLessThanOrEqual(dev(1.0));
+  });
+});
+

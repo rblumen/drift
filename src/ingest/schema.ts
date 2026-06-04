@@ -165,6 +165,10 @@ export const strategySchema = z.preprocess(migrateStrategyTargets, z.object({
   ),
   toleranceAbs: z.number().min(0).max(1),
   toleranceRel: z.number().min(0).max(1).optional(),
+  // Target band as a fraction of the trigger tolerance (issue #42). (0, 1]; the
+  // engine defaults a missing value to 0.5. 0 is excluded — it would demand exact
+  // targets, defeating trade-count minimization.
+  rebalanceTargetFraction: z.number().gt(0).max(1).optional(),
   minTradeUsd:  z.number().nonnegative(),
   preferTaxAdvantagedRebalance: z.boolean().optional(),
   taxAdjustment: z.object({

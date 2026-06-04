@@ -1,0 +1,46 @@
+{
+  "name": "issue-42-target-tighter-than-threshold",
+  "description": "Goal 10 / issue #42: once a class drifts past the trigger band, the rebalance lands it within the tighter target band (half the trigger by default) rather than parking it at the trigger edge. The trade-count-minimization pass keeps the small taxable swap it would otherwise drop, so US_LARGE_CAP and EMERGING_INTL settle exactly on target instead of at 3.33pp drift (within the 5pp trigger band but outside the 2.5pp target band). Fails on the pre-#42 engine, which dropped the swap.",
+  "principle": 10,
+  "accounts": [
+    { "id": "tax", "name": "Taxable Brokerage", "institution": "Schwab", "type": "TAXABLE" },
+    { "id": "ira", "name": "Traditional IRA", "institution": "Fidelity", "type": "TRADITIONAL_IRA" }
+  ],
+  "holdings": [
+    { "accountId": "tax", "ticker": "VOO", "marketValue": 20000 },
+    { "accountId": "tax", "ticker": "VWO", "marketValue": 35000 },
+    { "accountId": "tax", "ticker": "MUB", "marketValue": 45000 },
+    { "accountId": "ira", "ticker": "VOO", "marketValue": 30000 },
+    { "accountId": "ira", "ticker": "VWO", "marketValue": 20000 }
+  ],
+  "strategy": {
+    "targets": {
+      "US_LARGE_CAP": 0.5, "EMERGING_INTL": 0.2, "FIXED_INCOME": 0.3,
+      "US_TOTAL_MARKET": 0.0, "US_MID_CAP": 0.0, "US_SMALL_CAP": 0.0,
+      "DEVELOPED_INTL": 0.0, "ALTERNATIVES": 0.0, "CASH": 0.0
+    },
+    "placement": {
+      "US_LARGE_CAP": ["TAX_ADVANTAGED", "TAXABLE"],
+      "EMERGING_INTL": ["TAX_ADVANTAGED", "TAXABLE"],
+      "FIXED_INCOME": ["TAXABLE"]
+    },
+    "toleranceAbs": 0.05,
+    "toleranceRel": 1.0,
+    "rebalanceTargetFraction": 0.5,
+    "minTradeUsd": 100
+  },
+  "expected": {
+    "trades": [
+      { "accountId": "ira", "assetClass": "US_LARGE_CAP", "deltaUsd": 20000 },
+      { "accountId": "ira", "assetClass": "EMERGING_INTL", "deltaUsd": -20000 },
+      { "accountId": "tax", "assetClass": "US_LARGE_CAP", "deltaUsd": 5000 },
+      { "accountId": "tax", "assetClass": "EMERGING_INTL", "deltaUsd": -5000 }
+    ],
+    "projectedWeights": {
+      "US_LARGE_CAP": 0.5,
+      "EMERGING_INTL": 0.2,
+      "FIXED_INCOME": 0.3
+    },
+    "netByAccount": { "tax": 0, "ira": 0 }
+  }
+}

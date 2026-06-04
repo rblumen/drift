@@ -136,6 +136,16 @@ export interface Strategy {
    *  min(toleranceAbs, toleranceRel × target[ac]) — the tighter of the two
    *  bands wins. Optional; defaults to 0.25 (the Bogleheads / Swedroe 5/25 rule). */
   toleranceRel?: number;
+  /** Target band as a fraction of the trigger tolerance (issue #42). The trigger
+   *  band (toleranceAbs / toleranceRel) decides *whether* a class has drifted far
+   *  enough to rebalance; this fraction decides *how close to ideal* the engine
+   *  lands once it does. The trade-count-minimization pass (step 8.6) may only drop
+   *  a corrective trade if the class still sits within `targetTolerance` =
+   *  fraction × effectiveTolerance — a tighter band than the trigger — so rebalances
+   *  leave drift headroom instead of parking classes at the trigger edge (where the
+   *  next tiny move re-triggers). Range (0, 1]; 1.0 reproduces the pre-#42 behavior
+   *  (target band = trigger band). Optional; defaults to 0.5 (half the threshold). */
+  rebalanceTargetFraction?: number;
   minTradeUsd: number;   // suppress dust trades below this dollar amount
   /** When true (default), exhaust rebalancing inside tax-advantaged accounts before
    *  recommending any taxable-account sale. Set false to disable the redirect and

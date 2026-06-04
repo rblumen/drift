@@ -68,6 +68,9 @@ export const DEFAULT_STRATEGY: Strategy = {
   },
   toleranceAbs: 0.05,
   toleranceRel: 0.25,
+  // Aim to land within half the trigger band once a rebalance fires (issue #42),
+  // leaving drift headroom before the next one re-triggers.
+  rebalanceTargetFraction: 0.5,
   minTradeUsd:  250,
   // Exhaust tax-advantaged rebalancing before selling in taxable accounts.
   preferTaxAdvantagedRebalance: true,
