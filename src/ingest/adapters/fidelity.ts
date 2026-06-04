@@ -15,11 +15,8 @@
 //
 // Column names confirmed against the 2026-05 Fidelity export format.
 
-import Papa from 'papaparse';
-import { parseCsv, parseMoney } from '../csv';
+import { parseCsv, parseCsvMultiByAccount } from '../csv';
 import type { CsvParseResult, DiscoveredAccount, MultiAccountResult } from '../csv';
-import { positionSchema } from '../schema';
-import type { Position } from '../../engine/types';
 
 // ── Footer stripping ──────────────────────────────────────────────────────────
 
@@ -69,65 +66,13 @@ export type FidelityDiscoveredAccount = DiscoveredAccount;
 export type FidelityMultiResult       = MultiAccountResult;
 
 export function parseFidelityMultiCsv(csvText: string): FidelityMultiResult {
-  const normalised = stripFooter(csvText);   // also normalises \r\n → \n
-
-  const { data, errors: parseErrors } = Papa.parse<Record<string, string>>(
-    normalised, { header: true, skipEmptyLines: true },
-  );
-
-  const errors: string[] = parseErrors
-    .filter(e => e.type !== 'FieldMismatch')
-    .map(e => `CSV parse error: ${e.message}`);
-
-  // Preserve account order of first appearance.
-  const discoveredOrder: string[]           = [];
-  const discoveredNames: Record<string, string>  = {};
-  const positionsByNumber: Record<string, Position[]> = {};
-
-  for (const [i, row] of data.entries()) {
-    const accountNumber = row[COL.accountNumber]?.trim();
-    const accountName   = row[COL.accountName]?.trim() ?? '';
-    const ticker        = row[COL.ticker]?.trim().replace(/\*+$/, '');
-    const marketValue   = parseMoney(row[COL.marketValue]);
-    const price         = parseMoney(row[COL.price]);
-    const description   = row[COL.description]?.trim();
-    const costBasis     = parseMoney(row[COL.costBasis]);
-
-    if (!accountNumber) continue;
-
-    if (!positionsByNumber[accountNumber]) {
-      discoveredOrder.push(accountNumber);
-      discoveredNames[accountNumber] = accountName;
-      positionsByNumber[accountNumber] = [];
-    }
-
-    // Same row filters as the generic parseCsv layer:
-    // skip footer rows, pending activity, zero/negative values.
-    if (
-      !ticker || ticker === '--' || ticker.includes(' ') ||
-      isNaN(marketValue) || marketValue <= 0
-    ) continue;
-
-    const result = positionSchema.safeParse({
-      accountId: accountNumber,   // placeholder — remapped by caller
-      ticker,
-      description,
-      marketValue,
-      price: price && !isNaN(price) && price > 0 ? price : undefined,
-      costBasis: !isNaN(costBasis) && costBasis >= 0 ? costBasis : undefined,
-    });
-
-    if (result.success) {
-      positionsByNumber[accountNumber].push(result.data as Position);
-    } else {
-      errors.push(`Row ${i + 1} (${ticker ?? '?'}): ${result.error.message}`);
-    }
-  }
-
-  const discovered = discoveredOrder.map(num => ({
-    accountNumber: num,
-    accountName:   discoveredNames[num],
-  }));
-
-  return { discovered, positionsByNumber, errors };
+  return parseCsvMultiByAccount(csvText, {
+    accountNumber: COL.accountNumber,
+    accountName:   COL.accountName,
+    ticker:        COL.ticker,
+    marketValue:   COL.marketValue,
+    description:   COL.description,
+    price:         COL.price,
+    costBasis:     COL.costBasis,
+  }, { preprocess: stripFooter });
 }

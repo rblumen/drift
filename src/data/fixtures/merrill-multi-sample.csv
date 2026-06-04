@@ -1,0 +1,5 @@
+"COB Date","Security #","Symbol","CUSIP #","Security Description","Account Nickname","Account Registration","Account #","Quantity","Price ($)","Value ($)","Unrealized Gain/Loss ($)","Unrealized Gain/Loss (%)","Cumulative Investment Return ($)","Cumulative Investment Return (%)","Accrued Interest ($)"
+"2/17/2026","12345","VTI","922908769","VANGUARD TOTAL STOCK MARKET ETF","Joint Brokerage","CMA-Edge","99X-11111","100","198.30","19,830.00","2,000.00","11.21","2,000","11.21","--"
+"2/17/2026","12346","BND","921937835","VANGUARD TOTAL BOND MARKET ETF","Joint Brokerage","CMA-Edge","99X-11111","100","74.32","7,432.00","40.00","0.54","40","0.54","--"
+"2/17/2026","12347","VXUS","921909768","VANGUARD TOTAL INTL STOCK ETF","Roth IRA","IRA-Edge","99X-22222","250","56.01","14,002.50","1,000.00","7.69","1,000","7.69","--"
+"2/17/2026","12348","VWIUX","921927209","VANGUARD INTERMEDIATE-TERM TAX-EXEMPT ADM","Roth IRA","IRA-Edge","99X-22222","500","13.90","6,950.00","150.00","2.21","150","2.21","--"

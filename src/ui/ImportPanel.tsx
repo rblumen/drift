@@ -3,13 +3,23 @@ import type { Account, AssetClass, Position } from '../engine/types';
 import { ALL_ASSET_CLASSES } from '../engine/types';
 import { parseSchwabMultiCsv } from '../ingest/adapters/schwab';
 import { parseFidelityMultiCsv } from '../ingest/adapters/fidelity';
-import type { MultiAccountResult } from '../ingest/csv';
+import { parseVanguardMultiCsv } from '../ingest/adapters/vanguard';
+import { parseMerrillMultiCsv } from '../ingest/adapters/merrill';
+import { parseEtradeCsv } from '../ingest/adapters/etrade';
+import { detectFormat } from '../ingest/detect';
+import type { CsvParseResult, MultiAccountResult } from '../ingest/csv';
 import { parseEmpowerCsv, parseEmpowerTotals } from '../ingest/adapters/empower';
 import { AC_LABEL, ACCT_TYPE_COLOR, ACCT_TYPE_LABEL, fmtUsd } from './fmt';
 import { PieChart } from './PieChart';
 import { HelpBox, HelpDef, HelpSection } from './HelpBox';
 
-type Adapter = 'schwab' | 'fidelity' | 'empower' | 'empower-totals' | 'manual';
+// A broker CSV format. These are auto-detected from the file's contents
+// (detectFormat) and can also be picked manually from the Format dropdown.
+type FileFormat = 'schwab' | 'fidelity' | 'vanguard' | 'etrade' | 'merrill' | 'empower';
+
+// How the user supplies positions: a broker file (the common path), Empower
+// asset-class totals, or typing rows by hand. Chosen via the Source radio.
+type InputMethod = 'file' | 'empower-totals' | 'manual';
 
 interface Props {
   accounts: Account[];
@@ -17,13 +27,35 @@ interface Props {
   setPositions: (p: Position[]) => void;
 }
 
-const ADAPTER_META: { id: Adapter; label: string; hint: string }[] = [
-  { id: 'schwab',        label: 'Schwab CSV',      hint: 'Accounts → Positions tab → Export (single account or All-Accounts)' },
-  { id: 'fidelity',      label: 'Fidelity CSV',     hint: 'Accounts & Trade → Portfolio → Download (CSV)' },
-  { id: 'empower',       label: 'Empower CSV',      hint: 'Copy your "My Investments" table and save as CSV' },
-  { id: 'empower-totals',label: 'Empower Totals',   hint: 'Enter dollar totals from the Investments → Holdings → Allocation view' },
-  { id: 'manual',        label: 'Manual entry',     hint: 'Type positions in by hand' },
+const FORMAT_META: { id: FileFormat; label: string; hint: string }[] = [
+  { id: 'schwab',   label: 'Schwab',      hint: 'Accounts → Positions tab → Export (single account or All-Accounts)' },
+  { id: 'fidelity', label: 'Fidelity',    hint: 'Accounts & Trade → Portfolio → Download (CSV)' },
+  { id: 'vanguard', label: 'Vanguard',    hint: 'My Accounts → Transaction History → Download → CSV (brokerage holdings)' },
+  { id: 'etrade',   label: 'E*TRADE',     hint: 'Portfolios → Positions tab → Download; choose Collapsed View + All Positions' },
+  { id: 'merrill',  label: 'Merrill Edge',hint: 'Accounts → Holdings → expand lot detail → Export as .CSV' },
+  { id: 'empower',  label: 'Empower',     hint: 'Copy your "My Investments" table and save as CSV' },
 ];
+
+const METHOD_META: { id: InputMethod; label: string }[] = [
+  { id: 'file',           label: 'Import from file' },
+  { id: 'empower-totals', label: 'Empower totals' },
+  { id: 'manual',         label: 'Manual entry' },
+];
+
+// Formats whose export can carry several accounts in one file — they share the
+// discover-then-map flow. Each maps a file's text to a MultiAccountResult.
+const MULTI_PARSERS: Partial<Record<FileFormat, (text: string) => MultiAccountResult>> = {
+  schwab:   parseSchwabMultiCsv,
+  fidelity: parseFidelityMultiCsv,
+  vanguard: parseVanguardMultiCsv,
+  merrill:  parseMerrillMultiCsv,
+};
+
+// Single-account CSV formats: text + accountId → positions.
+const SINGLE_PARSERS: Partial<Record<FileFormat, (text: string, accountId: string) => CsvParseResult>> = {
+  etrade:  parseEtradeCsv,
+  empower: parseEmpowerCsv,
+};
 
 // Colours assigned round-robin to accounts in the order they appear.
 const ACCOUNT_COLORS = [
@@ -39,13 +71,21 @@ const ACCOUNT_COLORS = [
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/** Guess the best adapter from the account's institution name. */
-function defaultAdapter(institution: string): Adapter {
+/**
+ * Pre-upload guess of the file format from the account's institution name. This
+ * just seeds the Format dropdown before a file is chosen; once a file is loaded,
+ * detectFormat() reads the file's contents and overrides this. Unknown
+ * institutions fall back to the first format (detection corrects it on upload).
+ */
+function defaultFormat(institution: string): FileFormat {
   const i = institution.toLowerCase();
   if (i.includes('schwab'))   return 'schwab';
   if (i.includes('fidelity')) return 'fidelity';
+  if (i.includes('vanguard')) return 'vanguard';
+  if (i.includes('etrade') || i.includes('e*trade') || i.includes('e-trade')) return 'etrade';
+  if (i.includes('merrill'))  return 'merrill';
   if (i.includes('empower'))  return 'empower';
-  return 'manual';
+  return 'schwab';
 }
 
 function readFile(file: File): Promise<string> {
@@ -130,12 +170,20 @@ function EditableCell({
 export function ImportPanel({ accounts, positions, setPositions }: Props) {
   const firstAccountId = accounts[0]?.id ?? '';
   const [accountId,     setAccountId]     = useState(firstAccountId);
-  const [adapter,       setAdapter]       = useState<Adapter>(() => defaultAdapter(accounts[0]?.institution ?? ''));
+  const [method,        setMethod]        = useState<InputMethod>('file');
+  const [fileFormat,    setFileFormat]    = useState<FileFormat>(() => defaultFormat(accounts[0]?.institution ?? ''));
+  // Whether the current fileFormat was set by content detection (vs. a guess or
+  // a manual pick) — drives the "Auto-detected" badge.
+  const [detected,      setDetected]      = useState(false);
+  // Raw text + name of the loaded file, kept so changing the Format dropdown can
+  // re-parse the same file without re-uploading.
+  const [fileText,      setFileText]      = useState<string | null>(null);
+  const [fileName,      setFileName]      = useState<string | null>(null);
   const [preview,       setPreview]       = useState<Position[] | null>(null);
   const [parseErrors,   setParseErrors]   = useState<string[]>([]);
   const [manualRow,     setManualRow]     = useState({ ticker: '', marketValue: '', price: '' });
   const [empowerTotals, setEmpowerTotals] = useState<Partial<Record<AssetClass, string>>>({});
-  // Multi-account flow (Fidelity and Schwab all-accounts exports).
+  // Multi-account flow (Fidelity / Schwab / Vanguard / Merrill exports).
   const [multiAccount,  setMultiAccount]  = useState<MultiAccountResult | null>(null);
   const [accountMapping, setAccountMapping] = useState<Record<string, string>>({});
   // Set of account IDs whose position rows are collapsed.
@@ -150,36 +198,41 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
     });
   }
 
-  // When the user switches account, reset adapter to match the new institution.
-  useEffect(() => {
-    const acct = accounts.find(a => a.id === accountId);
-    if (acct) setAdapter(defaultAdapter(acct.institution));
+  // Clear any in-progress import (preview, mapping, loaded file, errors).
+  function resetImport() {
     setPreview(null);
     setParseErrors([]);
     setMultiAccount(null);
     setAccountMapping({});
+    setFileText(null);
+    setFileName(null);
+    setDetected(false);
+  }
+
+  // When the user switches account, re-seed the format guess and clear any
+  // in-progress import.
+  useEffect(() => {
+    const acct = accounts.find(a => a.id === accountId);
+    if (acct) setFileFormat(defaultFormat(acct.institution));
+    resetImport();
   }, [accountId]);
 
   // Keep accountId in sync if accounts list changes (e.g. first account added).
   useEffect(() => {
     if (!accountId && accounts.length > 0) {
       setAccountId(accounts[0].id);
-      setAdapter(defaultAdapter(accounts[0].institution));
+      setFileFormat(defaultFormat(accounts[0].institution));
     }
   }, [accounts]);
 
-  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const text = await readFile(file);
-
-    // Schwab and Fidelity exports can both carry multiple accounts in one file,
-    // so they share the discover-then-map flow. A file with a single account
-    // skips the mapping step and previews against the selected account.
-    if (adapter === 'fidelity' || adapter === 'schwab') {
-      const multiResult = adapter === 'fidelity'
-        ? parseFidelityMultiCsv(text)
-        : parseSchwabMultiCsv(text);
+  // Parse already-read CSV text with a specific format and route the result:
+  // multi-account formats discover-and-map (or preview directly when a single
+  // account is found); single-account formats preview against the selected
+  // account.
+  function parseText(fmt: FileFormat, text: string) {
+    const multiParser = MULTI_PARSERS[fmt];
+    if (multiParser) {
+      const multiResult = multiParser(text);
       setParseErrors(multiResult.errors);
 
       if (multiResult.discovered.length <= 1) {
@@ -200,16 +253,58 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
           );
           initMapping[disc.accountNumber] = match?.id ?? '';
         }
+        setPreview(null);
         setMultiAccount(multiResult);
         setAccountMapping(initMapping);
       }
     } else {
-      const result = parseEmpowerCsv(text, accountId);
+      // Single-account CSV formats (E*TRADE, Empower).
+      const singleParser = SINGLE_PARSERS[fmt] ?? parseEmpowerCsv;
+      const result = singleParser(text, accountId);
       setParseErrors(result.errors);
+      setMultiAccount(null);
       setPreview(result.positions);
     }
+  }
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const text = await readFile(file);
+    setFileText(text);
+    setFileName(file.name);
+
+    // Detect the format from the file's contents; fall back to the current
+    // dropdown selection when nothing matches.
+    const det = detectFormat(text);
+    const fmt = det ?? fileFormat;
+    setFileFormat(fmt);
+    setDetected(det !== null);
+    parseText(fmt, text);
 
     e.target.value = '';
+  }
+
+  // Manual Format override from the dropdown. Re-parses the loaded file (if any)
+  // with the chosen format so a wrong auto-detection is one click to correct.
+  function changeFormat(fmt: FileFormat) {
+    setFileFormat(fmt);
+    setDetected(false);
+    if (fileText) {
+      parseText(fmt, fileText);
+    } else {
+      setPreview(null);
+      setParseErrors([]);
+      setMultiAccount(null);
+      setAccountMapping({});
+    }
+  }
+
+  // Switch input method (file / Empower totals / manual), clearing any
+  // in-progress file import.
+  function changeMethod(m: InputMethod) {
+    setMethod(m);
+    resetImport();
   }
 
   function confirmImport() {
@@ -302,8 +397,7 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
       color: ACCT_TYPE_COLOR[type] ?? '#9ca3af',
     }));
 
-  const isCsvAdapter = adapter === 'schwab' || adapter === 'fidelity' || adapter === 'empower';
-  const adapterHint  = ADAPTER_META.find(m => m.id === adapter)?.hint ?? '';
+  const formatHint = FORMAT_META.find(m => m.id === fileFormat)?.hint ?? '';
 
   if (accounts.length === 0) {
     return (
@@ -326,12 +420,12 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
           selected account — re-importing an account always starts fresh for that account.
         </p>
 
-        <HelpSection title="Which format to use">
-          <HelpDef term="Schwab CSV">Accounts → Positions tab → Export (top-right link). Works with both a single-account export and the All-Accounts export — for All-Accounts the app detects each account in the file and lets you map them to your registered accounts.</HelpDef>
-          <HelpDef term="Fidelity CSV">Accounts &amp; Trade → Portfolio → Download (CSV). The app detects multiple accounts in a single file and lets you map each to a registered account.</HelpDef>
-          <HelpDef term="Empower CSV">Copy the "My Investments" table and save as a <code>.csv</code> file. Works best when Empower shows individual fund-level holdings.</HelpDef>
-          <HelpDef term="Empower Totals">Enter dollar amounts per asset class from Empower's Allocation/Holdings view. Fastest path when you don't need individual ticker detail — trade recommendations will be at the asset-class level only.</HelpDef>
-          <HelpDef term="Manual entry">Type ticker + market value directly. Use for any position a CSV doesn't cover, or to add a one-off holding.</HelpDef>
+        <HelpSection title="How importing works">
+          <HelpDef term="Auto-detect">Choose <strong>Import from file</strong> and pick your broker's CSV export — the app reads the file and selects the matching format automatically. If it can't tell, set the format yourself from the dropdown below the file picker. Supported: Schwab, Fidelity, Vanguard, E*TRADE, Merrill Edge, and Empower.</HelpDef>
+          <HelpDef term="Multiple accounts in one file">Schwab, Fidelity, Vanguard, and Merrill exports may contain several accounts. The app detects each one and lets you map it to a registered account. (Vanguard's file has no account-name column, so its accounts appear by number.) E*TRADE and Empower export one account per file.</HelpDef>
+          <HelpDef term="Where to export">Schwab: Accounts → Positions → Export. Fidelity: Accounts &amp; Trade → Portfolio → Download. Vanguard: My Accounts → Transaction History → Download (use the brokerage holdings CSV, which includes tickers). E*TRADE: Portfolios → Positions → Download (Collapsed View, All Positions). Merrill: Accounts → Holdings → expand lot detail → Export as .CSV.</HelpDef>
+          <HelpDef term="Empower totals">If you only have asset-class totals (not individual funds), choose <strong>Empower totals</strong> and enter dollar amounts per class. Trade recommendations will be at the asset-class level only.</HelpDef>
+          <HelpDef term="Manual entry">Choose <strong>Manual entry</strong> to type ticker + market value directly — for any position a CSV doesn't cover, or a one-off holding.</HelpDef>
         </HelpSection>
 
         <HelpSection title="Tips">
@@ -341,7 +435,7 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
         </HelpSection>
       </HelpBox>
 
-      {/* Step 1 — Pick account + format */}
+      {/* Step 1 — Pick account + source */}
       <div className="border border-gray-200 rounded-lg divide-y divide-gray-100">
         <div className="px-4 py-3 flex items-center gap-4">
           <span className="text-sm font-medium text-gray-700 w-28 shrink-0">Account</span>
@@ -362,36 +456,61 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
         </div>
 
         <div className="px-4 py-3 flex items-center gap-4">
-          <span className="text-sm font-medium text-gray-700 w-28 shrink-0">Format</span>
-          <div className="flex flex-wrap gap-2">
-            {ADAPTER_META.map(m => (
-              <button
-                key={m.id}
-                onClick={() => { setAdapter(m.id); setPreview(null); setParseErrors([]); setMultiAccount(null); setAccountMapping({}); }}
-                className={`px-3 py-1.5 text-sm rounded-md border transition-colors
-                  ${adapter === m.id
-                    ? 'bg-indigo-600 text-white border-indigo-600'
-                    : 'bg-white text-gray-600 border-gray-300 hover:border-indigo-400'}`}
-              >
+          <span className="text-sm font-medium text-gray-700 w-28 shrink-0">Source</span>
+          <div className="flex flex-wrap gap-x-5 gap-y-2">
+            {METHOD_META.map(m => (
+              <label key={m.id} className="flex items-center gap-1.5 text-sm text-gray-700 cursor-pointer">
+                <input
+                  type="radio"
+                  name="import-method"
+                  checked={method === m.id}
+                  onChange={() => changeMethod(m.id)}
+                  className="accent-indigo-600"
+                />
                 {m.label}
-              </button>
+              </label>
             ))}
           </div>
         </div>
       </div>
 
-      {/* Step 2 — Import widget */}
+      {/* Step 2 — File import: choose file, then (auto-detected) format below */}
+      {method === 'file' && (
+        <div className="space-y-3">
+          {!preview && !multiAccount && (
+            <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center space-y-3">
+              <input ref={fileRef} type="file" accept=".csv" onChange={handleFile} className="hidden" />
+              <button
+                onClick={() => fileRef.current?.click()}
+                className="bg-white border border-gray-300 text-gray-700 text-sm px-4 py-2 rounded-md hover:bg-gray-50"
+              >
+                Choose CSV file
+              </button>
+              <p className="text-xs text-gray-400">
+                {fileName ? `Loaded ${fileName}` : "We'll detect the format automatically."}
+              </p>
+            </div>
+          )}
 
-      {isCsvAdapter && !preview && !multiAccount && (
-        <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center space-y-3">
-          <p className="text-sm text-gray-500">{adapterHint}</p>
-          <input ref={fileRef} type="file" accept=".csv" onChange={handleFile} className="hidden" />
-          <button
-            onClick={() => fileRef.current?.click()}
-            className="bg-white border border-gray-300 text-gray-700 text-sm px-4 py-2 rounded-md hover:bg-gray-50"
-          >
-            Choose CSV file
-          </button>
+          {/* Format dropdown — auto-filled on detection, overridable here. */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-sm font-medium text-gray-700">Format</span>
+            <select
+              value={fileFormat}
+              onChange={e => changeFormat(e.target.value as FileFormat)}
+              className="border border-gray-300 rounded px-2 py-1.5 text-sm bg-white"
+            >
+              {FORMAT_META.map(f => (
+                <option key={f.id} value={f.id}>{f.label}</option>
+              ))}
+            </select>
+            {detected && (
+              <span className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-2 py-0.5">
+                Auto-detected
+              </span>
+            )}
+            <span className="text-xs text-gray-400">{formatHint}</span>
+          </div>
         </div>
       )}
 
@@ -502,9 +621,9 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
         </div>
       )}
 
-      {adapter === 'empower-totals' && (
+      {method === 'empower-totals' && (
         <div className="border border-gray-200 rounded-lg p-4 space-y-3">
-          <p className="text-sm text-gray-500">{adapterHint}</p>
+          <p className="text-sm text-gray-500">Enter dollar totals per asset class from Empower's Investments → Holdings → Allocation view.</p>
           <div className="grid grid-cols-2 gap-3">
             {ALL_ASSET_CLASSES.map(ac => (
               <div key={ac}>
@@ -528,7 +647,7 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
         </div>
       )}
 
-      {adapter === 'manual' && (
+      {method === 'manual' && (
         <div className="border border-gray-200 rounded-lg p-4 space-y-3">
           <div className="flex gap-2 items-end">
             <div>
