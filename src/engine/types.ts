@@ -203,8 +203,20 @@ export interface RebalanceResult {
     currentWeights: Record<AssetClass, number>;
     projectedWeights: Record<AssetClass, number>;
   };
-  /** Per-account current value by asset class (before trades). Excludes unmapped positions. */
+  /** Per-account current value by asset class (before trades). Excludes unmapped positions.
+   *  This is the engine's *allocation* lens: rollup redistributes parent holdings into
+   *  children and consolidateParentClasses folds them back per target granularity. Correct
+   *  for drift/trade math; use the native maps below for per-account display (issue #78). */
   currentValueByAccount: Record<string, Record<AssetClass, number>>;
+  /** Per-account current value in the *holdings* lens — each position pinned to its
+   *  classified class, no parent→child redistribution (issue #78). Granularity matches
+   *  what the user holds (a parent-level TDF stays at the parent level), so this drives
+   *  the per-account "Before" display. Per-account totals match currentValueByAccount. */
+  nativeValueByAccount: Record<string, Record<AssetClass, number>>;
+  /** The holdings-lens allocation after the recommended trades execute (issue #78) —
+   *  `nativeValueByAccount` with each resolved trade applied at its holding's pinned
+   *  class. Drives the per-account "After trades" display. */
+  projectedNativeValueByAccount: Record<string, Record<AssetClass, number>>;
   /** Per-account dollars withdrawn to fund a planned withdrawal / RMD (issue #14).
    *  This is the cash that leaves each account — RMD plus discretionary draw — which
    *  may be met by selling or from idle cash, so it is not the same as net sells.

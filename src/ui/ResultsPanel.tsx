@@ -401,7 +401,8 @@ function ContributionSummary({ summary }: { summary: RebalanceResult['contributi
 
 export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plannedWithdrawal, reminder, setReminder }: Props) {
   const { householdValue, currentWeights, targetWeights, projectedWeights,
-          currentValueByAccount, withdrawalByAccount, trades, flags, contributionSummary } = result;
+          nativeValueByAccount, projectedNativeValueByAccount,
+          withdrawalByAccount, trades, flags, contributionSummary } = result;
 
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
@@ -462,19 +463,16 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plann
   // Accounts are ordered as they appear in the accounts array.
   const tradesByAccount = accounts
     .map(account => {
-      // Raw trades used for per-class pie projection (accurate sub-class deltas).
-      const acctRawTrades = trades.filter(t => t.accountId === account.id);
       // Resolved trades used for the table (merged blended-fund rows with tickers).
       const acctTrades = resolvedTrades
         .filter(t => t.accountId === account.id)
         .sort((a, b) => Math.abs(b.deltaUsd) - Math.abs(a.deltaUsd));
-      const before = buildPieSlices(currentValueByAccount[account.id] ?? {});
-
-      // After: apply raw trade deltas on top of current values.
-      const afterByClass = { ...currentValueByAccount[account.id] } as Record<AssetClass, number>;
-      for (const ac of ALL_ASSET_CLASSES) afterByClass[ac] ??= 0;
-      for (const t of acctRawTrades) afterByClass[t.assetClass] += t.deltaUsd;
-      const after = buildPieSlices(afterByClass);
+      // Before / After pies use the holdings lens (issue #78): each position pinned
+      // to its classified class, so display granularity matches what's actually held
+      // rather than the engine's redistributed allocation lens. The after map already
+      // has the resolved trades applied at each holding's pinned class.
+      const before = buildPieSlices(nativeValueByAccount[account.id] ?? {});
+      const after  = buildPieSlices(projectedNativeValueByAccount[account.id] ?? {});
 
       return { account, trades: acctTrades, before, after };
     })
