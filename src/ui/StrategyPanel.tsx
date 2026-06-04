@@ -330,6 +330,9 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights, taxAdjust
   const [toleranceRel, setToleranceRel] = useState(
     String((((strategy.toleranceRel ?? 0.25)) * 100).toFixed(1)),
   );
+  const [targetFraction, setTargetFraction] = useState(
+    String(((strategy.rebalanceTargetFraction ?? 0.5) * 100).toFixed(0)),
+  );
   const [minTrade,  setMinTrade]  = useState(String(strategy.minTradeUsd));
 
   // Sync local state if strategy prop changes externally (e.g. JSON import).
@@ -347,6 +350,7 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights, taxAdjust
     });
     setTolerance(String((strategy.toleranceAbs * 100).toFixed(1)));
     setToleranceRel(String((((strategy.toleranceRel ?? 0.25)) * 100).toFixed(1)));
+    setTargetFraction(String(((strategy.rebalanceTargetFraction ?? 0.5) * 100).toFixed(0)));
     setMinTrade(String(strategy.minTradeUsd));
   }, [strategy]);
 
@@ -387,6 +391,8 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights, taxAdjust
       targets,
       toleranceAbs: (parseFloat(tolerance) || 5) / 100,
       toleranceRel: (parseFloat(toleranceRel) || 25) / 100,
+      // Clamp into (0, 1]: 0 would demand exact targets and the schema rejects it.
+      rebalanceTargetFraction: Math.min(1, Math.max(0.01, (parseFloat(targetFraction) || 50) / 100)),
       minTradeUsd:  parseFloat(minTrade) || 250,
     });
   }
@@ -603,6 +609,13 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights, taxAdjust
           <HelpDef term="Min trade size ($250 default)">
             Trade recommendations smaller than this dollar amount are dropped. Prevents dust-level orders
             that add transaction friction without meaningfully improving the allocation.
+          </HelpDef>
+          <HelpDef term="Rebalance target band (50% of tolerance default)">
+            Tolerance decides <em>when</em> a class has drifted enough to rebalance; this decides
+            <em> how close to ideal</em> it lands once it does. At the 50% default, a class is driven to
+            within half its tolerance band rather than parked at the edge — so it has room to drift before
+            the next rebalance re-triggers. Set to 100% to allow landing anywhere inside tolerance (more
+            drift, fewer trades).
           </HelpDef>
         </HelpSection>
       </HelpBox>
@@ -1064,6 +1077,35 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights, taxAdjust
             </div>
             <p className="text-xs text-gray-400 mt-1">
               Ignore trades smaller than this amount.
+            </p>
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">
+              Rebalance target band
+              <span className="ml-1 text-gray-400">(% of tolerance)</span>
+              <HelpTip>
+                How close to the ideal mix a rebalance aims once a class drifts past
+                tolerance. The engine lands within this fraction of the tolerance band —
+                tighter than the trigger — so there's drift headroom before the next
+                rebalance. Default 50% (half the band). 100% = land anywhere inside
+                tolerance (more drift, fewer trades).
+              </HelpTip>
+            </label>
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                value={targetFraction}
+                step="10"
+                min="1"
+                max="100"
+                onChange={e => setTargetFraction(e.target.value)}
+                onBlur={commitWeights}
+                className="w-20 border rounded px-2 py-1.5 text-sm text-right"
+              />
+              <span className="text-gray-400 text-xs">%</span>
+            </div>
+            <p className="text-xs text-gray-400 mt-1">
+              Aim closer than the trigger band.
             </p>
           </div>
         </div>
