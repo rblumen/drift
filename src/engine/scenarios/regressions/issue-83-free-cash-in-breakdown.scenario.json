@@ -26,12 +26,13 @@
   "freeCash": 5000,
   "expected": {
     "nativeByAccount": {
-      "ira":     { "CASH": 10000, "US_TOTAL_MARKET": 50000 },
-      "taxable": { "CASH": 4000,  "MUNI_BOND": 36000 }
+      "ira":     { "CASH": 5000, "US_TOTAL_MARKET": 50000 },
+      "taxable": { "CASH": 4000, "MUNI_BOND": 36000 }
     },
-    "accountValueByAccount": { "ira": 60000, "taxable": 40000 },
+    "accountValueByAccount": { "ira": 55000, "taxable": 40000 },
     "projectedNativeByAccount": { "ira": { "CASH": 0 } },
     "currentWeights": { "CASH": 0.14 },
+    "depositByAccount": { "ira": 5000 },
     "netByAccount": { "ira": 10000, "taxable": 0 }
   }
 }
