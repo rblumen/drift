@@ -478,35 +478,46 @@ function synthesizeBlendedFundSells(
 
 /**
  * Surface idle / free cash as the CASH asset class in the per-account display
- * maps and the reported current weights (issue #83).
+ * maps and the reported current weights (issues #83, #84, #87).
  *
- * `newCash` on an account is uninvested cash — a per-account contribution plus
- * that account's share of distributed household freeCash, net of any drawdown
- * (Steps 0a/0b). It already counts toward householdValue (via rollup's
- * accountValues), but — unlike a cash-classified *holding* such as a swept
- * money-market position — it was absent from every per-class breakdown. The
- * result: the "Before" view summed to less than household value, and the cash
- * the engine deploys appeared in "After trades" with no visible source, so the
- * trades looked unbalanced (an account grew out of nowhere).
+ * Two distinct kinds of uninvested cash, treated differently:
  *
- * This adjustment is display-only. The engine still models newCash as net-buy
- * capacity (never an out-of-tolerance CASH sale), so trade sizing/placement is
- * unchanged:
- *   • Before / current: add each account's idle cash to its CASH bucket.
- *   • After (projected): the net buys this cash funds consume it, so subtract
- *     the realized per-account deployment back out of projected CASH. The
- *     engine pins each account's net trade flow to its newCash, so for a fully
- *     deployed contribution the displayed CASH returns to just its
- *     cash-classified holdings; a within-tolerance leftover (deployment < idle
- *     cash) correctly remains visible as CASH.
+ *  • **In-account idle cash** (`idleByAccount` = the user-provided per-account
+ *    `newCash`): cash already sitting in the account. Deploying it into
+ *    securities is an intra-account conversion that does NOT change the account
+ *    balance, so it is shown under CASH in the account's "Before" view and is
+ *    consumed from "After" — but it is NOT a transfer and contributes nothing to
+ *    the per-account Net (#87).
  *
- * Per-account "Before" totals then reconcile with "After", and the household
- * current weights sum to ~100% instead of hiding the cash. Mutates the three
- * by-account maps in place and returns the cash-adjusted current weights. The
- * tax-adjusted (after-tax) lens is intentionally left untouched.
+ *  • **Deposits** (`depositByAccount` = household freeCash routed to the account
+ *    in Step 0b): new external money transferred *into* the account. It is NOT
+ *    shown as pre-existing "Before" cash for the account (it hasn't arrived yet);
+ *    it lands as securities in "After" via the trades it funds, and is surfaced
+ *    as a deposit transfer line item in the UI. The account balance grows by the
+ *    deposit, so "After" total = "Before" + deposit (#84).
+ *
+ * Without this, idle cash counted toward householdValue but was invisible in
+ * every per-class breakdown (only cash-classified *holdings* showed up), so the
+ * "Before" view summed to less than household value and deployed cash appeared in
+ * "After trades" with no source. This is display-only — the engine still models
+ * all newCash as net-buy capacity, so trade sizing/placement is unchanged.
+ *
+ *   • Before / current (per account): add idle cash to CASH.
+ *   • After (projected, per account): subtract the idle cash the trades consume,
+ *     so a fully deployed idle balance returns CASH to just its cash-classified
+ *     holdings. Only done when the account actually traded — an all-within-
+ *     tolerance account leaves its idle cash sitting, so it stays visible.
+ *   • Household current weights: add idle + deposits (both are household cash on
+ *     hand right now, even though a deposit isn't yet in any one account), so the
+ *     weights sum to ~100%.
+ *
+ * Mutates the three by-account maps in place and returns the cash-adjusted
+ * current weights. The tax-adjusted (after-tax) lens is left untouched.
  */
 function surfaceIdleCash(
-  idleCashAccounts: Account[],
+  accountsForCash: Account[],
+  idleByAccount: Record<string, number>,
+  depositByAccount: Record<string, number>,
   nativeValueByAccount: Record<string, Record<AssetClass, number>>,
   projectedNativeValueByAccount: Record<string, Record<AssetClass, number>>,
   currentValueByAccount: Record<string, Record<AssetClass, number>>,
@@ -514,21 +525,27 @@ function surfaceIdleCash(
   currentWeights: Record<AssetClass, number>,
   householdValue: number,
 ): Record<AssetClass, number> {
-  let totalIdle = 0;
-  for (const acct of idleCashAccounts) {
-    const idle = Math.max(0, acct.newCash ?? 0);
+  let totalCash = 0;
+  for (const acct of accountsForCash) {
+    const idle = Math.max(0, idleByAccount[acct.id] ?? 0);
+    const deposit = Math.max(0, depositByAccount[acct.id] ?? 0);
+    totalCash += idle + deposit;
     if (idle <= EPSILON) continue;
-    totalIdle += idle;
     (nativeValueByAccount[acct.id] ??= zeroByClass()).CASH += idle;
     (currentValueByAccount[acct.id] ??= zeroByClass()).CASH += idle;
-    const deployed = Math.max(0, resolvedTrades
-      .filter(t => t.accountId === acct.id)
-      .reduce((s, t) => s + t.deltaUsd, 0));
-    const proj = (projectedNativeValueByAccount[acct.id] ??= zeroByClass());
-    proj.CASH = Math.max(0, proj.CASH - deployed);
+    // The idle cash is consumed by the buys it funds — but only if the account
+    // actually traded. An account whose classes are all within tolerance leaves
+    // the idle cash sitting, so it stays visible in "After" too.
+    const acctTraded = resolvedTrades.some(
+      t => t.accountId === acct.id && Math.abs(t.deltaUsd) > EPSILON,
+    );
+    if (acctTraded) {
+      const proj = (projectedNativeValueByAccount[acct.id] ??= zeroByClass());
+      proj.CASH = Math.max(0, proj.CASH - idle);
+    }
   }
-  if (totalIdle <= EPSILON || householdValue <= 0) return currentWeights;
-  return { ...currentWeights, CASH: currentWeights.CASH + totalIdle / householdValue };
+  if (totalCash <= EPSILON || householdValue <= 0) return currentWeights;
+  return { ...currentWeights, CASH: currentWeights.CASH + totalCash / householdValue };
 }
 
 export function rebalance(
@@ -563,7 +580,20 @@ export function rebalance(
   // targets rather than leaving balanced classes untouched.
   const inDrawdown = plannedWithdrawal > EPSILON || accounts.some(a => (a.rmdDueUsd ?? 0) > 0);
   // Per-account dollars withdrawn (RMD + discretionary), surfaced in the result.
+  // A transfer *out* of the account (issues #84/#87).
   const withdrawalByAccount: Record<string, number> = {};
+
+  // Per-account in-account idle cash (the user-provided `newCash`), captured
+  // BEFORE Steps 0a/0b mutate `accounts`. Deploying it is an intra-account
+  // conversion (balance-neutral), so it is NOT a transfer — it surfaces under CASH
+  // in the per-account "Before" breakdown but contributes nothing to the Net
+  // (issues #84/#87). Distinct from depositByAccount below.
+  const idleCashByAccount: Record<string, number> = {};
+  for (const a of accounts) idleCashByAccount[a.id] = a.newCash ?? 0;
+
+  // Per-account household free cash deposited into the account (Step 0b below). A
+  // transfer *into* the account — new external money that changes the balance.
+  const depositByAccount: Record<string, number> = {};
 
   // Step 0a — Drawdown: raise the withdrawal (Σ RMD + the additional amount) by
   // assigning a NEGATIVE net flow to the chosen accounts. A withdrawal is just a
@@ -644,6 +674,10 @@ export function rebalance(
       const { alloc, residual } = fillOrdered(order, id => capOf[id], freeCash);
 
       if (residual > 0) flags.push({ kind: 'EXCESS_CASH', amountUsd: residual });
+      // Record the deposit (transfer in) per account before folding it into newCash.
+      for (const id of Object.keys(alloc)) {
+        if (alloc[id] > EPSILON) depositByAccount[id] = alloc[id];
+      }
       accounts = accounts.map(a =>
         alloc[a.id] !== undefined
           ? { ...a, newCash: (a.newCash ?? 0) + alloc[a.id] }
@@ -737,6 +771,7 @@ export function rebalance(
       nativeValueByAccount,
       projectedNativeValueByAccount: projectedNativeAllocationByAccount(nativeValueByAccount, [], classify, decompositions),
       withdrawalByAccount,
+      depositByAccount,
       trades: [],
       flags,
       contributionSummary: summarizeContributions([]),
@@ -773,7 +808,8 @@ export function rebalance(
     const nativeValueByAccount = nativeAllocationByAccount(originalAccounts, originalPositions, classify, decompositions);
     const projectedNativeValueByAccount = projectedNativeAllocationByAccount(nativeValueByAccount, [], classify, decompositions);
     const adjustedWeights = surfaceIdleCash(
-      originalAccounts, nativeValueByAccount, projectedNativeValueByAccount,
+      originalAccounts, idleCashByAccount, depositByAccount,
+      nativeValueByAccount, projectedNativeValueByAccount,
       currentValueByAccount, [], currentWeights, householdValue,
     );
     return {
@@ -785,6 +821,7 @@ export function rebalance(
       nativeValueByAccount,
       projectedNativeValueByAccount,
       withdrawalByAccount,
+      depositByAccount,
       trades: [],
       flags,
       contributionSummary: summarizeContributions([]),
@@ -1369,9 +1406,10 @@ export function rebalance(
     nativeValueByAccount, resolvedForDisplay, classify, decompositions,
   );
 
-  // Surface idle / free cash as CASH so the breakdowns reconcile (issue #83).
+  // Surface idle / free cash as CASH so the breakdowns reconcile (issues #83/#84/#87).
   nominalCurrentWeights = surfaceIdleCash(
-    originalAccounts, nativeValueByAccount, projectedNativeValueByAccount,
+    originalAccounts, idleCashByAccount, depositByAccount,
+    nativeValueByAccount, projectedNativeValueByAccount,
     resultCurrentValueByAccount, resolvedForDisplay, nominalCurrentWeights, resultHouseholdValue,
   );
 
@@ -1384,6 +1422,7 @@ export function rebalance(
     nativeValueByAccount,
     projectedNativeValueByAccount,
     withdrawalByAccount,
+    depositByAccount,
     trades,
     flags,
     contributionSummary: summarizeContributions(trades),

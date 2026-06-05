@@ -76,6 +76,17 @@ const expectedSchema = z
     // (positions + idle/free cash), matching the account's investable value. Only
     // the listed accounts are checked.
     accountValueByAccount: z.record(z.string(), z.number()).optional(),
+    // Per-account household-free-cash deposited into the account in dollars
+    // (result.depositByAccount) — a transfer *into* the account, as opposed to
+    // in-account idle cash whose deployment is balance-neutral (issues #84/#87).
+    // An account with no deposit may be listed as 0 or omitted. Only listed
+    // accounts are checked.
+    depositByAccount: z.record(z.string(), z.number()).optional(),
+    // Per-account dollars withdrawn in dollars (result.withdrawalByAccount) — a
+    // transfer *out* of the account (drawdown / RMD, issue #14). The reported
+    // per-account Net change is depositByAccount − withdrawalByAccount (#84/#87).
+    // Only listed accounts are checked.
+    withdrawalByAccount: z.record(z.string(), z.number()).optional(),
     // Whether every class's post-trade weight sits within its effective
     // tolerance band min(toleranceAbs, toleranceRel × target).
     projectedDriftWithinTolerance: z.boolean().optional(),

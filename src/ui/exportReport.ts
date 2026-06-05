@@ -249,7 +249,7 @@ function script(reportId: string): string {
 function buildHtml(result: RebalanceResult, accounts: Account[], resolvedTrades: ResolvedTrade[], freeCash: number, plannedWithdrawal: number, now: Date): string {
   const {
     householdValue, currentWeights, targetWeights, projectedWeights,
-    nativeValueByAccount, projectedNativeValueByAccount, withdrawalByAccount, trades, flags,
+    nativeValueByAccount, projectedNativeValueByAccount, withdrawalByAccount, depositByAccount, trades, flags,
   } = result;
 
   const dateStr = now.toLocaleDateString('en-US', {
@@ -304,7 +304,8 @@ function buildHtml(result: RebalanceResult, accounts: Account[], resolvedTrades:
     const netDeploy = trades.filter(t => t.accountId === a.id).reduce((s, t) => s + t.deltaUsd, 0);
     const depositsOpen = a.acceptsDeposits !== false;
     const limited = depositsOpen && a.depositLimitUsd != null;
-    const freeCashShare = freeCash > 0 && depositsOpen ? netDeploy - ownCash : 0;
+    // Exact household-free-cash deposit routed here (issues #84/#87).
+    const freeCashShare = depositByAccount[a.id] ?? 0;
     if (ownCash === 0 && freeCash === 0) return '';
     const depositBadge = !depositsOpen
       ? `<span class="badge sell">Closed</span>`
@@ -433,12 +434,19 @@ function buildHtml(result: RebalanceResult, accounts: Account[], resolvedTrades:
     const before = buildSlices(nativeValueByAccount[acct.id] ?? {} as Record<AssetClass, number>);
     const after  = buildSlices(projectedNativeValueByAccount[acct.id] ?? {} as Record<AssetClass, number>);
 
-    // Skip accounts with no positions and no trades.
-    if (before.length === 0 && acctTrades.length === 0) return '';
+    // Transfers in/out of the account (issues #84/#87). Deploying in-account idle
+    // cash is balance-neutral, so the Net change = deposits − withdrawals only.
+    const deposit    = depositByAccount[acct.id] ?? 0;
+    const withdrawal = withdrawalByAccount[acct.id] ?? 0;
+    const hasTransfer = deposit > 0.5 || withdrawal > 0.5;
 
-    const netUsd = acctTrades.reduce((s, t) => s + t.deltaUsd, 0);
-    const netStr = acctTrades.length > 0
-      ? `<span style="font-size:12px;color:${netUsd >= 0 ? '#16a34a' : '#dc2626'};font-weight:600">${fmtDelta(netUsd)}</span>`
+    // Skip accounts with no positions, no trades, and no transfers.
+    if (before.length === 0 && acctTrades.length === 0 && !hasTransfer) return '';
+
+    const netUsd = deposit - withdrawal;
+    const netColor = Math.abs(netUsd) < 0.5 ? '#6b7280' : netUsd > 0 ? '#16a34a' : '#dc2626';
+    const netStr = (acctTrades.length > 0 || hasTransfer)
+      ? `<span style="font-size:12px;color:${netColor};font-weight:600">${fmtDelta(netUsd)}</span>`
       : '';
     const lockBadge = acct.locked
       ? `<span style="font-size:11px;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:99px;padding:1px 8px">🔒 locked</span>`
@@ -469,7 +477,30 @@ function buildHtml(result: RebalanceResult, accounts: Account[], resolvedTrades:
       </div>`;
     }).join('');
 
-    const noTradesNote = acctTrades.length === 0
+    // Transfer line items (issues #84/#87): deposit at the top, withdrawal at the
+    // bottom — bracketing the trades. Checkable like trades since they're actions.
+    const depositRow = deposit > 0.5 ? (() => {
+      const id = `t-${tradeIndex++}`;
+      return `<div class="trade-item" id="item-${id}">
+        <input type="checkbox" class="trade-check" id="${id}" aria-label="deposit transfer in">
+        <span class="badge" style="background:#e0e7ff;color:#4338ca">DEPOSIT</span>
+        <span class="trade-label" style="flex:1;color:#374151">Transfer in
+          <span style="font-size:11px;color:#9ca3af;margin-left:4px">household free cash</span></span>
+        <span style="font-weight:600;color:#4338ca;font-variant-numeric:tabular-nums">+${esc(fmtUsd(deposit))}</span>
+      </div>`;
+    })() : '';
+    const withdrawalRow = withdrawal > 0.5 ? (() => {
+      const id = `t-${tradeIndex++}`;
+      return `<div class="trade-item" id="item-${id}">
+        <input type="checkbox" class="trade-check" id="${id}" aria-label="withdrawal transfer out">
+        <span class="badge" style="background:#fef3c7;color:#92400e">WITHDRAW</span>
+        <span class="trade-label" style="flex:1;color:#374151">Transfer out
+          <span style="font-size:11px;color:#9ca3af;margin-left:4px">withdrawal</span></span>
+        <span style="font-weight:600;color:#b45309;font-variant-numeric:tabular-nums">−${esc(fmtUsd(withdrawal))}</span>
+      </div>`;
+    })() : '';
+
+    const noTradesNote = acctTrades.length === 0 && !hasTransfer
       ? `<p style="padding:12px 16px;font-size:12px;color:#9ca3af;font-style:italic">Within tolerance — no trades required.</p>` : '';
 
     // Holdings table: asset class → current value → % of account
@@ -511,7 +542,9 @@ function buildHtml(result: RebalanceResult, accounts: Account[], resolvedTrades:
       <div id="${cardBodyId}">
         ${holdingsHtml ? `<div style="border-bottom:1px solid #f3f4f6">${holdingsHtml}</div>` : ''}
         ${piesHtml}
+        ${depositRow}
         ${tradeRows}
+        ${withdrawalRow}
         ${noTradesNote}
       </div>
     </div>`;

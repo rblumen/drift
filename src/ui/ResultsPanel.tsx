@@ -266,6 +266,39 @@ function TradeRow({ trade }: { trade: ResolvedTrade }) {
   );
 }
 
+// ── Transfer row (deposit / withdrawal) — issues #84/#87 ──────────────────────
+// A transfer is money moving in or out of the account, distinct from a buy/sell
+// inside it. A deposit is household free cash routed into the account; a
+// withdrawal is cash leaving (drawdown / RMD). Deploying in-account idle cash is
+// NOT a transfer — it's a balance-neutral conversion and shows up only as buys.
+// Deposits render at the top of the account's action list, withdrawals at the
+// bottom; their sum is the account's reported Net change.
+function TransferRow({ kind, amountUsd }: { kind: 'deposit' | 'withdrawal'; amountUsd: number }) {
+  const isDeposit = kind === 'deposit';
+  return (
+    <tr className="border-t border-gray-100 bg-indigo-50/40">
+      <td className="px-4 py-2">
+        <span className="text-gray-700">{isDeposit ? 'Transfer in' : 'Transfer out'}</span>
+        <div className="text-xs text-gray-400">
+          {isDeposit ? 'Deposit from household free cash' : 'Withdrawal'}
+        </div>
+      </td>
+      <td className="px-4 py-2">
+        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full
+          ${isDeposit ? 'bg-indigo-100 text-indigo-700' : 'bg-amber-100 text-amber-700'}`}>
+          {isDeposit ? 'DEPOSIT' : 'WITHDRAW'}
+        </span>
+      </td>
+      <td className="px-4 py-2 text-right tabular-nums font-medium">
+        <span className={isDeposit ? 'text-indigo-700' : 'text-amber-700'}>
+          {isDeposit ? '+' : '−'}{fmtUsd(amountUsd)}
+        </span>
+      </td>
+      <td className="px-4 py-2 text-xs text-gray-400">transfer</td>
+    </tr>
+  );
+}
+
 // ── Per-account allocation mini-pies ─────────────────────────────────────────
 
 /** Build pie slices from a by-class value map, filtering near-zero slivers. */
@@ -428,7 +461,7 @@ function ContributionSummary({ summary }: { summary: RebalanceResult['contributi
 export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plannedWithdrawal, reminder, setReminder }: Props) {
   const { householdValue, currentWeights, targetWeights, projectedWeights,
           nativeValueByAccount, projectedNativeValueByAccount,
-          withdrawalByAccount, trades, flags, contributionSummary } = result;
+          withdrawalByAccount, depositByAccount, trades, flags, contributionSummary } = result;
 
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
@@ -705,9 +738,8 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plann
                   .reduce((s, t) => s + t.deltaUsd, 0);
                 const depositsOpen = a.acceptsDeposits !== false;
                 const limited = depositsOpen && a.depositLimitUsd != null;
-                const freeCashShare = freeCash > 0 && depositsOpen
-                  ? netDeploy - ownCash  // approximate: net − own cash ≈ free cash routed here
-                  : 0;
+                // Exact household-free-cash deposit routed here (issues #84/#87).
+                const freeCashShare = depositByAccount[a.id] ?? 0;
                 if (ownCash === 0 && freeCash === 0) return null;
                 return (
                   <tr key={a.id} className="hover:bg-gray-50">
@@ -945,7 +977,13 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plann
           <h3 className="text-sm font-medium text-gray-700">Recommended trades</h3>
 
           {tradesByAccount.map(({ account, trades: acctTrades, before, after }) => {
-            const netUsd  = acctTrades.reduce((s, t) => s + t.deltaUsd, 0);
+            // Net change = transfers in/out only (issues #84/#87). Deploying
+            // in-account idle cash is balance-neutral, so it doesn't count toward
+            // Net — only a household-free-cash deposit or a withdrawal does.
+            const deposit    = depositByAccount[account.id] ?? 0;
+            const withdrawal = withdrawalByAccount[account.id] ?? 0;
+            const netUsd     = deposit - withdrawal;
+            const hasTransfer = deposit > 0.5 || withdrawal > 0.5;
             const isOpen  = !collapsed.has(account.id);
             const hasBoth = before.length > 0 && after.length > 0;
             const locked  = account.locked;
@@ -969,9 +1007,9 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plann
                       </span>
                     )}
                   </span>
-                  {acctTrades.length > 0 && (
+                  {(acctTrades.length > 0 || hasTransfer) && (
                     <span className="text-xs text-gray-500 shrink-0">
-                      Net: <span className={netUsd >= 0 ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}>
+                      Net: <span className={Math.abs(netUsd) < 0.5 ? 'text-gray-500 font-medium' : netUsd > 0 ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}>
                         {fmtDelta(netUsd)}
                       </span>
                     </span>
@@ -1002,8 +1040,8 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plann
                       </div>
                     )}
 
-                    {/* Trade table */}
-                    {acctTrades.length > 0 && (
+                    {/* Action table — transfers (deposit top / withdrawal bottom) bracket the trades */}
+                    {(acctTrades.length > 0 || hasTransfer) && (
                       <table className="w-full text-sm">
                         <thead className="text-xs text-gray-500 uppercase tracking-wide border-b border-gray-100">
                           <tr>
@@ -1014,14 +1052,16 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plann
                           </tr>
                         </thead>
                         <tbody>
+                          {deposit > 0.5 && <TransferRow kind="deposit" amountUsd={deposit} />}
                           {acctTrades.map((t, i) => (
                             <TradeRow key={i} trade={t} />
                           ))}
+                          {withdrawal > 0.5 && <TransferRow kind="withdrawal" amountUsd={withdrawal} />}
                         </tbody>
                       </table>
                     )}
 
-                    {acctTrades.length === 0 && (
+                    {acctTrades.length === 0 && !hasTransfer && (
                       <p className="px-4 py-3 text-xs text-gray-400 italic">
                         No trades — portfolio is within tolerance for this account.
                       </p>

@@ -1,0 +1,35 @@
+{
+  "name": "issue-84-87-transfers-vs-idle-cash",
+  "description": "Regression #84/#87: deploying in-account idle cash is balance-neutral (a transfer Net of $0 even though it funds buys), while a household-free-cash deposit is a transfer into the account (Net = the deposit). depositByAccount/withdrawalByAccount drive the per-account Net, not the sum of trade deltas",
+  "principle": "regression #84/#87 (transfers vs in-account idle cash)",
+  "accounts": [
+    { "id": "ira",  "name": "Trad IRA",    "institution": "Fidelity", "type": "TRADITIONAL_IRA", "newCash": 10000, "acceptsDeposits": false },
+    { "id": "k401", "name": "Empower 401k", "institution": "Empower",  "type": "FOUR_OH_ONE_K" }
+  ],
+  "holdings": [],
+  "strategy": {
+    "targets": {
+      "US_TOTAL_MARKET": 0.0, "US_LARGE_CAP": 0.6, "US_MID_CAP": 0.0, "US_SMALL_CAP": 0.0,
+      "DEVELOPED_INTL": 0.27, "DEVELOPED_EUROPE": 0.0, "DEVELOPED_PACIFIC": 0.0, "EMERGING_INTL": 0.03,
+      "FIXED_INCOME": 0.0, "US_TREASURY": 0.0, "US_CORP_BOND": 0.0, "MUNI_BOND": 0.0, "TIPS": 0.0, "INTL_BOND": 0.0,
+      "REAL_ESTATE": 0.0, "ALTERNATIVES": 0.1, "CRYPTO": 0.0, "PRECIOUS_METALS": 0.0, "CASH": 0.0
+    },
+    "placement": {},
+    "toleranceAbs": 0.05,
+    "toleranceRel": 0.25,
+    "minTradeUsd": 100
+  },
+  "freeCash": 5000,
+  "expected": {
+    "nativeByAccount": {
+      "ira":  { "CASH": 10000 },
+      "k401": { "CASH": 0 }
+    },
+    "accountValueByAccount": { "ira": 10000, "k401": 0 },
+    "projectedNativeByAccount": { "ira": { "CASH": 0 } },
+    "currentWeights": { "CASH": 1.0 },
+    "depositByAccount": { "ira": 0, "k401": 5000 },
+    "withdrawalByAccount": { "ira": 0, "k401": 0 },
+    "netByAccount": { "ira": 10000, "k401": 5000 }
+  }
+}

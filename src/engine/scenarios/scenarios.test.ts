@@ -213,6 +213,28 @@ function assertScenario(s: Scenario, result: RebalanceResult): void {
     }
   }
 
+  // ── depositByAccount — household free cash transferred in ─────────────────
+  if (expected.depositByAccount) {
+    for (const [accountId, want] of Object.entries(expected.depositByAccount)) {
+      const got = result.depositByAccount[accountId] ?? 0;
+      expect(
+        approxEq(got, want),
+        `depositByAccount[${accountId}] = ${got.toFixed(2)}, expected ≈ ${want} — ${s.description}`,
+      ).toBe(true);
+    }
+  }
+
+  // ── withdrawalByAccount — dollars transferred out ─────────────────────────
+  if (expected.withdrawalByAccount) {
+    for (const [accountId, want] of Object.entries(expected.withdrawalByAccount)) {
+      const got = result.withdrawalByAccount[accountId] ?? 0;
+      expect(
+        approxEq(got, want),
+        `withdrawalByAccount[${accountId}] = ${got.toFixed(2)}, expected ≈ ${want} — ${s.description}`,
+      ).toBe(true);
+    }
+  }
+
   // ── netByAccount — balance-preserving invariant ───────────────────────────
   if (expected.netByAccount) {
     for (const [accountId, want] of Object.entries(expected.netByAccount)) {
