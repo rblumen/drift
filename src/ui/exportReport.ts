@@ -17,6 +17,7 @@
 import type { Account, AssetClass, RebalanceResult, ResolvedTrade } from '../engine/types';
 import { ALL_ASSET_CLASSES } from '../engine/types';
 import { withdrawalPriorityOf, isWithdrawalEligible } from '../engine/rebalance';
+import { isTaxableSale } from '../engine/taxableSale';
 import { AC_COLOR, AC_LABEL, ACCT_TYPE_LABEL, fmtUsd, fmtPct, fmtDelta } from './fmt';
 
 function esc(s: string): string {
@@ -452,7 +453,7 @@ function buildHtml(result: RebalanceResult, accounts: Account[], resolvedTrades:
     const tradeRows = acctTrades.map(t => {
       const isBuy = t.deltaUsd > 0;
       const id    = `t-${tradeIndex++}`;
-      const taxWarn = (!isBuy && t.inTaxableAccount)
+      const taxWarn = isTaxableSale(t)
         ? `<span style="font-size:11px;color:#d97706;margin-left:8px">⚠ taxable sale</span>` : '';
       const tradeLabel = t.ticker
         ? `<span style="font-family:monospace;font-weight:600;color:#111827">${esc(t.ticker)}</span>
