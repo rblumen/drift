@@ -2,6 +2,7 @@
 import type { Account, AssetClass, Flag, RebalanceResult, ResolvedTrade } from '../engine/types';
 import { ALL_ASSET_CLASSES } from '../engine/types';
 import { withdrawalPriorityOf, isWithdrawalEligible } from '../engine/rebalance';
+import { isTaxableSale } from '../engine/taxableSale';
 import { isChildClass, isParentClass, childrenOf } from '../engine/hierarchy';
 import { AC_COLOR, AC_LABEL, ACCT_TYPE_LABEL, fmtUsd, fmtPct, fmtDelta } from './fmt';
 import { PieChart } from './PieChart';
@@ -258,7 +259,7 @@ function TradeRow({ trade }: { trade: ResolvedTrade }) {
           {fmtDelta(trade.deltaUsd)}
         </span>
       </td>
-      {trade.inTaxableAccount && !isBuy
+      {isTaxableSale(trade)
         ? <td className="px-4 py-2 text-xs text-amber-600">⚠ taxable sale</td>
         : <td className="px-4 py-2" />}
     </tr>

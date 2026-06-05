@@ -7,6 +7,7 @@ import { nativeAllocationByAccount, projectedNativeAllocationByAccount } from '.
 import { consolidateParentClasses, childrenOf } from './hierarchy';
 import { accountBucket, greedyPlace } from './placement';
 import { fillOrdered } from './cashfill';
+import { isTaxableSale } from './taxableSale';
 import { EPSILON, effectiveTolerance, targetTolerance, zeroByClass } from './utils';
 import {
   positionTaxFactor,
@@ -1141,7 +1142,7 @@ export function rebalance(
   // Generate TAXABLE_SALE flags from the corrected trade list.
   // Cash position reductions are not real trades; they don't generate capital-gains exposure.
   for (const trade of trades) {
-    if (trade.deltaUsd < 0 && trade.inTaxableAccount && trade.assetClass !== 'CASH') {
+    if (isTaxableSale(trade)) {
       flags.push({ kind: 'TAXABLE_SALE', accountId: trade.accountId, assetClass: trade.assetClass, amountUsd: Math.abs(trade.deltaUsd) });
     }
   }
