@@ -221,17 +221,28 @@ export interface RebalanceResult {
   /** Per-account current value in the *holdings* lens — each position pinned to its
    *  classified class, no parent→child redistribution (issue #78). Granularity matches
    *  what the user holds (a parent-level TDF stays at the parent level), so this drives
-   *  the per-account "Before" display. Per-account totals match currentValueByAccount. */
+   *  the per-account "Before" display. Per-account totals match currentValueByAccount.
+   *  Each account's idle/free cash (newCash + its share of distributed freeCash) is
+   *  included under CASH so the breakdown reconciles with household value (issue #83). */
   nativeValueByAccount: Record<string, Record<AssetClass, number>>;
   /** The holdings-lens allocation after the recommended trades execute (issue #78) —
    *  `nativeValueByAccount` with each resolved trade applied at its holding's pinned
-   *  class. Drives the per-account "After trades" display. */
+   *  class. Drives the per-account "After trades" display. Idle/free cash that the
+   *  trades deploy is consumed from CASH so "Before" and "After" totals match;
+   *  undeployed cash remains under CASH (issue #83). */
   projectedNativeValueByAccount: Record<string, Record<AssetClass, number>>;
   /** Per-account dollars withdrawn to fund a planned withdrawal / RMD (issue #14).
    *  This is the cash that leaves each account — RMD plus discretionary draw — which
    *  may be met by selling or from idle cash, so it is not the same as net sells.
-   *  Empty when not in drawdown mode. */
+   *  Empty when not in drawdown mode. A transfer *out* of the account (issues #84/#87). */
   withdrawalByAccount: Record<string, number>;
+  /** Per-account household free cash deposited into the account (Step 0b's freeCash
+   *  distribution). A transfer *into* the account — new external money that changes
+   *  the balance — as opposed to per-account `newCash`, which is in-account idle cash
+   *  whose deployment is balance-neutral. The reported per-account Net is
+   *  `depositByAccount − withdrawalByAccount` (issues #84/#87). Empty when no
+   *  household freeCash was distributed. */
+  depositByAccount: Record<string, number>;
   trades: Trade[];
   flags: Flag[];
   /** Contribution-first funding breakdown of the recommended trades.

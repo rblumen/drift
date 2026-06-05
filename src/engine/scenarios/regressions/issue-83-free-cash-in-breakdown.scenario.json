@@ -1,0 +1,38 @@
+{
+  "name": "issue-83-free-cash-in-breakdown",
+  "description": "Regression #83: idle/free cash (per-account newCash + distributed household freeCash) surfaces under CASH in the per-account breakdown and household current weights, so Before/After reconcile and trades don't appear unbalanced",
+  "principle": "regression #83 (free cash visible in account breakdown)",
+  "accounts": [
+    { "id": "taxable", "name": "Taxable", "institution": "Schwab", "type": "TAXABLE", "acceptsDeposits": false },
+    { "id": "ira", "name": "Trad IRA", "institution": "Fidelity", "type": "TRADITIONAL_IRA", "newCash": 5000 }
+  ],
+  "holdings": [
+    { "accountId": "taxable", "ticker": "MUNY", "marketValue": 36000 },
+    { "accountId": "taxable", "ticker": "VMFXX", "marketValue": 4000 },
+    { "accountId": "ira", "ticker": "FZROX", "marketValue": 50000 }
+  ],
+  "strategy": {
+    "targets": {
+      "US_TOTAL_MARKET": 0.0, "US_LARGE_CAP": 0.385, "US_MID_CAP": 0.144, "US_SMALL_CAP": 0.046,
+      "DEVELOPED_INTL": 0.17, "DEVELOPED_EUROPE": 0.0, "DEVELOPED_PACIFIC": 0.0, "EMERGING_INTL": 0.03,
+      "FIXED_INCOME": 0.2, "US_TREASURY": 0.0, "US_CORP_BOND": 0.0, "MUNI_BOND": 0.0, "TIPS": 0.0, "INTL_BOND": 0.0,
+      "REAL_ESTATE": 0.0, "ALTERNATIVES": 0.025, "CRYPTO": 0.0, "PRECIOUS_METALS": 0.0, "CASH": 0.0
+    },
+    "placement": {},
+    "toleranceAbs": 0.05,
+    "toleranceRel": 0.25,
+    "minTradeUsd": 100
+  },
+  "freeCash": 5000,
+  "expected": {
+    "nativeByAccount": {
+      "ira":     { "CASH": 5000, "US_TOTAL_MARKET": 50000 },
+      "taxable": { "CASH": 4000, "MUNI_BOND": 36000 }
+    },
+    "accountValueByAccount": { "ira": 55000, "taxable": 40000 },
+    "projectedNativeByAccount": { "ira": { "CASH": 0 } },
+    "currentWeights": { "CASH": 0.14 },
+    "depositByAccount": { "ira": 5000 },
+    "netByAccount": { "ira": 10000, "taxable": 0 }
+  }
+}
