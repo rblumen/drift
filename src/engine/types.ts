@@ -221,11 +221,15 @@ export interface RebalanceResult {
   /** Per-account current value in the *holdings* lens — each position pinned to its
    *  classified class, no parent→child redistribution (issue #78). Granularity matches
    *  what the user holds (a parent-level TDF stays at the parent level), so this drives
-   *  the per-account "Before" display. Per-account totals match currentValueByAccount. */
+   *  the per-account "Before" display. Per-account totals match currentValueByAccount.
+   *  Each account's idle/free cash (newCash + its share of distributed freeCash) is
+   *  included under CASH so the breakdown reconciles with household value (issue #83). */
   nativeValueByAccount: Record<string, Record<AssetClass, number>>;
   /** The holdings-lens allocation after the recommended trades execute (issue #78) —
    *  `nativeValueByAccount` with each resolved trade applied at its holding's pinned
-   *  class. Drives the per-account "After trades" display. */
+   *  class. Drives the per-account "After trades" display. Idle/free cash that the
+   *  trades deploy is consumed from CASH so "Before" and "After" totals match;
+   *  undeployed cash remains under CASH (issue #83). */
   projectedNativeValueByAccount: Record<string, Record<AssetClass, number>>;
   /** Per-account dollars withdrawn to fund a planned withdrawal / RMD (issue #14).
    *  This is the cash that leaves each account — RMD plus discretionary draw — which

@@ -476,6 +476,61 @@ function synthesizeBlendedFundSells(
   return flags;
 }
 
+/**
+ * Surface idle / free cash as the CASH asset class in the per-account display
+ * maps and the reported current weights (issue #83).
+ *
+ * `newCash` on an account is uninvested cash — a per-account contribution plus
+ * that account's share of distributed household freeCash, net of any drawdown
+ * (Steps 0a/0b). It already counts toward householdValue (via rollup's
+ * accountValues), but — unlike a cash-classified *holding* such as a swept
+ * money-market position — it was absent from every per-class breakdown. The
+ * result: the "Before" view summed to less than household value, and the cash
+ * the engine deploys appeared in "After trades" with no visible source, so the
+ * trades looked unbalanced (an account grew out of nowhere).
+ *
+ * This adjustment is display-only. The engine still models newCash as net-buy
+ * capacity (never an out-of-tolerance CASH sale), so trade sizing/placement is
+ * unchanged:
+ *   • Before / current: add each account's idle cash to its CASH bucket.
+ *   • After (projected): the net buys this cash funds consume it, so subtract
+ *     the realized per-account deployment back out of projected CASH. The
+ *     engine pins each account's net trade flow to its newCash, so for a fully
+ *     deployed contribution the displayed CASH returns to just its
+ *     cash-classified holdings; a within-tolerance leftover (deployment < idle
+ *     cash) correctly remains visible as CASH.
+ *
+ * Per-account "Before" totals then reconcile with "After", and the household
+ * current weights sum to ~100% instead of hiding the cash. Mutates the three
+ * by-account maps in place and returns the cash-adjusted current weights. The
+ * tax-adjusted (after-tax) lens is intentionally left untouched.
+ */
+function surfaceIdleCash(
+  idleCashAccounts: Account[],
+  nativeValueByAccount: Record<string, Record<AssetClass, number>>,
+  projectedNativeValueByAccount: Record<string, Record<AssetClass, number>>,
+  currentValueByAccount: Record<string, Record<AssetClass, number>>,
+  resolvedTrades: { accountId: string; deltaUsd: number }[],
+  currentWeights: Record<AssetClass, number>,
+  householdValue: number,
+): Record<AssetClass, number> {
+  let totalIdle = 0;
+  for (const acct of idleCashAccounts) {
+    const idle = Math.max(0, acct.newCash ?? 0);
+    if (idle <= EPSILON) continue;
+    totalIdle += idle;
+    (nativeValueByAccount[acct.id] ??= zeroByClass()).CASH += idle;
+    (currentValueByAccount[acct.id] ??= zeroByClass()).CASH += idle;
+    const deployed = Math.max(0, resolvedTrades
+      .filter(t => t.accountId === acct.id)
+      .reduce((s, t) => s + t.deltaUsd, 0));
+    const proj = (projectedNativeValueByAccount[acct.id] ??= zeroByClass());
+    proj.CASH = Math.max(0, proj.CASH - deployed);
+  }
+  if (totalIdle <= EPSILON || householdValue <= 0) return currentWeights;
+  return { ...currentWeights, CASH: currentWeights.CASH + totalIdle / householdValue };
+}
+
 export function rebalance(
   accounts: Account[],
   positions: Position[],
@@ -713,12 +768,22 @@ export function rebalance(
   }
 
   if (withinTolerance.size === ALL_ASSET_CLASSES.length) {
+    // No trades, but idle/free cash still belongs in the breakdowns (issue #83).
+    // With nothing to deploy, projected == before — the cash stays visible as CASH.
+    const nativeValueByAccount = nativeAllocationByAccount(originalAccounts, originalPositions, classify, decompositions);
+    const projectedNativeValueByAccount = projectedNativeAllocationByAccount(nativeValueByAccount, [], classify, decompositions);
+    const adjustedWeights = surfaceIdleCash(
+      originalAccounts, nativeValueByAccount, projectedNativeValueByAccount,
+      currentValueByAccount, [], currentWeights, householdValue,
+    );
     return {
       householdValue,
-      currentWeights,
+      currentWeights: adjustedWeights,
       targetWeights: strategy.targets,
-      projectedWeights: currentWeights,
+      projectedWeights: adjustedWeights,
       currentValueByAccount,
+      nativeValueByAccount,
+      projectedNativeValueByAccount,
       withdrawalByAccount,
       trades: [],
       flags,
@@ -1302,6 +1367,12 @@ export function rebalance(
   const resolvedForDisplay = resolveTradeVehicles(trades, originalPositions, decompositions, classify, strategy.targets);
   const projectedNativeValueByAccount = projectedNativeAllocationByAccount(
     nativeValueByAccount, resolvedForDisplay, classify, decompositions,
+  );
+
+  // Surface idle / free cash as CASH so the breakdowns reconcile (issue #83).
+  nominalCurrentWeights = surfaceIdleCash(
+    originalAccounts, nativeValueByAccount, projectedNativeValueByAccount,
+    resultCurrentValueByAccount, resolvedForDisplay, nominalCurrentWeights, resultHouseholdValue,
   );
 
   return {

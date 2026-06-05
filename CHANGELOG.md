@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Free cash now appears in the account breakdown** ([#83](https://github.com/rblumen/drift/issues/83)) — uninvested cash (a per-account contribution, plus each account's share of distributed household free cash) counts toward household value but was missing from every per-class breakdown — only a cash-classified *holding* like a money-market position showed up. As a result the per-account **Before** pie summed to less than the account's value, and the cash the engine deploys appeared in **After trades** with no visible source, so trades looked unbalanced (the account seemed to grow out of nowhere). Idle/free cash now shows under **Cash** in the per-account Before pies and the household allocation table, so Before and After totals reconcile and the current column sums to 100%. The deployed portion is consumed from Cash in the After view; any free cash left undeployed (e.g. when everything is within tolerance) stays visible as Cash. Trade calculations are unchanged — this is a display fix.
+
 ### Changed
 
 - **Rebalances now land closer to your ideal mix** ([#42](https://github.com/rblumen/drift/issues/42)) — previously, once a class drifted past its tolerance band the engine was allowed to correct it back to *anywhere inside* that band, which could leave it sitting right at the edge — so the next small move would re-trigger a rebalance almost immediately. The tolerance band now governs only **whether** a class has drifted enough to act; a new **Rebalance target band** setting (Strategy → Rebalance parameters) governs **how close to ideal** it lands once it does. It defaults to 50% — the engine aims to land within half the tolerance band, leaving drift headroom before the next rebalance. The trade-count-minimization pass respects this tighter band, so it keeps a few more trades than before in exchange for a tighter result; set the band to 100% to restore the prior "land anywhere inside tolerance" behavior (fewer trades, more drift). Existing strategies without the setting default to 50%.

@@ -56,6 +56,26 @@ const expectedSchema = z
     // Partial: only the listed asset classes are checked against
     // result.projectedWeights (post-trade household weights, as fractions).
     projectedWeights: z.record(ASSET_CLASS, z.number()).optional(),
+    // Partial: only the listed asset classes are checked against
+    // result.currentWeights (pre-trade household weights, as fractions). Mirror of
+    // projectedWeights. Idle/free cash surfaces under CASH here (issue #83), so the
+    // weights sum to ~1.0 rather than hiding uninvested cash.
+    currentWeights: z.record(ASSET_CLASS, z.number()).optional(),
+    // Per-account holdings-lens breakdown BEFORE trades (result.nativeValueByAccount),
+    // in dollars. Each listed account checks only its listed classes; an account's
+    // idle/free cash (newCash + its share of distributed freeCash) appears under
+    // CASH alongside cash-classified holdings (issue #83). Use to assert what a
+    // per-account "Before" pie shows.
+    nativeByAccount: z.record(z.string(), z.record(ASSET_CLASS, z.number())).optional(),
+    // Per-account holdings-lens breakdown AFTER trades
+    // (result.projectedNativeValueByAccount), in dollars. Same partial semantics as
+    // nativeByAccount; use to assert deployment (e.g. free cash consumed from CASH)
+    // and that "Before"/"After" reconcile.
+    projectedNativeByAccount: z.record(z.string(), z.record(ASSET_CLASS, z.number())).optional(),
+    // Per-account total balance in dollars — the sum of the holdings-lens breakdown
+    // (positions + idle/free cash), matching the account's investable value. Only
+    // the listed accounts are checked.
+    accountValueByAccount: z.record(z.string(), z.number()).optional(),
     // Whether every class's post-trade weight sits within its effective
     // tolerance band min(toleranceAbs, toleranceRel × target).
     projectedDriftWithinTolerance: z.boolean().optional(),

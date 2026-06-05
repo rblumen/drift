@@ -162,6 +162,57 @@ function assertScenario(s: Scenario, result: RebalanceResult): void {
     expect(actual, `projectedWeights mismatch — ${s.description}`).toEqual(want);
   }
 
+  // ── currentWeights — partial (pre-trade household allocation) ─────────────
+  if (expected.currentWeights) {
+    const want: Record<string, number> = {};
+    const actual: Record<string, number> = {};
+    for (const [ac, w] of Object.entries(expected.currentWeights)) {
+      want[ac] = round(w as number, 4);
+      actual[ac] = round(result.currentWeights[ac as AssetClass] ?? 0, 4);
+    }
+    expect(actual, `currentWeights mismatch — ${s.description}`).toEqual(want);
+  }
+
+  // ── nativeByAccount — per-account breakdown BEFORE trades (incl. idle cash) ─
+  if (expected.nativeByAccount) {
+    for (const [accountId, classes] of Object.entries(expected.nativeByAccount)) {
+      const got = result.nativeValueByAccount[accountId] ?? {};
+      for (const [ac, want] of Object.entries(classes as Record<string, number>)) {
+        const actual = got[ac as AssetClass] ?? 0;
+        expect(
+          approxEq(actual, want),
+          `nativeByAccount[${accountId}][${ac}] = ${actual.toFixed(2)}, expected ≈ ${want} — ${s.description}`,
+        ).toBe(true);
+      }
+    }
+  }
+
+  // ── projectedNativeByAccount — per-account breakdown AFTER trades ──────────
+  if (expected.projectedNativeByAccount) {
+    for (const [accountId, classes] of Object.entries(expected.projectedNativeByAccount)) {
+      const got = result.projectedNativeValueByAccount[accountId] ?? {};
+      for (const [ac, want] of Object.entries(classes as Record<string, number>)) {
+        const actual = got[ac as AssetClass] ?? 0;
+        expect(
+          approxEq(actual, want),
+          `projectedNativeByAccount[${accountId}][${ac}] = ${actual.toFixed(2)}, expected ≈ ${want} — ${s.description}`,
+        ).toBe(true);
+      }
+    }
+  }
+
+  // ── accountValueByAccount — per-account total balance (positions + idle cash) ─
+  if (expected.accountValueByAccount) {
+    for (const [accountId, want] of Object.entries(expected.accountValueByAccount)) {
+      const got = result.nativeValueByAccount[accountId] ?? {};
+      const total = ALL_ASSET_CLASSES.reduce((sum, ac) => sum + (got[ac] ?? 0), 0);
+      expect(
+        approxEq(total, want),
+        `accountValueByAccount[${accountId}] = ${total.toFixed(2)}, expected ≈ ${want} — ${s.description}`,
+      ).toBe(true);
+    }
+  }
+
   // ── netByAccount — balance-preserving invariant ───────────────────────────
   if (expected.netByAccount) {
     for (const [accountId, want] of Object.entries(expected.netByAccount)) {

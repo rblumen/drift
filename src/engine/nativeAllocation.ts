@@ -55,8 +55,10 @@ function applyHolding(
  * user actually holds. Per-account totals match rollup()'s currentValueByAccount;
  * only the granularity differs.
  *
- * newCash is intentionally excluded, mirroring rollup()'s currentValueByAccount
- * (idle cash isn't a classified holding).
+ * newCash is excluded here — this function reports classified *holdings* only.
+ * rebalance() layers idle/free cash onto the CASH bucket of its result
+ * (`surfaceIdleCash`, issue #83) so the displayed breakdown reconciles with
+ * household value; this function itself stays a pure holdings lens.
  */
 export function nativeAllocationByAccount(
   accounts: Account[],
