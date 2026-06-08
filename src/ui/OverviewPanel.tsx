@@ -149,10 +149,6 @@ const ASSUMPTIONS = [
     body: 'The default strategy holds muni bonds (e.g. MUNY) in the taxable account because muni interest is exempt from federal and NY state taxes. Equities and alternatives go in tax-advantaged accounts where long-term growth compounds tax-deferred.',
   },
   {
-    heading: 'Placement has a built-in expiry trigger',
-    body: 'The bonds-in-taxable strategy only makes sense while the taxable balance is smaller than the fixed-income sleeve. When taxable assets exceed the fixed-income target weight, the engine emits a REVISIT_PLACEMENT flag — a signal to update the placement rules.',
-  },
-  {
     heading: 'No cost-basis tracking in v1',
     body: 'The engine flags when a recommended sell lands in a taxable account (TAXABLE_SALE), but it does not estimate the capital gain. Review taxable sells manually before executing.',
   },

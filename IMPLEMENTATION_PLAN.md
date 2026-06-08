@@ -128,16 +128,16 @@ type Flag =
 
 **Other defaults:** `toleranceAbs = 0.05`, `toleranceRel = 0.25` (Bogleheads 5/25 rule — the engine uses whichever band is tighter per class), `minTradeUsd = 250`.
 
-### The placement compromise and REVISIT_PLACEMENT trigger
+### The REVISIT_PLACEMENT heads-up
 
-The strategy keeps taxable focused on tax-free munis near-term while the taxable balance is still small relative to the total — concentrating growth assets in tax-advantaged accounts. This compromise has a built-in expiry:
+Placement preferences are user-configurable per asset class (and per account); the defaults above keep taxable focused on tax-free munis while concentrating growth assets in tax-advantaged accounts. Independent of that configuration, the engine emits a heads-up keyed on account values vs. the Fixed Income target:
 
 ```
 if (taxableValue / householdValue) > strategy.targets.FIXED_INCOME
     → emit REVISIT_PLACEMENT { taxableShare, fixedIncomeTarget }
 ```
 
-When taxable assets outgrow the fixed-income sleeve, bonds can no longer fill it exclusively and equities must begin landing in taxable. This flag turns "we'll reconsider someday" into an automatic, measurable prompt.
+When taxable assets outgrow the fixed-income sleeve, bonds can no longer fill it exclusively and equities must begin landing in taxable. The flag is an automatic, measurable prompt to revisit the placement rules.
 
 ---
 
