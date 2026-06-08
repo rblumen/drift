@@ -1,36 +1,85 @@
 ﻿import { useState, useEffect } from 'react';
-import type { Strategy, AssetClass, PlacementTarget } from '../engine/types';
+import type { Strategy, Account, AssetClass, PlacementTarget } from '../engine/types';
 import { ALL_ASSET_CLASSES } from '../engine/types';
 import { DEFAULT_STRATEGY } from '../engine/strategy';
 import { CLASS_HIERARCHY, PARENT_CLASS, isParentClass, isChildClass, childrenOf } from '../engine/hierarchy';
+import { accountTarget, isAccountTarget, accountIdOf, descendantAccountTypes } from '../engine/placementHierarchy';
 import { AC_COLOR, AC_LABEL, BUCKET_LABEL, fmtPct } from './fmt';
 import { WeightPie } from './WeightPie';
 import type { WeightSlice } from './WeightPie';
 import { HelpBox, HelpDef, HelpSection, HelpTip } from './HelpBox';
 
-// Placement-target options offered in the dropdowns, grouped hierarchically (issue #89).
-// The broad tax-advantaged bucket and its two tiers (tax-deferred / tax-free) share one
-// group so a rule can stay broad or drill into Traditional/401k vs Roth/HSA.
-const PLACEMENT_OPTION_GROUPS: Array<{ label: string; options: PlacementTarget[] }> = [
-  { label: '', options: ['TAXABLE'] },
-  { label: 'Tax-Advantaged', options: ['TAX_ADVANTAGED', 'TAX_DEFERRED', 'TAX_FREE'] },
-  { label: '', options: ['EDUCATION'] },
-];
-// Renders the placement-target choices for a <select>: bare buckets at top level,
-// the tax-advantaged tier inside a labelled <optgroup> so the hierarchy reads visually.
-function placementTargetOptions() {
-  return PLACEMENT_OPTION_GROUPS.map(group =>
-    group.label
-      ? (
+// One selectable placement option: a value plus its display label and nesting depth.
+// depth 1 rows are specific-account leaves shown indented under their tax tier (#89 Phase 2).
+type PlacementOption = { value: PlacementTarget; label: string; depth: 0 | 1 };
+
+// Display label for any placement target — tier/bucket via BUCKET_LABEL, or the account's
+// name for an account: leaf (falling back to a deleted-account marker if it's gone).
+function labelForTarget(target: PlacementTarget, accounts: Account[]): string {
+  if (isAccountTarget(target)) {
+    const acct = accounts.find(a => a.id === accountIdOf(target));
+    return acct ? acct.name : '⚠ deleted account';
+  }
+  return BUCKET_LABEL[target] ?? String(target);
+}
+
+// Placement-target options grouped hierarchically and filtered to the household (#89).
+// The tax-advantaged group holds the broad bucket plus the tax-deferred / tax-free tiers,
+// and each tier is followed by the specific accounts the household actually holds under it
+// — so a rule can stay broad, pick a tier, or pin a single account. Tiers/buckets are
+// always offered; only *specific-account* leaves are visibility-gated (we list real
+// accounts only).
+function buildPlacementOptionGroups(
+  accounts: Account[],
+): Array<{ label: string; options: PlacementOption[] }> {
+  const accountLeaves = (tier: PlacementTarget): PlacementOption[] => {
+    const types = descendantAccountTypes(tier);
+    return accounts
+      .filter(a => types.includes(a.type))
+      .map(a => ({ value: accountTarget(a.id), label: `↳ ${a.name}`, depth: 1 as const }));
+  };
+  const tier = (t: PlacementTarget): PlacementOption => ({ value: t, label: BUCKET_LABEL[t], depth: 0 });
+
+  return [
+    { label: 'Taxable', options: [tier('TAXABLE'), ...accountLeaves('TAXABLE')] },
+    {
+      label: 'Tax-Advantaged',
+      options: [
+        tier('TAX_ADVANTAGED'),
+        tier('TAX_DEFERRED'), ...accountLeaves('TAX_DEFERRED'),
+        tier('TAX_FREE'), ...accountLeaves('TAX_FREE'),
+      ],
+    },
+    { label: 'Education', options: [tier('EDUCATION'), ...accountLeaves('EDUCATION')] },
+  ];
+}
+
+// Renders grouped <optgroup>/<option> for a placement <select>. `current` is the value the
+// select is showing; if it's an account: leaf for a since-deleted account (not in any
+// group), a fallback option is prepended so the stale rule stays visible and selectable.
+function renderPlacementOptions(
+  groups: Array<{ label: string; options: PlacementOption[] }>,
+  current: PlacementTarget | '' | undefined,
+  accounts: Account[],
+) {
+  const known = new Set(groups.flatMap(g => g.options.map(o => o.value)));
+  const staleOption =
+    current && isAccountTarget(current) && !known.has(current)
+      ? <option key={current} value={current}>{labelForTarget(current, accounts)}</option>
+      : null;
+  return (
+    <>
+      {staleOption}
+      {groups.map(group => (
         <optgroup key={group.label} label={group.label}>
-          {group.options.map(t => (
-            <option key={t} value={t}>{BUCKET_LABEL[t]}</option>
+          {group.options.map(o => (
+            <option key={o.value} value={o.value}>
+              {o.depth ? `  ${o.label}` : o.label}
+            </option>
           ))}
         </optgroup>
-      )
-      : group.options.map(t => (
-        <option key={t} value={t}>{BUCKET_LABEL[t]}</option>
-      )),
+      ))}
+    </>
   );
 }
 
@@ -114,6 +163,8 @@ function CollapsibleSection({
 interface Props {
   strategy: Strategy;
   setStrategy: (s: Strategy) => void;
+  /** Household accounts — drives the per-account placement options (issue #89 Phase 2). */
+  accounts: Account[];
   currentWeights: Record<AssetClass, number>;
   /** Nominal weights the engine drives toward when tax adjustment is enabled —
    *  i.e. the nominal allocation required to satisfy strategy.targets in
@@ -310,7 +361,11 @@ function TaxAdjustmentControl({
   );
 }
 
-export function StrategyPanel({ strategy, setStrategy, currentWeights, taxAdjustedTargetWeights }: Props) {
+export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights, taxAdjustedTargetWeights }: Props) {
+  // Placement dropdown options, rebuilt when the household's accounts change so each tax
+  // tier lists the specific accounts it contains (issue #89 Phase 2).
+  const placementGroups = buildPlacementOptionGroups(accounts);
+
   // A child class "carries weight" when it is targeted or actually held — such a
   // parent is force-expanded (its sub-classes are real, not a hidden refinement).
   const heldOrTargeted = (ac: AssetClass) =>
@@ -996,7 +1051,7 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights, taxAdjust
                           className="border border-gray-200 rounded px-2 py-1 text-sm bg-white hover:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400"
                         >
                           <option value={NO_PREF}>No preference</option>
-                          {placementTargetOptions()}
+                          {renderPlacementOptions(placementGroups, buckets[0], accounts)}
                         </select>
                       </td>
 
@@ -1011,7 +1066,7 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights, taxAdjust
                             className="border border-gray-200 rounded px-2 py-1 text-sm bg-white hover:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400 text-gray-500"
                           >
                             <option value="">— none —</option>
-                            {placementTargetOptions()}
+                            {renderPlacementOptions(placementGroups, buckets[1], accounts)}
                           </select>
                         )}
                       </td>
