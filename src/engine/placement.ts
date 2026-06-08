@@ -1,6 +1,6 @@
 import type { Account, AccountType, AssetClass, PlacementBucket, Strategy, Flag } from './types';
 import { ALL_ASSET_CLASSES } from './types';
-import { accountSatisfiesTarget } from './placementHierarchy';
+import { accountSatisfiesPlacement } from './placementHierarchy';
 import { EPSILON, zeroByClass } from './utils';
 
 // Tiebreaker for classes with equal placement constraint counts.
@@ -179,7 +179,7 @@ export function greedyPlace(
       if (remainingNeed[ac] <= EPSILON) break;
 
       const eligible = accounts.filter(
-        a => accountSatisfiesTarget(a.type, target)
+        a => accountSatisfiesPlacement(a, target)
           && effectiveAllowed[a.id].has(ac)
           && remainingCapacity[a.id] > EPSILON,
       );
@@ -187,7 +187,7 @@ export function greedyPlace(
       // overflowed — distinguish "doesn't exist / already full" from a real overflow by
       // checking whether any account satisfies the target at all (capacity aside).
       const targetHasAnyAccount = accounts.some(
-        a => accountSatisfiesTarget(a.type, target) && effectiveAllowed[a.id].has(ac),
+        a => accountSatisfiesPlacement(a, target) && effectiveAllowed[a.id].has(ac),
       );
       if (eligible.length === 0) {
         // The home exists but is already full → a genuine overflow source for later spill.

@@ -35,13 +35,23 @@ export type AccountType =
 // tax-sale logic, withdrawal eligibility, and REVISIT_PLACEMENT key on. Unchanged by #89.
 export type PlacementBucket = 'TAXABLE' | 'TAX_ADVANTAGED' | 'EDUCATION';
 
+// A specific-account placement leaf (issue #89 Phase 2): `account:<accountId>`. Kept as a
+// prefixed string rather than a tagged object so the PlacementTarget union stays
+// string-based — comparable, array-friendly, and Zod-validatable. Build/parse via the
+// accountTarget / accountIdOf helpers in placementHierarchy.ts.
+export type AccountPlacementTarget = `account:${string}`;
+
 // A placement *preference* a strategy may express (issue #89). Generalizes the flat
 // PlacementBucket into a tree node that can be a broad tax-treatment bucket, an
-// intermediate bucket (tax-deferred vs tax-free), or a specific account type. An account
-// satisfies a target when its type is a leaf descendant of that node (see
-// placementHierarchy.ts). Phase 1 keeps this a closed union; per-account leaves are a
-// future phase. `Strategy.placement` holds ordered lists of these.
-export type PlacementTarget = PlacementBucket | 'TAX_DEFERRED' | 'TAX_FREE' | AccountType;
+// intermediate bucket (tax-deferred vs tax-free), a specific account type, or a specific
+// account (Phase 2). An account satisfies a node by type (placementHierarchy.ts) or, for
+// an account leaf, by id. `Strategy.placement` holds ordered lists of these.
+export type PlacementTarget =
+  | PlacementBucket
+  | 'TAX_DEFERRED'
+  | 'TAX_FREE'
+  | AccountType
+  | AccountPlacementTarget;
 
 export const ALL_ASSET_CLASSES: readonly AssetClass[] = [
   'US_TOTAL_MARKET',
