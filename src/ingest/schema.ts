@@ -7,7 +7,13 @@ const ACCOUNT_TYPES = [
   'FIVE_TWENTY_NINE', 'HSA', 'OTHER',
 ] as const;
 
-const PLACEMENT_BUCKETS = ['TAXABLE', 'TAX_ADVANTAGED', 'EDUCATION'] as const;
+// Placement targets a strategy may express (issue #89). Beyond the three coarse
+// tax-treatment buckets, a preference may name an intermediate bucket (TAX_DEFERRED /
+// TAX_FREE) or a specific account type. Mirrors the PlacementTarget union in engine/types.
+const PLACEMENT_TARGETS = [
+  'TAXABLE', 'TAX_ADVANTAGED', 'EDUCATION', 'TAX_DEFERRED', 'TAX_FREE',
+  'TRADITIONAL_IRA', 'ROTH_IRA', 'FOUR_OH_ONE_K', 'FIVE_TWENTY_NINE', 'HSA', 'OTHER',
+] as const;
 
 const ASSET_CLASSES = [
   'US_TOTAL_MARKET', 'US_LARGE_CAP', 'US_MID_CAP', 'US_SMALL_CAP',
@@ -79,29 +85,38 @@ const targetsSchema = z.object({
   { message: 'Target weights must sum to 1.0 (±0.001)' },
 );
 
-// Default placement for any asset class missing from an old saved strategy.
+// Default placement for any asset class missing from an old saved strategy (issue #89
+// asset-location defaults). High-growth sleeves prefer tax-free (Roth/HSA), spilling to
+// tax-deferred then taxable; ordinary-income bond sleeves prefer tax-deferred
+// (Traditional/401k); munis stay taxable. These are *starting points* — the migration
+// in migrateStrategyTargets only backfills classes a saved strategy never specified, so
+// adopting these never overwrites an existing/imported selection (see that function).
 const DEFAULT_PLACEMENT: Record<string, string[]> = {
-  US_TOTAL_MARKET:  ['TAX_ADVANTAGED', 'TAXABLE'],
-  US_LARGE_CAP:     ['TAX_ADVANTAGED', 'TAXABLE'],
-  US_MID_CAP:       ['TAX_ADVANTAGED', 'TAXABLE'],
-  US_SMALL_CAP:     ['TAX_ADVANTAGED', 'TAXABLE'],
-  DEVELOPED_INTL:   ['TAX_ADVANTAGED', 'TAXABLE'],
-  DEVELOPED_EUROPE: ['TAX_ADVANTAGED', 'TAXABLE'],
-  DEVELOPED_PACIFIC: ['TAX_ADVANTAGED', 'TAXABLE'],
-  EMERGING_INTL:    ['TAX_ADVANTAGED', 'TAXABLE'],
+  // Core/total-market and cap equity — highest-growth, prefer Roth.
+  US_TOTAL_MARKET:  ['TAX_FREE', 'TAX_DEFERRED', 'TAXABLE'],
+  US_LARGE_CAP:     ['TAX_FREE', 'TAX_DEFERRED', 'TAXABLE'],
+  US_MID_CAP:       ['TAX_FREE', 'TAX_DEFERRED', 'TAXABLE'],
+  US_SMALL_CAP:     ['TAX_FREE', 'TAX_DEFERRED', 'TAXABLE'],
+  // Emerging markets — highest expected growth/vol → Roth.
+  EMERGING_INTL:    ['TAX_FREE', 'TAX_DEFERRED', 'TAXABLE'],
+  // Developed intl — foreign-tax-credit value; prefer tax-deferred but keep taxable as a
+  // tier so the credit isn't stranded on spillover.
+  DEVELOPED_INTL:   ['TAX_DEFERRED', 'TAXABLE'],
+  DEVELOPED_EUROPE: ['TAX_DEFERRED', 'TAXABLE'],
+  DEVELOPED_PACIFIC: ['TAX_DEFERRED', 'TAXABLE'],
   // FIXED_INCOME parent → taxable (muni intent). Subdivided: munis stay taxable;
-  // taxable-coupon sleeves (treasury/corp/tips/intl) shelter in tax-advantaged.
+  // ordinary-income coupon sleeves (treasury/corp/tips/intl) prefer tax-deferred.
   FIXED_INCOME:     ['TAXABLE'],
-  US_TREASURY:      ['TAX_ADVANTAGED', 'TAXABLE'],
-  US_CORP_BOND:     ['TAX_ADVANTAGED'],
+  US_TREASURY:      ['TAX_DEFERRED', 'TAXABLE'],
+  US_CORP_BOND:     ['TAX_DEFERRED'],
   MUNI_BOND:        ['TAXABLE'],
-  TIPS:             ['TAX_ADVANTAGED'],
-  INTL_BOND:        ['TAX_ADVANTAGED'],
-  // REITs — non-qualified dividends → shelter.
-  REAL_ESTATE:      ['TAX_ADVANTAGED'],
-  ALTERNATIVES:     ['TAX_ADVANTAGED'],
-  CRYPTO:           ['TAX_ADVANTAGED'],
-  PRECIOUS_METALS:  ['TAX_ADVANTAGED'],
+  TIPS:             ['TAX_DEFERRED'],
+  INTL_BOND:        ['TAX_DEFERRED'],
+  // REITs — non-qualified dividends + growth → Roth, then tax-deferred.
+  REAL_ESTATE:      ['TAX_FREE', 'TAX_DEFERRED'],
+  ALTERNATIVES:     ['TAX_FREE', 'TAX_DEFERRED'],
+  CRYPTO:           ['TAX_FREE', 'TAX_DEFERRED'],
+  PRECIOUS_METALS:  ['TAX_FREE', 'TAX_DEFERRED'],
   CASH:             ['TAXABLE', 'TAX_ADVANTAGED'],
 };
 
@@ -161,7 +176,7 @@ export const strategySchema = z.preprocess(migrateStrategyTargets, z.object({
   // wherever capacity is largest. A missing entry is backfilled by the migration.
   placement: z.record(
     z.string(),
-    z.array(z.enum(PLACEMENT_BUCKETS)),
+    z.array(z.enum(PLACEMENT_TARGETS)),
   ),
   toleranceAbs: z.number().min(0).max(1),
   toleranceRel: z.number().min(0).max(1).optional(),

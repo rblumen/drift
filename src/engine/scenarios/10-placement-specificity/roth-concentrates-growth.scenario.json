@@ -1,0 +1,37 @@
+{
+  "name": "roth-concentrates-growth",
+  "description": "Goal 6 (issue #89): an equity sleeve preferring tax-free placement concentrates in the Roth IRA while ordinary-income bonds shelter in the Traditional IRA — the tax-deferred vs tax-free distinction the broad bucket could not express",
+  "principle": 6,
+  "accounts": [
+    { "id": "roth", "name": "Fidelity Roth IRA", "institution": "Fidelity", "type": "ROTH_IRA", "newCash": 20000 },
+    { "id": "trad", "name": "Fidelity Trad IRA", "institution": "Fidelity", "type": "TRADITIONAL_IRA", "newCash": 80000 }
+  ],
+  "holdings": [],
+  "strategy": {
+    "targets": {
+      "US_TOTAL_MARKET": 0.0, "US_LARGE_CAP": 0.2, "US_MID_CAP": 0.0, "US_SMALL_CAP": 0.0,
+      "DEVELOPED_INTL": 0.0, "DEVELOPED_EUROPE": 0.0, "DEVELOPED_PACIFIC": 0.0, "EMERGING_INTL": 0.0,
+      "FIXED_INCOME": 0.0, "US_TREASURY": 0.0, "US_CORP_BOND": 0.8, "MUNI_BOND": 0.0, "TIPS": 0.0, "INTL_BOND": 0.0,
+      "REAL_ESTATE": 0.0, "ALTERNATIVES": 0.0, "CRYPTO": 0.0, "PRECIOUS_METALS": 0.0, "CASH": 0.0
+    },
+    "placement": {
+      "US_LARGE_CAP": ["TAX_FREE"],
+      "US_CORP_BOND": ["TAX_DEFERRED"]
+    },
+    "toleranceAbs": 0.0,
+    "toleranceRel": 0.25,
+    "minTradeUsd": 0
+  },
+  "expected": {
+    "requiredTrades": [
+      { "accountId": "roth", "assetClass": "US_LARGE_CAP", "deltaUsd": 20000 },
+      { "accountId": "trad", "assetClass": "US_CORP_BOND", "deltaUsd": 80000 }
+    ],
+    "forbiddenTrades": [
+      { "accountId": "trad", "assetClass": "US_LARGE_CAP" },
+      { "accountId": "roth", "assetClass": "US_CORP_BOND" }
+    ],
+    "absentFlags": [{ "kind": "PLACEMENT_SPILLOVER" }],
+    "netByAccount": { "roth": 20000, "trad": 80000 }
+  }
+}

@@ -1344,7 +1344,13 @@ describe('Goal 11: account-count minimization â€” concentrate-then-spill (b
       { id: 'tiny',   name: 'Tiny Roth', institution: 'Fidelity', type: 'ROTH_IRA',       newCash:  50_000 },
     ];
     // ALTS target = 2.5% Ã— $1M = $25k.  big IRA ($600k) absorbs it all.
-    const r = rebalance(accounts, NO_POSITIONS, ZERO_TOL_STRATEGY);
+    // Pin ALTS to the broad tax-advantaged bucket so this exercises capacity ordering
+    // (Goal 11), not the issue-#89 asset-location default (which prefers the Roth).
+    const strategy = {
+      ...ZERO_TOL_STRATEGY,
+      placement: { ...ZERO_TOL_STRATEGY.placement, ALTERNATIVES: ['TAX_ADVANTAGED'] as const },
+    };
+    const r = rebalance(accounts, NO_POSITIONS, strategy);
     expect(tradeFor(r.trades, 'big',  'ALTERNATIVES')?.deltaUsd).toBeCloseTo(25_000, 0);
     expect(tradeFor(r.trades, 'mid',  'ALTERNATIVES')).toBeUndefined();
     expect(tradeFor(r.trades, 'tiny', 'ALTERNATIVES')).toBeUndefined();

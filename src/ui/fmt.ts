@@ -67,11 +67,22 @@ export const ACCT_TYPE_COLOR: Record<string, string> = {
   OTHER:            '#9ca3af', // gray-400
 };
 
-// Human-readable placement bucket labels and chart colours.
+// Human-readable placement-target labels and chart colours. Beyond the three coarse
+// tax-treatment buckets (used by the Classify/Results charts), the intermediate tiers and
+// account-type leaves let placement rules name a specific home (issue #89).
 export const BUCKET_LABEL: Record<string, string> = {
-  TAXABLE:       'Taxable',
+  TAXABLE:        'Taxable',
   TAX_ADVANTAGED: 'Tax-Advantaged',
-  EDUCATION:     'Education (529)',
+  EDUCATION:      'Education (529)',
+  // Issue #89 placement tiers and account-type leaves.
+  TAX_DEFERRED:    'Tax-Deferred (Traditional/401k)',
+  TAX_FREE:        'Tax-Free (Roth/HSA)',
+  TRADITIONAL_IRA: 'Traditional IRA',
+  ROTH_IRA:        'Roth IRA',
+  FOUR_OH_ONE_K:   '401(k)',
+  HSA:             'HSA',
+  FIVE_TWENTY_NINE: '529 Plan',
+  OTHER:           'Other',
 };
 
 export const BUCKET_COLOR: Record<string, string> = {

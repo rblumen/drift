@@ -9,7 +9,7 @@
   "holdings": [],
   "strategy": {
     "targets": { "US_TOTAL_MARKET": 0.0, "US_LARGE_CAP": 0.975, "DEVELOPED_INTL": 0.0, "EMERGING_INTL": 0.0, "FIXED_INCOME": 0.0, "ALTERNATIVES": 0.025, "CASH": 0.0 },
-    "placement": {},
+    "placement": { "US_LARGE_CAP": ["TAX_ADVANTAGED"], "ALTERNATIVES": ["TAX_ADVANTAGED"] },
     "toleranceAbs": 0.0,
     "toleranceRel": 0.25,
     "minTradeUsd": 0

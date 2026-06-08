@@ -6,6 +6,7 @@ import { resolveTradeVehicles } from './resolve';
 import { nativeAllocationByAccount, projectedNativeAllocationByAccount } from './nativeAllocation';
 import { consolidateParentClasses, childrenOf } from './hierarchy';
 import { accountBucket, greedyPlace } from './placement';
+import { targetTaxTreatment } from './placementHierarchy';
 import { fillOrdered } from './cashfill';
 import { isTaxableSale } from './taxableSale';
 import { EPSILON, effectiveTolerance, targetTolerance, zeroByClass } from './utils';
@@ -264,9 +265,11 @@ function redirectTaxableSells(
 
   for (const T of taxableAccounts) {
     for (const ac of ALL_ASSET_CLASSES) {
-      // Only redirect sells of classes whose primary home is TAX_ADVANTAGED.
-      const prefBucket = (strategy.placement[ac] ?? ['TAX_ADVANTAGED', 'TAXABLE'])[0];
-      if (prefBucket !== 'TAX_ADVANTAGED') continue;
+      // Only redirect sells of classes whose primary home is tax-advantaged. The
+      // preference may be the broad bucket or a specific tier (TAX_DEFERRED / TAX_FREE,
+      // issue #89) — all are sheltered homes, so all are eligible for redirect.
+      const prefTarget = (strategy.placement[ac] ?? ['TAX_ADVANTAGED', 'TAXABLE'])[0];
+      if (targetTaxTreatment(prefTarget) !== 'TAX_ADVANTAGED') continue;
 
       let toRedirect = unlockedCurrent[T.id][ac] - targetLocation[T.id][ac];
       if (toRedirect <= EPSILON) continue; // T is not selling this class
@@ -286,8 +289,8 @@ function redirectTaxableSells(
           // A already has a greedyPlace allocation for Y. That means FI was already
           // being put in A as a spillover — extending it is acceptable. Creating a
           // brand-new FI-in-TA position would silently undo the placement intent.
-          const yPrefBucket = (strategy.placement[Y] ?? ['TAX_ADVANTAGED', 'TAXABLE'])[0];
-          if (yPrefBucket !== 'TAX_ADVANTAGED' && targetLocation[A.id][Y] <= EPSILON) continue;
+          const yPrefTarget = (strategy.placement[Y] ?? ['TAX_ADVANTAGED', 'TAXABLE'])[0];
+          if (targetTaxTreatment(yPrefTarget) !== 'TAX_ADVANTAGED' && targetLocation[A.id][Y] <= EPSILON) continue;
 
           // Re-read live value — earlier Y iterations may have reduced it.
           const aAbsorbNow = targetLocation[A.id][ac];
