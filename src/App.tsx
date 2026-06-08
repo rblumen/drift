@@ -358,6 +358,7 @@ export default function App() {
           <StrategyPanel
             strategy={strategy}
             setStrategy={setStrategy}
+            accounts={accounts}
             currentWeights={result.currentWeights}
             // When tax adjustment is on, result.projectedWeights is the nominal
             // allocation the engine drives toward to satisfy strategy.targets

@@ -174,9 +174,11 @@ export const strategySchema = z.preprocess(migrateStrategyTargets, z.object({
   targets: targetsSchema,
   // An empty bucket array means "no preference" — the engine places the class
   // wherever capacity is largest. A missing entry is backfilled by the migration.
+  // A placement target is a tier/bucket/account-type enum value, or an `account:<id>`
+  // leaf naming a specific account (issue #89 Phase 2).
   placement: z.record(
     z.string(),
-    z.array(z.enum(PLACEMENT_TARGETS)),
+    z.array(z.union([z.enum(PLACEMENT_TARGETS), z.string().startsWith('account:')])),
   ),
   toleranceAbs: z.number().min(0).max(1),
   toleranceRel: z.number().min(0).max(1).optional(),
