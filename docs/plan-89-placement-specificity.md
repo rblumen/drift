@@ -203,18 +203,34 @@ optgroup drill-down, visibility gated by household account types, reset-to-recom
 
 ---
 
-## Phase 2 — Down to the specific account  *(future PR, depends on Phase 1)*
+## Phase 2 — Down to the specific account  *(implemented)*
 
-The #89 "preferred" tier. Let a `placement[ac]` entry name a specific account.
+The #89 "preferred" tier. A `placement[ac]` entry may name a specific account.
 
-- Model account-id leaves as a tagged shape (e.g. `{ accountId: string }`) rather than
-  widening the union to bare `string`, so the Zod schema stays validating and
-  `accountSatisfiesTarget` gains one `target.accountId === account.id` branch.
-- UI: the dropdown's leaf level lists the household's actual account names under each
-  type group.
-- **Graceful degradation:** a placement referencing a since-deleted account must fall
-  back to its parent bucket and never silently drop the class. Visibility hides stale
-  account leaves; the engine treats an unresolvable account target as its parent bucket.
+- **Account-id leaves modeled as `account:<id>`** (a `\`account:${string}\`` template-literal
+  member of `PlacementTarget`) rather than a tagged object — the union stays string-based,
+  so comparison, arrays, and the Zod schema (`z.string().startsWith('account:')`) all stay
+  simple. Built/parsed via `accountTarget` / `accountIdOf` in `placementHierarchy.ts`.
+- **Membership:** a new `accountSatisfiesPlacement(account, target)` layers over Phase 1's
+  type-based `accountSatisfiesTarget` — an `account:` leaf matches by id, everything else by
+  type. `targetTaxTreatment` gained an optional `accounts` arg so an account leaf resolves
+  its tax treatment via the named account (used by the Goal 7 redirect). The Phase 1
+  membership API and its tests are untouched.
+- **UI:** `StrategyPanel` now receives `accounts`; each tax tier in the dropdown lists the
+  household's actual accounts indented beneath it (`buildPlacementOptionGroups`), so only
+  real accounts are offered — the household-driven visibility deferred from Phase 1.
+- **Graceful degradation:** a placement naming a since-deleted account matches no account,
+  so the class **falls through to the next preference** (the Phase 1 "preferred home that
+  doesn't exist isn't a spill" rule already handles this) rather than being stranded — it
+  is never dropped. The stale leaf can't be reconstructed to a bucket (the account's type is
+  gone), so the engine treats it as simply unsatisfiable; the UI keeps the stale rule
+  visible as *⚠ deleted account* so the user can re-point it. (This is the honest behavior;
+  the earlier "fall back to its parent bucket" framing isn't possible once the account — and
+  thus its type — no longer exists.)
+- Tests: `placement-per-account.test.ts` (9) — account-target helpers, `accountSatisfiesPlacement`
+  membership, `targetTaxTreatment` resolution, specific-account routing, graceful
+  degradation, and schema round-trip. UI verified in preview (per-account options gated by
+  household, selection persists through to the engine).
 
 ---
 
