@@ -107,7 +107,7 @@ All intermediate calculations use raw decimals. Rounding and `toFixed()` live ex
 `zod` enforces this at the schema boundary. The Strategy UI enforces it live. Reject configs that don't comply.
 
 **Fixed income → taxable (munis). Equities + alternatives → tax-advantaged.**
-This is the default placement logic. It holds while taxable assets < fixed income target weight. When that threshold is crossed, the engine emits `REVISIT_PLACEMENT` — a signal to update placement rules.
+This is the *default* placement; preferences are user-configurable per asset class and per account. Independent of that config, the engine emits `REVISIT_PLACEMENT` when taxable assets > fixed income target weight — a standing heads-up that taxable can no longer be bonds-only, signaling a need to revisit placement rules.
 
 ---
 

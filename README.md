@@ -140,11 +140,11 @@ Total US equity = 57.5%, expressed through the Russell cap split.
 | Equities (all) | Tax-Advantaged | Long-term growth; tax deferral compounds over time |
 | Cash | Taxable | Easiest to keep liquid in a brokerage |
 
-### The placement compromise and its expiry trigger
+### The REVISIT_PLACEMENT heads-up
 
-The default strategy keeps bonds in taxable accounts and equities in tax-advantaged. This only holds while the taxable balance is small enough to be fully absorbed by the fixed-income sleeve (20% of household).
+Placement preferences are fully configurable — per asset class, and per account. The table above is just the default. The `REVISIT_PLACEMENT` flag is a standing heads-up tied to your Fixed Income target, independent of how you configure placement.
 
-Once **taxable assets > Fixed Income target**, the taxable accounts can no longer be bonds-only. The engine detects this and emits a `REVISIT_PLACEMENT` flag. When you see it, update the placement rules to allow equities as a 2nd-choice for the taxable bucket.
+The default keeps bonds in taxable and equities in tax-advantaged, which assumes the taxable balance is small enough to be absorbed by the fixed-income sleeve (20% of household by default). Once **taxable assets > Fixed Income target**, taxable can no longer be bonds-only and equities must begin landing there. The engine detects this and emits `REVISIT_PLACEMENT`. When you see it, adjust the placement rules — e.g. allow equities as a 2nd-choice for the taxable bucket.
 
 ---
 
