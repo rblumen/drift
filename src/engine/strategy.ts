@@ -40,30 +40,33 @@ export const DEFAULT_STRATEGY: Strategy = {
     PRECIOUS_METALS:  0.0,
     CASH:             0.0,
   },
+  // Asset-location defaults (issue #89): high-growth sleeves prefer tax-free (Roth/HSA),
+  // ordinary-income bond sleeves prefer tax-deferred (Traditional/401k), munis stay
+  // taxable. Targets that don't exist in a given household are skipped without penalty.
   placement: {
     // FIXED_INCOME parent — held as NY tax-free munis (e.g. MUNY) in taxable.
     FIXED_INCOME:     ['TAXABLE'],
-    // Bond sub-classes: munis stay taxable; taxable-coupon sleeves shelter.
+    // Bond sub-classes: munis stay taxable; ordinary-income coupons → tax-deferred.
     MUNI_BOND:        ['TAXABLE'],
-    US_TREASURY:      ['TAX_ADVANTAGED', 'TAXABLE'],
-    US_CORP_BOND:     ['TAX_ADVANTAGED'],
-    TIPS:             ['TAX_ADVANTAGED'],
-    INTL_BOND:        ['TAX_ADVANTAGED'],
-    // Alternatives — crypto/metals; collectibles tax treatment favors IRA.
-    ALTERNATIVES:     ['TAX_ADVANTAGED'],
-    CRYPTO:           ['TAX_ADVANTAGED'],
-    PRECIOUS_METALS:  ['TAX_ADVANTAGED'],
-    // REITs — non-qualified dividends → shelter in tax-advantaged.
-    REAL_ESTATE:      ['TAX_ADVANTAGED'],
-    // Equities prefer tax-advantaged; spill to taxable when capacity is exhausted.
-    EMERGING_INTL:    ['TAX_ADVANTAGED', 'TAXABLE'],
-    DEVELOPED_INTL:   ['TAX_ADVANTAGED', 'TAXABLE'],
-    DEVELOPED_EUROPE: ['TAX_ADVANTAGED', 'TAXABLE'],
-    DEVELOPED_PACIFIC: ['TAX_ADVANTAGED', 'TAXABLE'],
-    US_TOTAL_MARKET:  ['TAX_ADVANTAGED', 'TAXABLE'],
-    US_LARGE_CAP:     ['TAX_ADVANTAGED', 'TAXABLE'],
-    US_MID_CAP:       ['TAX_ADVANTAGED', 'TAXABLE'],
-    US_SMALL_CAP:     ['TAX_ADVANTAGED', 'TAXABLE'],
+    US_TREASURY:      ['TAX_DEFERRED', 'TAXABLE'],
+    US_CORP_BOND:     ['TAX_DEFERRED'],
+    TIPS:             ['TAX_DEFERRED'],
+    INTL_BOND:        ['TAX_DEFERRED'],
+    // Alternatives — high-growth/high-vol; prefer Roth, then tax-deferred.
+    ALTERNATIVES:     ['TAX_FREE', 'TAX_DEFERRED'],
+    CRYPTO:           ['TAX_FREE', 'TAX_DEFERRED'],
+    PRECIOUS_METALS:  ['TAX_FREE', 'TAX_DEFERRED'],
+    // REITs — non-qualified dividends + growth → Roth, then tax-deferred.
+    REAL_ESTATE:      ['TAX_FREE', 'TAX_DEFERRED'],
+    // Equities prefer tax-free; spill to tax-deferred then taxable as capacity is exhausted.
+    EMERGING_INTL:    ['TAX_FREE', 'TAX_DEFERRED', 'TAXABLE'],
+    DEVELOPED_INTL:   ['TAX_DEFERRED', 'TAXABLE'],
+    DEVELOPED_EUROPE: ['TAX_DEFERRED', 'TAXABLE'],
+    DEVELOPED_PACIFIC: ['TAX_DEFERRED', 'TAXABLE'],
+    US_TOTAL_MARKET:  ['TAX_FREE', 'TAX_DEFERRED', 'TAXABLE'],
+    US_LARGE_CAP:     ['TAX_FREE', 'TAX_DEFERRED', 'TAXABLE'],
+    US_MID_CAP:       ['TAX_FREE', 'TAX_DEFERRED', 'TAXABLE'],
+    US_SMALL_CAP:     ['TAX_FREE', 'TAX_DEFERRED', 'TAXABLE'],
     CASH:             ['TAXABLE', 'TAX_ADVANTAGED'],
   },
   toleranceAbs: 0.05,

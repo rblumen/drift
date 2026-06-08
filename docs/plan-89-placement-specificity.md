@@ -112,14 +112,20 @@ Membership table is in research §2. `OTHER` is a direct leaf under `TAX_ADVANTA
    "prefer TAX_ADVANTAGED, landed in Roth" emit no flag, while "prefer Roth, spilled into
    Traditional" flags correctly.
 
-3. **`constraintCount` (refinement):** today it sorts by `placement[ac].length`. A narrow
-   target (one account type) is more constrained than a broad bucket yet has the same
-   list length, so Goal 6 ("most-constrained class placed first") would mis-order.
-   Replace the length proxy with the count of *household accounts that satisfy the primary
-   target* — cheap to compute here and faithful to the goal. No-preference (empty list)
-   keeps its sentinel "placed last" rank.
+3. **`constraintCount` (refinement — deferred):** today it sorts by `placement[ac].length`.
+   A narrow target (one account type) is more constrained than a broad bucket yet has the
+   same list length, so Goal 6 ("most-constrained class placed first") could mis-order two
+   single-element preferences. Switching the metric to the count of *household accounts
+   that satisfy the primary target* is more faithful, but it reorders placement in
+   existing scenarios and risked destabilizing the suite for no behavior the tier
+   subdivision needs. **Left as list-length for Phase 1**; revisit if a real case surfaces.
 
-`accountBucket()` is untouched and still used for the tax-treatment call sites.
+`accountBucket()` is untouched and still used for the tax-treatment call sites. One
+adjacent integration point did need updating: the taxable-sell redirect (Goal 7) hard-
+checked `placement[ac][0] === 'TAX_ADVANTAGED'`, which stops matching once a class's
+primary preference is the more specific `TAX_FREE`/`TAX_DEFERRED`. A new
+`targetTaxTreatment(target)` helper (the target-level mirror of `accountBucket`) lets the
+redirect fire for any sheltered-home preference regardless of tier.
 
 ### `src/ingest/schema.ts`
 
@@ -138,15 +144,18 @@ Membership table is in research §2. `OTHER` is a direct leaf under `TAX_ADVANTA
 
 ### `src/ui/StrategyPanel.tsx`
 
-- **Hierarchical dropdowns:** render placement options as `<optgroup>` so the user can
-  pick the broad bucket (`Tax-Advantaged`) or drill into `Tax-Deferred → Traditional IRA
-  / 401(k)` and `Tax-Free → Roth IRA / HSA`. Mirrors the `<optgroup>` pattern #36 added
-  to Classify. Interior buckets remain selectable as a group header option.
-- **Household-driven visibility:** only offer account-type leaves the household actually
-  holds — no "Roth IRA" option when there is no Roth account. The placement-side analog
-  of #36's "hidden until held or targeted."
-- **Explicit opt-in control:** add a "Reset to recommended placement" button in the
-  Placement-rules section that overwrites `strategy.placement` with `DEFAULT_PLACEMENT`.
+- **Hierarchical dropdowns:** placement options render as an `<optgroup>` labelled
+  *Tax-Advantaged* containing the broad bucket plus the two tiers `Tax-Deferred
+  (Traditional/401k)` and `Tax-Free (Roth/HSA)`, with `Taxable` and `Education (529)` as
+  bare top-level options. Mirrors the `<optgroup>` pattern #36 added to Classify, and
+  delivers the issue's "minimum" (the tier distinction).
+- **Account-type leaves + household-driven visibility — deferred to Phase 2.** Offering
+  *specific* account types (and only those the household holds) is most useful alongside
+  per-account targeting and needs `accounts` threaded into the panel (a prop it doesn't
+  currently receive). Phase 1 stops at the tier level; the engine and schema already
+  accept account-type leaves, so Phase 2 is purely additive UI.
+- **Explicit opt-in control:** a "Reset to recommended placement" button in the
+  Placement-rules section overwrites `strategy.placement` with `DEFAULT_STRATEGY.placement`.
   This is the *only* way an existing portfolio adopts the new asset-location defaults.
 - Child-class placement inheritance (`placementBuckets()` falling back to the parent
   *asset class*'s preference) is unchanged. `updatePlacement` keeps the 1st/2nd-choice
@@ -215,4 +224,3 @@ Same disposition as #36's custom-class Phase 3: runtime-defined account types re
 open type system, schema versioning, and threading through every `Record<…>` map and Zod
 enum. Defer until demand is proven. `placementHierarchy.ts` is the single place it would
 extend.
-</content>

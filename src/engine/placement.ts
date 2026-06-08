@@ -1,5 +1,6 @@
 import type { Account, AccountType, AssetClass, PlacementBucket, Strategy, Flag } from './types';
 import { ALL_ASSET_CLASSES } from './types';
+import { accountSatisfiesTarget } from './placementHierarchy';
 import { EPSILON, zeroByClass } from './utils';
 
 // Tiebreaker for classes with equal placement constraint counts.
@@ -138,13 +139,13 @@ export function greedyPlace(
   for (const ac of sortedClasses) {
     if (remainingNeed[ac] <= EPSILON) continue;
 
-    const placementBuckets = strategy.placement[ac] ?? ['TAX_ADVANTAGED', 'TAXABLE'];
+    const placementTargets = strategy.placement[ac] ?? ['TAX_ADVANTAGED', 'TAXABLE'];
 
-    // No preference (empty bucket list): the class has no required home, so place
+    // No preference (empty target list): the class has no required home, so place
     // it freely across every eligible account wherever capacity is largest. No
     // PLACEMENT_SPILLOVER flag — there is no preferred bucket to overflow from.
     // A genuine NO_ELIGIBLE_ACCOUNT still fires if no account can hold the class.
-    if (placementBuckets.length === 0) {
+    if (placementTargets.length === 0) {
       const eligible = accounts.filter(
         a => effectiveAllowed[a.id].has(ac) && remainingCapacity[a.id] > EPSILON,
       );
@@ -161,19 +162,38 @@ export function greedyPlace(
       continue;
     }
 
-    // Pass 1 — try preferred buckets in order.
-    // Filling any bucket beyond the first (index > 0) is a spillover and gets flagged,
-    // because the asset class didn't fully fit in its primary home.
-    for (let bucketIdx = 0; bucketIdx < placementBuckets.length; bucketIdx++) {
-      const bucket = placementBuckets[bucketIdx];
+    // Pass 1 — try preferred targets in order. A target may be a broad tax-treatment
+    // bucket, an intermediate bucket (TAX_DEFERRED / TAX_FREE), or a specific account
+    // type (issue #89); an account is eligible when its type satisfies the target node.
+    //
+    // Spillover semantics: filling a later target is a spillover *only when an earlier,
+    // higher-priority target actually existed in the household and overflowed*. If an
+    // earlier target had no eligible account at all (the household simply has no Roth,
+    // say), falling through to the next preference is forced placement — the effective
+    // primary — not an overflow, so it is not flagged. This is why a TAX_ADVANTAGED-
+    // preferred class landing in a Roth never flags: the Roth satisfies the primary
+    // target outright.
+    let priorHomeOverflowed = false;
+    for (let targetIdx = 0; targetIdx < placementTargets.length; targetIdx++) {
+      const target = placementTargets[targetIdx];
       if (remainingNeed[ac] <= EPSILON) break;
 
       const eligible = accounts.filter(
-        a => accountBucket(a.type) === bucket
+        a => accountSatisfiesTarget(a.type, target)
           && effectiveAllowed[a.id].has(ac)
           && remainingCapacity[a.id] > EPSILON,
       );
-      if (eligible.length === 0) continue;
+      // A target with no account that can ever hold this class is not a "home" that
+      // overflowed — distinguish "doesn't exist / already full" from a real overflow by
+      // checking whether any account satisfies the target at all (capacity aside).
+      const targetHasAnyAccount = accounts.some(
+        a => accountSatisfiesTarget(a.type, target) && effectiveAllowed[a.id].has(ac),
+      );
+      if (eligible.length === 0) {
+        // The home exists but is already full → a genuine overflow source for later spill.
+        if (targetHasAnyAccount) priorHomeOverflowed = true;
+        continue;
+      }
 
       // Fill accounts that concentrate this class first, then the rest.
       const [conc, rest] = partition(eligible, a => !!a.concentrateClasses?.includes(ac));
@@ -188,9 +208,13 @@ export function greedyPlace(
         placed += toPlace;
       }
 
-      if (bucketIdx > 0 && placed > EPSILON) {
-        flags.push({ kind: 'PLACEMENT_SPILLOVER', assetClass: ac, bucket, amountUsd: placed });
+      // Spillover only when a real higher-priority home overflowed into this one.
+      if (priorHomeOverflowed && placed > EPSILON) {
+        flags.push({ kind: 'PLACEMENT_SPILLOVER', assetClass: ac, bucket: target, amountUsd: placed });
       }
+      // This target became a (possibly partial) home; if it can't absorb the remainder,
+      // the next target down is a spill destination.
+      if (remainingNeed[ac] > EPSILON) priorHomeOverflowed = true;
     } // end pass 1
 
     // Pass 2 — spill into any eligible account (any bucket).

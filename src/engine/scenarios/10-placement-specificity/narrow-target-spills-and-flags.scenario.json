@@ -1,0 +1,34 @@
+{
+  "name": "narrow-target-spills-and-flags",
+  "description": "Goal 6 (issue #89): a tax-free-preferred equity sleeve larger than the Roth overflows into the Traditional IRA and the engine flags PLACEMENT_SPILLOVER for the uncovered amount — the narrow target's home overflowed, unlike a broad-bucket fill",
+  "principle": 6,
+  "accounts": [
+    { "id": "roth", "name": "Roth IRA", "institution": "Fidelity", "type": "ROTH_IRA", "newCash": 20000 },
+    { "id": "trad", "name": "Trad IRA", "institution": "Fidelity", "type": "TRADITIONAL_IRA", "newCash": 80000 }
+  ],
+  "holdings": [],
+  "strategy": {
+    "targets": {
+      "US_TOTAL_MARKET": 0.0, "US_LARGE_CAP": 0.5, "US_MID_CAP": 0.0, "US_SMALL_CAP": 0.0,
+      "DEVELOPED_INTL": 0.0, "DEVELOPED_EUROPE": 0.0, "DEVELOPED_PACIFIC": 0.0, "EMERGING_INTL": 0.0,
+      "FIXED_INCOME": 0.0, "US_TREASURY": 0.0, "US_CORP_BOND": 0.5, "MUNI_BOND": 0.0, "TIPS": 0.0, "INTL_BOND": 0.0,
+      "REAL_ESTATE": 0.0, "ALTERNATIVES": 0.0, "CRYPTO": 0.0, "PRECIOUS_METALS": 0.0, "CASH": 0.0
+    },
+    "placement": {
+      "US_LARGE_CAP": ["TAX_FREE"],
+      "US_CORP_BOND": ["TAX_DEFERRED"]
+    },
+    "toleranceAbs": 0.0,
+    "toleranceRel": 0.25,
+    "minTradeUsd": 0
+  },
+  "expected": {
+    "requiredTrades": [
+      { "accountId": "roth", "assetClass": "US_LARGE_CAP", "deltaUsd": 20000 }
+    ],
+    "flags": [
+      { "kind": "PLACEMENT_SPILLOVER", "assetClass": "US_LARGE_CAP", "amountUsd": 30000 }
+    ],
+    "netByAccount": { "roth": 20000, "trad": 80000 }
+  }
+}

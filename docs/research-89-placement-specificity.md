@@ -150,4 +150,3 @@ that click, migration preserves every existing entry (see plan §"Migration & op
 - **Custom account types** (the issue's "TBD") — Phase 3, deferred indefinitely, same
   disposition as #36's custom-class Phase 3.
 - **Style/sector-driven placement** — no tax-location rationale; not pursued.
-</content>

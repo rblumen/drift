@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect } from 'react';
-import type { Strategy, AssetClass, PlacementBucket } from '../engine/types';
+import type { Strategy, AssetClass, PlacementTarget } from '../engine/types';
 import { ALL_ASSET_CLASSES } from '../engine/types';
 import { DEFAULT_STRATEGY } from '../engine/strategy';
 import { CLASS_HIERARCHY, PARENT_CLASS, isParentClass, isChildClass, childrenOf } from '../engine/hierarchy';
@@ -8,7 +8,31 @@ import { WeightPie } from './WeightPie';
 import type { WeightSlice } from './WeightPie';
 import { HelpBox, HelpDef, HelpSection, HelpTip } from './HelpBox';
 
-const ALL_BUCKETS: PlacementBucket[] = ['TAX_ADVANTAGED', 'TAXABLE', 'EDUCATION'];
+// Placement-target options offered in the dropdowns, grouped hierarchically (issue #89).
+// The broad tax-advantaged bucket and its two tiers (tax-deferred / tax-free) share one
+// group so a rule can stay broad or drill into Traditional/401k vs Roth/HSA.
+const PLACEMENT_OPTION_GROUPS: Array<{ label: string; options: PlacementTarget[] }> = [
+  { label: '', options: ['TAXABLE'] },
+  { label: 'Tax-Advantaged', options: ['TAX_ADVANTAGED', 'TAX_DEFERRED', 'TAX_FREE'] },
+  { label: '', options: ['EDUCATION'] },
+];
+// Renders the placement-target choices for a <select>: bare buckets at top level,
+// the tax-advantaged tier inside a labelled <optgroup> so the hierarchy reads visually.
+function placementTargetOptions() {
+  return PLACEMENT_OPTION_GROUPS.map(group =>
+    group.label
+      ? (
+        <optgroup key={group.label} label={group.label}>
+          {group.options.map(t => (
+            <option key={t} value={t}>{BUCKET_LABEL[t]}</option>
+          ))}
+        </optgroup>
+      )
+      : group.options.map(t => (
+        <option key={t} value={t}>{BUCKET_LABEL[t]}</option>
+      )),
+  );
+}
 
 // Parent classes (US_TOTAL_MARKET, ALTERNATIVES, …) and the top-level rows shown
 // in the target/placement tables. Children are pulled in beneath their parent.
@@ -460,29 +484,36 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights, taxAdjust
   // Sentinel for the 1st-choice dropdown's "No preference" option.
   const NO_PREF = 'ANY';
 
-  // Placement buckets shown for a class. Sub-classes with no explicit entry inherit
+  // Placement targets shown for a class. Sub-classes with no explicit entry inherit
   // their parent's current placement (so a child defaults to the parent preference).
-  function placementBuckets(ac: AssetClass): PlacementBucket[] {
+  function placementBuckets(ac: AssetClass): PlacementTarget[] {
     if (strategy.placement[ac]) return strategy.placement[ac];
     const parent = PARENT_CLASS[ac];
     if (parent && strategy.placement[parent]) return strategy.placement[parent];
     return DEFAULT_STRATEGY.placement[ac] ?? [];
   }
 
-  function updatePlacement(ac: AssetClass, slot: 0 | 1, bucket: PlacementBucket | '' | typeof NO_PREF) {
-    // "No preference" → empty bucket list; the engine places the class freely.
-    if (slot === 0 && bucket === NO_PREF) {
+  function updatePlacement(ac: AssetClass, slot: 0 | 1, target: PlacementTarget | '' | typeof NO_PREF) {
+    // "No preference" → empty target list; the engine places the class freely.
+    if (slot === 0 && target === NO_PREF) {
       setStrategy({ ...strategy, placement: { ...strategy.placement, [ac]: [] } });
       return;
     }
-    const current = [...placementBuckets(ac)] as PlacementBucket[];
+    const current = [...placementBuckets(ac)] as PlacementTarget[];
     if (slot === 0) {
-      current[0] = bucket as PlacementBucket;
+      current[0] = target as PlacementTarget;
     } else {
-      if (bucket === '') current.splice(1);
-      else current[1] = bucket as PlacementBucket;
+      if (target === '') current.splice(1);
+      else current[1] = target as PlacementTarget;
     }
     setStrategy({ ...strategy, placement: { ...strategy.placement, [ac]: current } });
+  }
+
+  // Overwrite the entire placement map with the recommended asset-location defaults
+  // (issue #89). This is the explicit opt-in: imported/saved selections are otherwise
+  // preserved on load, so adopting the new defaults only happens when the user asks.
+  function resetPlacementToRecommended() {
+    setStrategy({ ...strategy, placement: { ...DEFAULT_STRATEGY.placement } });
   }
 
   // Pie slices reflect the live (uncommitted) weight inputs so the chart updates as you type.
@@ -902,8 +933,18 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights, taxAdjust
       {/* ── Placement rules (editable) ───────────────────────────────────────── */}
       <CollapsibleSection
         title="Placement rules"
-        subtitle="Preferred account type for each asset class. The engine fills the 1st-choice bucket first, then spills into 2nd."
+        subtitle="Preferred account home for each asset class. The engine fills the 1st choice first, then spills into 2nd. Tax-Advantaged can be left broad or drilled into Tax-Deferred (Traditional/401k) vs Tax-Free (Roth/HSA)."
       >
+        <div className="mb-3 flex justify-end">
+          <button
+            type="button"
+            onClick={resetPlacementToRecommended}
+            className="text-xs text-indigo-600 hover:text-indigo-800 hover:underline"
+            title="Overwrite every placement rule with the recommended asset-location defaults (growth → Roth, taxable-coupon bonds → Traditional). Your current selections will be replaced."
+          >
+            Reset to recommended placement
+          </button>
+        </div>
         <div className="overflow-hidden border border-gray-200 rounded-lg">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
@@ -951,13 +992,11 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights, taxAdjust
                       <td className="px-4 py-2">
                         <select
                           value={noPreference ? NO_PREF : (buckets[0] ?? 'TAX_ADVANTAGED')}
-                          onChange={e => updatePlacement(cls, 0, e.target.value as PlacementBucket | typeof NO_PREF)}
+                          onChange={e => updatePlacement(cls, 0, e.target.value as PlacementTarget | typeof NO_PREF)}
                           className="border border-gray-200 rounded px-2 py-1 text-sm bg-white hover:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400"
                         >
                           <option value={NO_PREF}>No preference</option>
-                          {ALL_BUCKETS.map(b => (
-                            <option key={b} value={b}>{BUCKET_LABEL[b]}</option>
-                          ))}
+                          {placementTargetOptions()}
                         </select>
                       </td>
 
@@ -968,13 +1007,11 @@ export function StrategyPanel({ strategy, setStrategy, currentWeights, taxAdjust
                         ) : (
                           <select
                             value={buckets[1] ?? ''}
-                            onChange={e => updatePlacement(cls, 1, e.target.value as PlacementBucket | '')}
+                            onChange={e => updatePlacement(cls, 1, e.target.value as PlacementTarget | '')}
                             className="border border-gray-200 rounded px-2 py-1 text-sm bg-white hover:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400 text-gray-500"
                           >
                             <option value="">— none —</option>
-                            {ALL_BUCKETS.map(b => (
-                              <option key={b} value={b}>{BUCKET_LABEL[b]}</option>
-                            ))}
+                            {placementTargetOptions()}
                           </select>
                         )}
                       </td>

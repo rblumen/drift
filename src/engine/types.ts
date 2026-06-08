@@ -30,8 +30,18 @@ export type AccountType =
   | 'HSA'
   | 'OTHER';
 
-// Placement buckets group account types by tax treatment.
+// Placement buckets group account types by tax treatment. This coarse triple is the
+// engine's *tax-treatment* vocabulary: what `accountBucket()` returns and what the
+// tax-sale logic, withdrawal eligibility, and REVISIT_PLACEMENT key on. Unchanged by #89.
 export type PlacementBucket = 'TAXABLE' | 'TAX_ADVANTAGED' | 'EDUCATION';
+
+// A placement *preference* a strategy may express (issue #89). Generalizes the flat
+// PlacementBucket into a tree node that can be a broad tax-treatment bucket, an
+// intermediate bucket (tax-deferred vs tax-free), or a specific account type. An account
+// satisfies a target when its type is a leaf descendant of that node (see
+// placementHierarchy.ts). Phase 1 keeps this a closed union; per-account leaves are a
+// future phase. `Strategy.placement` holds ordered lists of these.
+export type PlacementTarget = PlacementBucket | 'TAX_DEFERRED' | 'TAX_FREE' | AccountType;
 
 export const ALL_ASSET_CLASSES: readonly AssetClass[] = [
   'US_TOTAL_MARKET',
@@ -125,11 +135,13 @@ export interface Position {
 
 export interface Strategy {
   targets: Record<AssetClass, number>;           // weights summing to 1.0
-  // Preferred buckets, in order. An empty array means "no preference" — the class
-  // has no required placement and the greedy fill assigns it wherever capacity is
-  // largest, without emitting a PLACEMENT_SPILLOVER flag. A missing entry falls
-  // back to the default two-bucket preference.
-  placement: Record<AssetClass, PlacementBucket[]>;
+  // Preferred placement targets, in order (issue #89). A target may be a broad
+  // tax-treatment bucket (TAX_ADVANTAGED), an intermediate bucket (TAX_DEFERRED /
+  // TAX_FREE), or a specific account type. An empty array means "no preference" — the
+  // class has no required placement and the greedy fill assigns it wherever capacity is
+  // largest, without emitting a PLACEMENT_SPILLOVER flag. A missing entry falls back to
+  // the default preference.
+  placement: Record<AssetClass, PlacementTarget[]>;
   toleranceAbs: number;  // e.g. 0.05 → ignore drift within ±5 percentage points
   /** Relative band: a class drifts by this fraction of its own target weight
    *  (e.g. 0.25 ⇒ 25% of target). Effective per-class tolerance is
@@ -264,7 +276,7 @@ export type Flag =
   | { kind: 'WITHIN_TOLERANCE'; assetClass: AssetClass }
   | { kind: 'TAXABLE_SALE'; accountId: string; assetClass: AssetClass; amountUsd: number }
   | { kind: 'UNMAPPED_HOLDING'; ticker: string }
-  | { kind: 'PLACEMENT_SPILLOVER'; assetClass: AssetClass; bucket: PlacementBucket; amountUsd: number }
+  | { kind: 'PLACEMENT_SPILLOVER'; assetClass: AssetClass; bucket: PlacementTarget; amountUsd: number }
   | { kind: 'REVISIT_PLACEMENT'; taxableShare: number; fixedIncomeTarget: number }
   | { kind: 'NO_ELIGIBLE_ACCOUNT'; assetClass: AssetClass; amountUsd: number }
   | { kind: 'EXCESS_CASH'; amountUsd: number }
