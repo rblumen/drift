@@ -36,7 +36,7 @@ function buildPlacementOptionGroups(
     const types = descendantAccountTypes(tier);
     return accounts
       .filter(a => types.includes(a.type))
-      .map(a => ({ value: accountTarget(a.id), label: `↳ ${a.name}`, depth: 1 as const }));
+      .map(a => ({ value: accountTarget(a.id), label: a.name, depth: 1 as const }));
   };
   const tier = (t: PlacementTarget): PlacementOption => ({ value: t, label: BUCKET_LABEL[t], depth: 0 });
 
@@ -74,7 +74,10 @@ function renderPlacementOptions(
         <optgroup key={group.label} label={group.label}>
           {group.options.map(o => (
             <option key={o.value} value={o.value}>
-              {o.depth ? `  ${o.label}` : o.label}
+              {/* Account leaves sit one level under their tax tier; indent only (no glyph),
+                  matching the Classify dropdown. Non-breaking spaces so the indent survives
+                  <option> whitespace collapsing. */}
+              {o.depth ? `    ${o.label}` : o.label}
             </option>
           ))}
         </optgroup>
