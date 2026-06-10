@@ -219,7 +219,7 @@ export function OverviewPanel({ onStart }: Props) {
       {/* Engine priority order */}
       <div>
         <h3 className="text-sm font-semibold text-gray-700 mb-1 uppercase tracking-wide">
-          How the engine prioritises
+          How the engine prioritizes
         </h3>
         <p className="text-xs text-gray-500 mb-3 leading-relaxed">
           When goals conflict the higher-ranked goal always wins. Within a tier, goals are
