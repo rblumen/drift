@@ -11,6 +11,8 @@ import { ClassifyPanel } from './ui/ClassifyPanel';
 import { StrategyPanel } from './ui/StrategyPanel';
 import { ResultsPanel } from './ui/ResultsPanel';
 import { fmtUsd } from './ui/fmt';
+import { Logo } from './ui/Logo';
+import { HowItWorksDrawer } from './ui/HowItWorksDrawer';
 import {
   buildState, clearState, DEFAULT_APP_STATE, saveJson, loadJson,
   loadState, saveState, saveBackup,
@@ -53,6 +55,7 @@ export default function App() {
   const [plannedWithdrawal, setPlannedWithdrawal] = useState<number>(saved.plannedWithdrawal ?? 0);
   const [reminder,          setReminder]          = useState<Reminder>(saved.reminder ?? {});
   const [activeTab,        setActiveTab]        = useState<Tab>('overview');
+  const [howItWorksOpen,   setHowItWorksOpen]   = useState(false);
   const [loadError,        setLoadError]        = useState<string | null>(null);
   const [isDemoMode,       setIsDemoMode]       = useState<boolean>(_isDemoInit);
   // Non-null when data was loaded from a backup because the primary slot was invalid.
@@ -177,9 +180,11 @@ export default function App() {
       <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-4">
           <div className="flex items-center justify-between py-3">
-            <div className="flex items-baseline gap-2">
-              <h1 className="text-base font-semibold text-gray-900 tracking-tight">Drift</h1>
-              <span className="text-xs text-gray-400 hidden sm:inline">DIY Portfolio Rebalancer</span>
+            <div className="flex items-center gap-2.5">
+              <Logo size={24} />
+              <span className="text-xs text-gray-400 hidden sm:inline border-l border-gray-200 pl-2.5">
+                DIY Portfolio Rebalancer
+              </span>
             </div>
 
             <div className="flex items-center gap-3">
@@ -230,6 +235,19 @@ export default function App() {
                   className="hidden"
                 />
               </div>
+
+              <button
+                onClick={() => setHowItWorksOpen(true)}
+                title="How Drift works"
+                className="hidden sm:flex items-center gap-1.5 text-xs text-gray-600 hover:text-gray-900 border border-gray-200 rounded px-2.5 py-1 hover:border-indigo-200 hover:bg-gray-50 transition-colors"
+              >
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                  <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.4" />
+                  <path d="M8 7v4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                  <circle cx="8" cy="4.7" r="1" fill="currentColor" />
+                </svg>
+                How it works
+              </button>
             </div>
           </div>
 
@@ -322,7 +340,10 @@ export default function App() {
       {/* Panel */}
       <main className="max-w-5xl mx-auto px-4 py-6">
         {activeTab === 'overview' && (
-          <OverviewPanel onStart={() => setActiveTab('accounts')} />
+          <OverviewPanel
+            onStart={() => setActiveTab('accounts')}
+            onOpenHowItWorks={() => setHowItWorksOpen(true)}
+          />
         )}
         {activeTab === 'accounts' && (
           <AccountsPanel
@@ -395,6 +416,8 @@ export default function App() {
           <span>Not investment advice.</span>
         </span>
       </footer>
+
+      <HowItWorksDrawer open={howItWorksOpen} onClose={() => setHowItWorksOpen(false)} />
     </div>
   );
 }

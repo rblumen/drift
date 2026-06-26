@@ -1,3 +1,26 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  :root {
+    --brand: #4f46e5;
+    --brand-ink: #312e81;
+    --accent: #f59e0b;
+    --ink: #11161d;
+    --paper: #fbfcfd;
+
+    --dv-us:   #3b82f6;
+    --dv-intl: #38bdf8;
+    --dv-em:   #34d399;
+    --dv-bond: #fbbf24;
+    --dv-alt:  #f87171;
+  }
+
+  html { -webkit-text-size-adjust: 100%; }
+
+  body {
+    @apply font-sans text-ink antialiased;
+    background: var(--paper);
+  }
+}
