@@ -1,4 +1,4 @@
-﻿import { useState, Fragment } from 'react';
+import { useState, Fragment } from 'react';
 import type { Account, AssetClass, Flag, FundDecomposition, PlacementBucket, Position } from '../engine/types';
 import { ALL_ASSET_CLASSES } from '../engine/types';
 import { BUILTIN_CLASS_MAP, makeClassifier } from '../engine/classify';
@@ -161,7 +161,7 @@ function DecompEditor({
           <button
             onClick={handleApply}
             disabled={!sumOk}
-            className="text-xs text-white bg-indigo-600 rounded px-2 py-1 disabled:opacity-40 hover:bg-indigo-700 disabled:cursor-not-allowed"
+            className="text-xs text-white bg-brand-600 rounded px-2 py-1 disabled:opacity-40 hover:bg-brand-700 disabled:cursor-not-allowed"
           >
             Apply decomposition
           </button>
@@ -391,7 +391,7 @@ export function ClassifyPanel({
                     </span>
                     <div className="flex items-center gap-2 ml-auto">
                       {tdfDetect && (
-                        <span className="text-xs text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
+                        <span className="text-xs text-brand-600 bg-brand-50 px-2 py-0.5 rounded-full">
                           Known blend{tdfDetect.confidence === 'estimated' ? ' (estimated)' : ''}
                         </span>
                       )}
@@ -399,7 +399,7 @@ export function ClassifyPanel({
                         <>
                           <button
                             onClick={() => setEditState({ ticker: row.ticker, draft: {} })}
-                            className="text-xs border border-indigo-300 text-indigo-600 rounded px-2 py-0.5 hover:bg-indigo-50"
+                            className="text-xs border border-brand-300 text-brand-600 rounded px-2 py-0.5 hover:bg-brand-50"
                           >
                             Set as blended fund
                           </button>
@@ -441,9 +441,9 @@ export function ClassifyPanel({
       {decomposed.length > 0 && (
         <div className="space-y-2">
           <h3 className="text-sm font-medium text-gray-600">Blended funds</h3>
-          <div className="overflow-hidden border border-indigo-200 rounded-lg">
+          <div className="overflow-hidden border border-brand-200 rounded-lg">
             <table className="w-full text-sm">
-              <thead className="bg-indigo-50 text-xs text-indigo-600 uppercase tracking-wide border-b border-indigo-200">
+              <thead className="bg-brand-50 text-xs text-brand-600 uppercase tracking-wide border-b border-brand-200">
                 <tr>
                   <th className="px-4 py-2 text-left">Ticker</th>
                   <th className="px-4 py-2 text-left">Description</th>
@@ -451,13 +451,13 @@ export function ClassifyPanel({
                   <th className="px-4 py-2 text-left"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-indigo-50">
+              <tbody className="divide-y divide-brand-50">
                 {decomposed.map(row => {
                   const decomp = decompositions[row.ticker]!;
                   const isEditing = editState?.ticker === row.ticker;
                   return (
-                    <tr key={row.ticker} className="hover:bg-indigo-50/40">
-                      <td className="px-4 py-2.5 font-mono font-medium text-indigo-900">{row.ticker}</td>
+                    <tr key={row.ticker} className="hover:bg-brand-50/40">
+                      <td className="px-4 py-2.5 font-mono font-medium text-brand-900">{row.ticker}</td>
                       <td className="px-4 py-2.5 text-gray-500 truncate max-w-[180px]">
                         {row.description ?? <span className="text-gray-300">—</span>}
                       </td>
@@ -487,7 +487,7 @@ export function ClassifyPanel({
                           <div className="flex gap-2">
                             <button
                               onClick={() => setEditState({ ticker: row.ticker, draft: {} })}
-                              className="text-xs text-indigo-600 border border-indigo-200 rounded px-2 py-0.5 hover:bg-indigo-50"
+                              className="text-xs text-brand-600 border border-brand-200 rounded px-2 py-0.5 hover:bg-brand-50"
                             >
                               Edit
                             </button>
@@ -535,14 +535,14 @@ export function ClassifyPanel({
                   const isEditing = editState?.ticker === row.ticker;
                   return (
                     <Fragment key={row.ticker}>
-                      <tr className={`hover:bg-gray-50 ${isEditing ? 'bg-indigo-50/60' : ''}`}>
+                      <tr className={`hover:bg-gray-50 ${isEditing ? 'bg-brand-50/60' : ''}`}>
                         <td className="px-4 py-2 font-mono font-medium">{row.ticker}</td>
                         <td className="px-4 py-2 text-gray-500 truncate max-w-[200px]">
                           {row.description ?? <span className="text-gray-300">—</span>}
                         </td>
                         <td className="px-4 py-2">
                           {isEditing ? (
-                            <span className="text-xs text-indigo-500 italic">Setting blend…</span>
+                            <span className="text-xs text-brand-500 italic">Setting blend…</span>
                           ) : (
                             <select
                               value={row.effective ?? ''}
@@ -555,7 +555,7 @@ export function ClassifyPanel({
                         </td>
                         <td className="px-4 py-2">
                           {row.source === 'override' ? (
-                            <span className="inline-flex items-center gap-1.5 text-xs text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
+                            <span className="inline-flex items-center gap-1.5 text-xs text-brand-600 bg-brand-50 px-2 py-0.5 rounded-full">
                               Your override
                               {!isEditing && (
                                 <button
@@ -580,7 +580,7 @@ export function ClassifyPanel({
                           ) : (
                             <button
                               onClick={() => setEditState({ ticker: row.ticker, draft: {} })}
-                              className="text-xs text-gray-400 hover:text-indigo-600 hover:underline"
+                              className="text-xs text-gray-400 hover:text-brand-600 hover:underline"
                               title="Define this as a blended fund with multiple asset-class components"
                             >
                               Set as blended
@@ -589,7 +589,7 @@ export function ClassifyPanel({
                         </td>
                       </tr>
                       {isEditing && (
-                        <tr className="bg-indigo-50/30">
+                        <tr className="bg-brand-50/30">
                           <td colSpan={5} className="px-4 pb-3">
                             <DecompEditor
                               ticker={row.ticker}

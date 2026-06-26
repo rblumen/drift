@@ -406,7 +406,7 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
           </div>
         )}
         {concentrated.length > 0 && (
-          <div className="text-xs text-indigo-400 font-normal">
+          <div className="text-xs text-brand-400 font-normal">
             concentrate: {concentrated.map(c => AC_LABEL[c]).join(', ')}
           </div>
         )}
@@ -490,7 +490,7 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
         <h2 className="text-lg font-semibold text-gray-800">Accounts</h2>
         <button
           onClick={() => { setShowAdd(true); setEditingId(null); }}
-          className="text-sm bg-indigo-600 text-white px-3 py-1.5 rounded-md hover:bg-indigo-700"
+          className="text-sm bg-brand-600 text-white px-3 py-1.5 rounded-md hover:bg-brand-700"
         >
           + Add account
         </button>
@@ -602,7 +602,7 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
           <p className="text-sm text-gray-500">No accounts yet. Add one to get started.</p>
           <button
             onClick={onLoadSample}
-            className="text-xs text-indigo-600 hover:text-indigo-800 border border-indigo-200 rounded px-3 py-1.5 hover:bg-indigo-50 transition-colors"
+            className="text-xs text-brand-600 hover:text-brand-800 border border-brand-200 rounded px-3 py-1.5 hover:bg-brand-50 transition-colors"
           >
             Load sample portfolio
           </button>
@@ -657,7 +657,7 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
                 editingId === acct.id ? (
                   <tr key={acct.id}>
                     <td colSpan={8} className="px-0 py-0">
-                      <div className="bg-indigo-50 px-4 py-3 space-y-3">
+                      <div className="bg-brand-50 px-4 py-3 space-y-3">
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                           <div>
                             <label className="block text-xs text-gray-500 mb-1">Name</label>
@@ -712,7 +712,7 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
                         <div className="flex items-center gap-3 pt-1">
                           <button
                             onClick={() => saveEdit(acct.id)}
-                            className="bg-indigo-600 text-white text-sm px-4 py-1.5 rounded-md hover:bg-indigo-700"
+                            className="bg-brand-600 text-white text-sm px-4 py-1.5 rounded-md hover:bg-brand-700"
                           >Save</button>
                           <button
                             onClick={() => setEditingId(null)}
@@ -774,7 +774,7 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
                     <td className="px-4 py-2 text-right space-x-3 whitespace-nowrap">
                       <button
                         onClick={() => startEdit(acct)}
-                        className="text-indigo-500 hover:underline text-xs"
+                        className="text-brand-500 hover:underline text-xs"
                       >Edit</button>
                       <button
                         onClick={() => {
@@ -796,7 +796,7 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
 
       {/* Add form */}
       {showAdd && (
-        <div className="border border-indigo-200 rounded-lg p-4 bg-indigo-50 space-y-3">
+        <div className="border border-brand-200 rounded-lg p-4 bg-brand-50 space-y-3">
           <h3 className="text-sm font-medium text-gray-700">New account</h3>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -855,7 +855,7 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
             <button
               onClick={handleAdd}
               disabled={!form.name.trim()}
-              className="bg-indigo-600 text-white text-sm px-4 py-1.5 rounded-md hover:bg-indigo-700 disabled:opacity-40"
+              className="bg-brand-600 text-white text-sm px-4 py-1.5 rounded-md hover:bg-brand-700 disabled:opacity-40"
             >Add</button>
             <button
               onClick={() => { setShowAdd(false); setForm(blankForm()); }}

@@ -1,15 +1,20 @@
+/* src/index.css — Drift foundation
+   Replaces your current index.css (which was just the three @tailwind lines). */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    --brand: #4f46e5;
-    --brand-ink: #312e81;
-    --accent: #f59e0b;
-    --ink: #11161d;
+    --brand: #0d3e7a;
+    --brand-ink: #082855;
+    --accent: #e8600a;
+    --ink: #2a3441;
     --paper: #fbfcfd;
 
+    /* Data-viz family anchors. The full per-asset-class map still lives in
+       src/ui/fmt.ts — these are just the five top-level families, handy for
+       CSS-only chrome (legends, bars) that doesn't import the TS map. */
     --dv-us:   #3b82f6;
     --dv-intl: #38bdf8;
     --dv-em:   #34d399;
@@ -23,4 +28,7 @@
     @apply font-sans text-ink antialiased;
     background: var(--paper);
   }
+
+  /* Tabular figures everywhere numbers matter look better with this on the
+     mono face; opt-in via `font-mono` as you already do. */
 }

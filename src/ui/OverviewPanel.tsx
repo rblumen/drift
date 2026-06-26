@@ -36,7 +36,7 @@ export function OverviewPanel({ onStart, onOpenHowItWorks }: Props) {
         <div>
           <div className="font-mono text-[11px] tracking-[0.16em] uppercase text-gray-400">Welcome</div>
           <h1 className="text-4xl font-semibold tracking-tight leading-[1.08] text-gray-900 mt-1">
-            Let it drift.<br />Bring it <span className="text-indigo-600">back to plan.</span>
+            Portfolios <span className="text-brand-600">drift.</span><br />Bring yours back on course.
           </h1>
           <p className="text-[17px] leading-relaxed text-gray-600 mt-3.5 max-w-2xl">
             Drift is a household-level rebalancing calculator. Enter your accounts and positions,

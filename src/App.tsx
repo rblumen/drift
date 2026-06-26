@@ -1,3 +1,10 @@
+// src/App.tsx — Drift branded shell
+// Brand changes vs original:
+//   • DriftWordmark (height=32) replaces tile Logo
+//   • Active tab: brand-600 (Anchor Blue) replaces indigo-600
+//   • Demo banner: brand-50/200/800 replaces indigo-50/200/800
+//   • Results tab badge: brand-100/700 replaces indigo-100/700
+//   • "How it works" hover: brand-200/brand-50 replaces indigo-200/indigo-50
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import type { Account, AssetClass, FundDecomposition, Position, Strategy } from './engine/types';
 import { DEFAULT_STRATEGY } from './engine/strategy';
@@ -11,7 +18,7 @@ import { ClassifyPanel } from './ui/ClassifyPanel';
 import { StrategyPanel } from './ui/StrategyPanel';
 import { ResultsPanel } from './ui/ResultsPanel';
 import { fmtUsd } from './ui/fmt';
-import { Logo } from './ui/Logo';
+import { DriftWordmark } from './ui/Logo';
 import { HowItWorksDrawer } from './ui/HowItWorksDrawer';
 import {
   buildState, clearState, DEFAULT_APP_STATE, saveJson, loadJson,
@@ -32,65 +39,51 @@ const TABS: { id: Tab; label: string }[] = [
 ];
 
 // Demo mode: ?demo in the URL → load sample portfolio instead of localStorage.
-// The param is stripped from the URL immediately so a page refresh doesn't re-trigger.
 const _demoRequested = new URLSearchParams(window.location.search).has('demo');
 const _demoParsed    = _demoRequested ? appStateSchema.safeParse(SAMPLE_PORTFOLIO) : null;
 const _isDemoInit    = _demoParsed?.success === true;
 if (_isDemoInit) window.history.replaceState({}, '', window.location.pathname);
 
-// Initialise from localStorage (or defaults if nothing saved / schema mismatch).
-// loadState() falls back to the most-recent valid backup automatically.
 const loadResult = _isDemoInit ? null : loadState();
 const saved = (_isDemoInit && _demoParsed?.success)
   ? _demoParsed.data
   : (loadResult?.state ?? DEFAULT_APP_STATE);
 
 export default function App() {
-  const [accounts,         setAccounts]         = useState<Account[]>(saved.accounts);
-  const [positions,        setPositions]         = useState<Position[]>(saved.positions);
-  const [strategy,         setStrategy]         = useState<Strategy>(saved.strategy);
-  const [tickerOverrides,  setTickerOverrides]  = useState<Record<string, AssetClass>>(saved.tickerOverrides);
-  const [decompositions,   setDecompositions]   = useState<Record<string, FundDecomposition>>(saved.decompositions ?? {});
-  const [freeCash,         setFreeCash]         = useState<number>(saved.freeCash ?? 0);
+  const [accounts,          setAccounts]          = useState<Account[]>(saved.accounts);
+  const [positions,         setPositions]          = useState<Position[]>(saved.positions);
+  const [strategy,          setStrategy]          = useState<Strategy>(saved.strategy);
+  const [tickerOverrides,   setTickerOverrides]   = useState<Record<string, AssetClass>>(saved.tickerOverrides);
+  const [decompositions,    setDecompositions]    = useState<Record<string, FundDecomposition>>(saved.decompositions ?? {});
+  const [freeCash,          setFreeCash]          = useState<number>(saved.freeCash ?? 0);
   const [plannedWithdrawal, setPlannedWithdrawal] = useState<number>(saved.plannedWithdrawal ?? 0);
   const [reminder,          setReminder]          = useState<Reminder>(saved.reminder ?? {});
-  const [activeTab,        setActiveTab]        = useState<Tab>('overview');
-  const [howItWorksOpen,   setHowItWorksOpen]   = useState(false);
-  const [loadError,        setLoadError]        = useState<string | null>(null);
-  const [isDemoMode,       setIsDemoMode]       = useState<boolean>(_isDemoInit);
-  // Non-null when data was loaded from a backup because the primary slot was invalid.
+  const [activeTab,         setActiveTab]         = useState<Tab>('overview');
+  const [howItWorksOpen,    setHowItWorksOpen]    = useState(false);
+  const [loadError,         setLoadError]         = useState<string | null>(null);
+  const [isDemoMode,        setIsDemoMode]        = useState<boolean>(_isDemoInit);
   const [restoredFromBackup, setRestoredFromBackup] = useState<number | null>(
     loadResult?.source === 'backup' ? (loadResult.backupTs ?? Date.now()) : null,
   );
-  // Timestamp of last successful primary save — drives the "Saved" indicator.
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(
     loadResult !== null ? new Date() : null,
   );
 
   const loadFileRef = useRef<HTMLInputElement>(null);
 
-  // Keep a ref to the latest state slices for the backup interval closure.
   const stateRef = useRef({ accounts, positions, strategy, tickerOverrides, decompositions, freeCash, plannedWithdrawal, reminder });
   useEffect(() => {
     stateRef.current = { accounts, positions, strategy, tickerOverrides, decompositions, freeCash, plannedWithdrawal, reminder };
   }, [accounts, positions, strategy, tickerOverrides, decompositions, freeCash, plannedWithdrawal, reminder]);
 
-  // Skip the very first save so that a schema-validation failure on load can
-  // never silently overwrite existing localStorage data with empty defaults.
   const didMountRef = useRef(false);
 
-  // Primary autosave: write to localStorage on every state change (but not on
-  // the initial mount — the stored value is already correct at that point).
   useEffect(() => {
-    if (!didMountRef.current) {
-      didMountRef.current = true;
-      return;
-    }
+    if (!didMountRef.current) { didMountRef.current = true; return; }
     saveState(buildState(accounts, positions, strategy, tickerOverrides, decompositions, freeCash, plannedWithdrawal, reminder));
     setLastSavedAt(new Date());
   }, [accounts, positions, strategy, tickerOverrides, decompositions, freeCash, plannedWithdrawal, reminder]);
 
-  // Backup autosave: write a timestamped snapshot every 5 minutes.
   useEffect(() => {
     const id = setInterval(() => {
       const s = stateRef.current;
@@ -111,7 +104,6 @@ export default function App() {
 
   const unmappedCount = result.flags.filter(f => f.kind === 'UNMAPPED_HOLDING').length;
 
-  /** Format the last-saved time as "3:42 PM". */
   const fmtSavedTime = useCallback((d: Date) =>
     d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }), []);
 
@@ -141,13 +133,10 @@ export default function App() {
   async function handleLoadFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    e.target.value = '';  // allow re-selecting same file
+    e.target.value = '';
     setLoadError(null);
     const result = await loadJson(file);
-    if ('error' in result) {
-      setLoadError(result.error);
-      return;
-    }
+    if ('error' in result) { setLoadError(result.error); return; }
     setAccounts(result.accounts);
     setPositions(result.positions);
     setStrategy(result.strategy);
@@ -176,12 +165,14 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-4">
+
+          {/* Top row: wordmark + actions */}
           <div className="flex items-center justify-between py-3">
-            <div className="flex items-center gap-2.5">
-              <Logo size={24} />
+            <div className="flex items-center gap-3">
+              <DriftWordmark height={32} />
               <span className="text-xs text-gray-400 hidden sm:inline border-l border-gray-200 pl-2.5">
                 DIY Portfolio Rebalancer
               </span>
@@ -189,7 +180,7 @@ export default function App() {
 
             <div className="flex items-center gap-3">
               {result.householdValue > 0 && (
-                <span className="text-sm text-gray-500">
+                <span className="text-sm text-gray-500 font-mono tabular-nums">
                   {fmtUsd(result.householdValue)}
                 </span>
               )}
@@ -239,7 +230,7 @@ export default function App() {
               <button
                 onClick={() => setHowItWorksOpen(true)}
                 title="How Drift works"
-                className="hidden sm:flex items-center gap-1.5 text-xs text-gray-600 hover:text-gray-900 border border-gray-200 rounded px-2.5 py-1 hover:border-indigo-200 hover:bg-gray-50 transition-colors"
+                className="hidden sm:flex items-center gap-1.5 text-xs text-gray-600 hover:text-gray-900 border border-gray-200 rounded px-2.5 py-1 hover:border-brand-200 hover:bg-brand-50 transition-colors"
               >
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
                   <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.4" />
@@ -267,14 +258,14 @@ export default function App() {
 
           {/* Demo mode banner */}
           {isDemoMode && (
-            <div className="mb-2 bg-indigo-50 border border-indigo-200 rounded px-3 py-2 text-xs text-indigo-800 flex items-center justify-between">
+            <div className="mb-2 bg-brand-50 border border-brand-200 rounded px-3 py-2 text-xs text-brand-800 flex items-center justify-between">
               <span>
                 Demo — showing a synthetic 5-account sample portfolio. Your saved data is untouched.
                 {' '}Use ↑ Load or Reset to switch to your own portfolio.
               </span>
               <button
                 onClick={() => setIsDemoMode(false)}
-                className="ml-3 text-indigo-400 hover:text-indigo-700 flex-shrink-0"
+                className="ml-3 text-brand-400 hover:text-brand-700 flex-shrink-0"
               >
                 ✕
               </button>
@@ -308,7 +299,7 @@ export default function App() {
             </div>
           )}
 
-          {/* Tab nav */}
+          {/* ── Tab nav — active tab uses Anchor Blue (brand-600) ── */}
           <nav className="flex gap-0 -mb-px">
             {TABS.map(tab => (
               <button
@@ -316,7 +307,7 @@ export default function App() {
                 onClick={() => setActiveTab(tab.id)}
                 className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap
                   ${activeTab === tab.id
-                    ? 'border-indigo-600 text-indigo-600'
+                    ? 'border-brand-600 text-brand-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                   }`}
               >
@@ -327,7 +318,7 @@ export default function App() {
                   </span>
                 )}
                 {tab.id === 'results' && resolvedTrades.length > 0 && (
-                  <span className="ml-1.5 bg-indigo-100 text-indigo-700 text-xs px-1.5 py-0.5 rounded-full">
+                  <span className="ml-1.5 bg-brand-100 text-brand-700 text-xs px-1.5 py-0.5 rounded-full">
                     {resolvedTrades.length}
                   </span>
                 )}
@@ -337,7 +328,7 @@ export default function App() {
         </div>
       </header>
 
-      {/* Panel */}
+      {/* ── Panel ──────────────────────────────────────────────────────────── */}
       <main className="max-w-5xl mx-auto px-4 py-6">
         {activeTab === 'overview' && (
           <OverviewPanel
@@ -381,10 +372,6 @@ export default function App() {
             setStrategy={setStrategy}
             accounts={accounts}
             currentWeights={result.currentWeights}
-            // When tax adjustment is on, result.projectedWeights is the nominal
-            // allocation the engine drives toward to satisfy strategy.targets
-            // in after-tax terms — i.e. the "tax-adjusted target" expressed in
-            // nominal weights.
             taxAdjustedTargetWeights={result.taxAdjusted ? result.projectedWeights : undefined}
           />
         )}
@@ -401,7 +388,7 @@ export default function App() {
         )}
       </main>
 
-      {/* Footer */}
+      {/* ── Footer ─────────────────────────────────────────────────────────── */}
       <footer className="max-w-5xl mx-auto px-4 py-6 mt-8 border-t border-gray-100 text-xs text-gray-400 flex items-center justify-between">
         <span>All computation is local — no data leaves your browser.</span>
         <span className="flex items-center gap-4">
