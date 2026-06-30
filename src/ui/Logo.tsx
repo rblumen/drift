@@ -51,10 +51,11 @@ export function DriftWordmark({ height = 32, className }: WordmarkProps) {
   const dy = -(5 * s);
   // Waterline in output coordinates
   const waterY = 26 * s + dy;
-  // Stub width: just under the mark (~32 units in vb)
-  const stubEnd = Math.round(32 * s + 2);
-  // Text starts after a small gap
-  const textX = Math.round(36 * s + 2);
+  // Stub width: extend to the paddle's rotated right edge (~55 vb units)
+  const stubEnd = Math.round(55 * s + 2);
+  // Paddle's rotated right edge lands at ~54.8 vb units; add ~5px gap.
+  // Matches the locked V1 reference (Wordmark v3, large-scale lockup).
+  const textX = Math.round(55 * s + 7);
   const fontSize = Math.round(height * 0.58);
   // Total width
   const width = Math.round(textX + fontSize * 3.2);

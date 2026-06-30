@@ -20,6 +20,7 @@ import { ResultsPanel } from './ui/ResultsPanel';
 import { fmtUsd } from './ui/fmt';
 import { DriftWordmark } from './ui/Logo';
 import { HowItWorksDrawer } from './ui/HowItWorksDrawer';
+import { LandingPage } from './ui/LandingPage';
 import {
   buildState, clearState, DEFAULT_APP_STATE, saveJson, loadJson,
   loadState, saveState, saveBackup,
@@ -62,6 +63,7 @@ export default function App() {
   const [howItWorksOpen,    setHowItWorksOpen]    = useState(false);
   const [loadError,         setLoadError]         = useState<string | null>(null);
   const [isDemoMode,        setIsDemoMode]        = useState<boolean>(_isDemoInit);
+  const [showLanding,      setShowLanding]       = useState(true);
   const [restoredFromBackup, setRestoredFromBackup] = useState<number | null>(
     loadResult?.source === 'backup' ? (loadResult.backupTs ?? Date.now()) : null,
   );
@@ -163,6 +165,15 @@ export default function App() {
     setRestoredFromBackup(null);
   }
 
+  if (showLanding) {
+    return (
+      <LandingPage
+        onEnter={() => setShowLanding(false)}
+        onDemo={() => { handleLoadSample(); setShowLanding(false); }}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* ── Header ─────────────────────────────────────────────────────────── */}
@@ -172,7 +183,13 @@ export default function App() {
           {/* Top row: wordmark + actions */}
           <div className="flex items-center justify-between py-3">
             <div className="flex items-center gap-3">
-              <DriftWordmark height={32} />
+              <button
+                onClick={() => setShowLanding(true)}
+                className="p-0 border-0 bg-transparent cursor-pointer flex items-center"
+                title="Back to Drift home"
+              >
+                <DriftWordmark height={32} />
+              </button>
               <span className="text-xs text-gray-400 hidden sm:inline border-l border-gray-200 pl-2.5">
                 DIY Portfolio Rebalancer
               </span>
@@ -332,8 +349,12 @@ export default function App() {
       <main className="max-w-5xl mx-auto px-4 py-6">
         {activeTab === 'overview' && (
           <OverviewPanel
-            onStart={() => setActiveTab('accounts')}
-            onOpenHowItWorks={() => setHowItWorksOpen(true)}
+            accounts={accounts}
+            positions={positions}
+            unmappedCount={unmappedCount}
+            householdValue={result.householdValue}
+            lastSavedAt={lastSavedAt}
+            onNavigate={(tab) => setActiveTab(tab as Tab)}
           />
         )}
         {activeTab === 'accounts' && (
