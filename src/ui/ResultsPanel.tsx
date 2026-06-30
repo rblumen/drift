@@ -473,6 +473,15 @@ function SharePopover({ anchor, onClose }: { anchor: ShareAnchor; onClose: () =>
 
 type FeedbackState = 'none' | 'good' | 'mixed' | 'bad';
 
+const FORM_BASE = `https://docs.google.com/forms/d/e/1FAIpQLSdG-V4Zq4X-fwal9ThhM4PQSFSwinrFo8fyWpZLCWu7mGXHlA/viewform?usp=pp_url&entry.715582229=${import.meta.env.VITE_GIT_SHA ?? 'dev'}`;
+// Add a "sentiment" field to the Google Form and paste its entry ID here (e.g. 'entry.123456789'):
+const FORM_ENTRY_SENTIMENT = '';
+function formUrl(sentiment: Exclude<FeedbackState, 'none'>) {
+  return FORM_ENTRY_SENTIMENT
+    ? `${FORM_BASE}&${FORM_ENTRY_SENTIMENT}=${encodeURIComponent(sentiment)}`
+    : FORM_BASE;
+}
+
 function FeedbackSection() {
   const [fbState,     setFbState]     = useState<FeedbackState>('none');
   const [shareAnchor, setShareAnchor] = useState<ShareAnchor | null>(null);
@@ -536,6 +545,16 @@ function FeedbackSection() {
               </div>
               <div className="bg-white border border-gray-200 rounded-xl px-[18px] py-4 flex flex-col gap-2">
                 <div>
+                  <div className="font-mono text-[10.5px] text-brand-400 uppercase tracking-[.08em] mb-1">Leave feedback</div>
+                  <p className="text-[13px] text-gray-500 leading-relaxed">Tell us what worked — it shapes what gets built next.</p>
+                </div>
+                <a href={formUrl('good')} target="_blank" rel="noopener noreferrer"
+                  className="self-start text-[12.5px] font-medium px-3.5 py-1.5 rounded-lg border border-gray-200 hover:border-gray-400 transition-colors">
+                  Leave feedback →
+                </a>
+              </div>
+              <div className="bg-white border border-gray-200 rounded-xl px-[18px] py-4 flex flex-col gap-2">
+                <div>
                   <div className="font-mono text-[10.5px] text-brand-400 uppercase tracking-[.08em] mb-1">Support the project</div>
                   <p className="text-[13px] text-gray-500 leading-relaxed">Drift is a solo project. If it saved you time, consider buying me a coffee.</p>
                 </div>
@@ -554,7 +573,7 @@ function FeedbackSection() {
                 <p className="text-[13px] text-gray-500 leading-relaxed">Your input directly shapes what gets built next. What's working? What's missing?</p>
               </div>
               <a
-                href={`https://docs.google.com/forms/d/e/1FAIpQLSdG-V4Zq4X-fwal9ThhM4PQSFSwinrFo8fyWpZLCWu7mGXHlA/viewform?usp=pp_url&entry.715582229=${import.meta.env.VITE_GIT_SHA ?? 'dev'}`}
+                href={formUrl(fbState as Exclude<FeedbackState, 'none'>)}
                 target="_blank" rel="noopener noreferrer"
                 className="self-start text-[12.5px] font-medium px-3.5 py-1.5 rounded-lg border border-gray-200 hover:border-gray-400 transition-colors">
                 Leave feedback →
