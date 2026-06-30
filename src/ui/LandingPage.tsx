@@ -96,6 +96,9 @@ export function LandingPage({ onEnter, onDemo }: LandingPageProps) {
                   Try the demo portfolio
                 </button>
               )}
+              <a className="lp-btn lp-btn-ghost" href="https://ko-fi.com/driftrebalance" target="_blank" rel="noopener noreferrer">
+                ☕ Support on Ko-fi
+              </a>
             </div>
             <div className="lp-micro">
               <span><span className="lp-dot"></span>Free · runs in your browser</span>
@@ -291,6 +294,9 @@ export function LandingPage({ onEnter, onDemo }: LandingPageProps) {
               {onDemo && (
                 <button className="lp-btn lp-btn-wire" onClick={onDemo}>Try the demo</button>
               )}
+              <a className="lp-btn lp-btn-wire" href="https://ko-fi.com/driftrebalance" target="_blank" rel="noopener noreferrer">
+                ☕ Support on Ko-fi
+              </a>
             </div>
             <div className="lp-rings">
               {CLS.map((c, i) => <i key={i} style={{ background: c }}></i>)}
