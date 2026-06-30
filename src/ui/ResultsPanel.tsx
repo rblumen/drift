@@ -8,7 +8,7 @@
 //   • Tabular/mono figures throughout
 //   • indigo UI chrome → brand blue
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import type { Account, AssetClass, Flag, RebalanceResult, ResolvedTrade } from '../engine/types';
 import { ALL_ASSET_CLASSES } from '../engine/types';
 import { withdrawalPriorityOf, isWithdrawalEligible } from '../engine/rebalance';
@@ -42,6 +42,7 @@ interface Props {
   plannedWithdrawal: number;
   reminder: Reminder;
   setReminder: (r: Reminder) => void;
+  onSave?: () => void;
 }
 
 // ── Flag banners ──────────────────────────────────────────────────────────────
@@ -359,10 +360,180 @@ function ContributionSummary({ summary }: { summary: RebalanceResult['contributi
   );
 }
 
-// ── Main panel ────────────────────────────────────────────────────────────────
+// ── Feedback section ────────────────────────────────────────────────────────
+
+type FeedbackState = 'none' | 'good' | 'mixed' | 'bad';
+
+const FEEDBACK_OPTIONS: { val: FeedbackState; label: string }[] = [
+  { val: 'good',  label: 'Went well' },
+  { val: 'mixed', label: 'Mixed' },
+  { val: 'bad',   label: "Didn't work for me" },
+];
+
+function FeedbackSection() {
+  const [fbState, setFbState] = useState<FeedbackState>('none');
+  const [copied,  setCopied]  = useState(false);
+  const revealRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (fbState !== 'none' && revealRef.current) {
+      const top = revealRef.current.getBoundingClientRect().top + window.scrollY - 24;
+      window.scrollTo({ top, behavior: 'smooth' });
+    }
+  }, [fbState]);
+
+  function copyLink() {
+    navigator.clipboard?.writeText(window.location.href).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  return (
+    <div className="border-t border-gray-100 pt-8 mt-2 text-center">
+      <p className="font-semibold text-[14px] text-gray-700 mb-4">
+        How did the rebalance go?
+      </p>
+      <div className={`flex gap-2 flex-wrap justify-center ${fbState !== 'none' ? 'mb-6' : ''}`}>
+        {FEEDBACK_OPTIONS.map(({ val, label }) => (
+          <button key={val}
+            onClick={() => setFbState(s => s === val ? 'none' : val)}
+            className={`text-sm font-medium px-[18px] py-2 rounded-lg border transition-colors ${
+              fbState === val
+                ? 'border-brand-400 bg-brand-50 text-brand font-semibold'
+                : 'border-gray-200 bg-white text-gray-600 hover:border-gray-400'
+            }`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {fbState === 'good' && (
+        <div ref={revealRef} className="text-left">
+          <p className="text-[13px] text-gray-500 mb-4">Glad to hear it.</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-white border border-gray-200 rounded-xl p-5 flex flex-col gap-3">
+              <div>
+                <div className="font-mono text-[10.5px] text-brand-400 uppercase tracking-[.08em] mb-1.5">Share Drift</div>
+                <p className="text-[13px] text-gray-500 leading-relaxed">Know someone who manages their own portfolio? Send them this link.</p>
+              </div>
+              <button onClick={copyLink}
+                className="self-start text-[12.5px] font-medium px-3.5 py-1.5 rounded-lg border border-gray-200 hover:border-gray-400 transition-colors">
+                {copied ? '\u2713 Copied' : 'Copy link'}
+              </button>
+            </div>
+            <div className="bg-white border border-gray-200 rounded-xl p-5 flex flex-col gap-3">
+              <div>
+                <div className="font-mono text-[10.5px] text-brand-400 uppercase tracking-[.08em] mb-1.5">Support the project</div>
+                <p className="text-[13px] text-gray-500 leading-relaxed">Drift is a solo project. If it saved you time, consider buying me a coffee.</p>
+              </div>
+              <a href="#"
+                className="self-start inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3.5 py-1.5 rounded-lg border border-gray-200 hover:border-gray-400 transition-colors">
+                Support →<span className="font-mono text-[10.5px] text-gray-400 ml-1">(coming soon)</span>
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {(fbState === 'mixed' || fbState === 'bad') && (
+        <div ref={revealRef} className="text-left">
+          <p className="text-[13px] text-gray-500 mb-4">Thanks for letting us know.</p>
+          <div className="bg-white border border-gray-200 rounded-xl p-5 flex flex-col gap-3 max-w-sm">
+            <div>
+              <div className="font-mono text-[10.5px] text-brand-400 uppercase tracking-[.08em] mb-1.5">Leave feedback</div>
+              <p className="text-[13px] text-gray-500 leading-relaxed">Your input directly shapes what gets built next. What's working? What's missing?</p>
+            </div>
+            <a
+              href={`https://docs.google.com/forms/d/e/1FAIpQLSdG-V4Zq4X-fwal9ThhM4PQSFSwinrFo8fyWpZLCWu7mGXHlA/viewform?usp=pp_url&entry.715582229=${import.meta.env.VITE_GIT_SHA ?? 'dev'}`}
+              target="_blank" rel="noopener noreferrer"
+              className="self-start text-[12.5px] font-medium px-3.5 py-1.5 rounded-lg border border-gray-200 hover:border-gray-400 transition-colors">
+              Leave feedback →
+            </a>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Next steps section ───────────────────────────────────────────────────────
+
+interface NextStepsSectionProps {
+  result:            RebalanceResult;
+  accounts:          Account[];
+  resolvedTrades:    ResolvedTrade[];
+  freeCash:          number;
+  plannedWithdrawal: number;
+  reminder:          Reminder;
+  setReminder:       (r: Reminder) => void;
+  onSave?:           () => void;
+}
+
+function NextStepsSection({
+  result, accounts, resolvedTrades, freeCash, plannedWithdrawal,
+  reminder, setReminder, onSave,
+}: NextStepsSectionProps) {
+  const card = 'bg-white border border-gray-200 rounded-xl p-5 flex flex-col gap-3';
+  const num  = 'font-mono text-[10.5px] text-brand-400 uppercase tracking-[.08em] mb-1.5';
+  return (
+    <div className="mt-10 space-y-4">
+      <div className="font-mono text-[11px] text-gray-400 uppercase tracking-[.09em]">Next steps</div>
+      <div className="grid grid-cols-3 gap-3">
+        {/* 01 Download */}
+        <div className={card}>
+          <div>
+            <div className={num}>01</div>
+            <div className="font-semibold text-[14px] text-gray-900">Download your files</div>
+          </div>
+          <p className="text-[13px] text-gray-500 leading-relaxed flex-1">
+            Your trade list as an interactive checklist. Save your portfolio file as a backup before making changes at your broker.
+          </p>
+          <div className="flex gap-2 flex-wrap">
+            <button
+              onClick={() => downloadReport(result, accounts, resolvedTrades, freeCash, plannedWithdrawal)}
+              className="inline-flex items-center gap-1.5 bg-brand text-white text-[12.5px] font-semibold px-3.5 py-1.5 rounded-lg hover:bg-brand-ink transition-colors">
+              \u2193 Trade report
+            </button>
+            {onSave && (
+              <button onClick={onSave}
+                className="inline-flex items-center gap-1.5 border border-gray-200 text-gray-600 text-[12.5px] font-medium px-3.5 py-1.5 rounded-lg hover:border-gray-400 transition-colors">
+                \u2193 Portfolio file
+              </button>
+            )}
+          </div>
+        </div>
+        {/* 02 Execute */}
+        <div className={card}>
+          <div>
+            <div className={num}>02</div>
+            <div className="font-semibold text-[14px] text-gray-900">Execute your trades</div>
+          </div>
+          <p className="text-[13px] text-gray-500 leading-relaxed flex-1">
+            Log into each broker account and work through the trades above. Start with sells to free up cash, then place buys.
+          </p>
+          <div className="flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-gray-200 flex-none"></span>
+            <span className="font-mono text-[11px] text-gray-400">Happens at your broker — nothing to do here.</span>
+          </div>
+        </div>
+        {/* 03 Schedule */}
+        <div className={card}>
+          <div>
+            <div className={num}>03</div>
+            <div className="font-semibold text-[14px] text-gray-900">Schedule your next run</div>
+          </div>
+          <ReminderPanel reminder={reminder} setReminder={setReminder} />
+        </div>
+      </div>
+      <FeedbackSection />
+    </div>
+  );
+}
+
+// ── Main panel ────────────────────────────────────────────────────────────────────
 
 export function ResultsPanel({
-  result, accounts, resolvedTrades, freeCash, plannedWithdrawal, reminder, setReminder,
+  result, accounts, resolvedTrades, freeCash, plannedWithdrawal, reminder, setReminder, onSave,
 }: Props) {
   const {
     householdValue, currentWeights, targetWeights, projectedWeights,
@@ -502,12 +673,7 @@ export function ResultsPanel({
             )}
           </span>
         </div>
-        <button
-          onClick={() => downloadReport(result, accounts, resolvedTrades, freeCash, plannedWithdrawal)}
-          className="text-xs text-gray-500 hover:text-gray-800 border border-gray-200 rounded px-2 py-1 hover:bg-gray-50 transition-colors shrink-0"
-        >
-          ↓ Report
-        </button>
+
       </div>
 
       <HelpBox label="About these results">
@@ -869,14 +1035,16 @@ export function ResultsPanel({
         </div>
       )}
 
-      {/* Next-rebalance reminder */}
-      <div>
-        <h3 className="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">
-          Schedule the next rebalance
-        </h3>
-        {/* Cadence note: "every 3–6 months" — tolerance-band trigger removed per design intent */}
-        <ReminderPanel reminder={reminder} setReminder={setReminder} />
-      </div>
+      <NextStepsSection
+        result={result}
+        accounts={accounts}
+        resolvedTrades={resolvedTrades}
+        freeCash={freeCash}
+        plannedWithdrawal={plannedWithdrawal}
+        reminder={reminder}
+        setReminder={setReminder}
+        onSave={onSave}
+      />
     </div>
   );
 }

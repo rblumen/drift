@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Results: post-rebalance next-steps section** — the bottom of the Results tab is now a three-card **Next steps** layout: *Download your files* (trade report HTML + portfolio JSON save), *Execute your trades* (static reminder with broker-side note), and *Schedule your next run* (moves the existing reminder panel here). The standalone "↓ Report" button previously in the Results header has been removed in favour of the card.
+
+- **Results: feedback prompt** — below next steps, a "How did the rebalance go?" prompt lets users rate the run (Went well / Mixed / Didn't work for me). Positive path surfaces "Share Drift" (copy-link) and a "Support the project" placeholder; negative path links directly to the feedback form. Selection scrolls the follow-up into view smoothly.
+
 - **Landing page** — a full marketing / orientation screen is now the first thing a new visitor sees: hero with allocation donut preview, feature cards, four-step how-it-works guide, a transparency block showing engine reasoning, broker compatibility pills, and a "Try the demo" path that loads the sample portfolio. Returning users land here too; clicking **Enter app →** or the wordmark in the app header navigates back into the tab shell. The existing orientation content (hero text, workflow stepper, privacy card) has been moved to this page and removed from the Overview tab.
 
 - **Overview tab rebuilt as a session dashboard** — now shows a live status strip (accounts count, positions count, unclassified count, household value, last-saved time) and a workflow stepper with per-step state badges (done / warn / idle / locked) derived from actual session data. The CTA button advances to the next incomplete step rather than always linking to Accounts. Step cards are clickable. Orientation content moved to the new LandingPage.

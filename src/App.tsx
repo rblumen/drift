@@ -405,6 +405,7 @@ export default function App() {
             plannedWithdrawal={plannedWithdrawal}
             reminder={reminder}
             setReminder={setReminder}
+            onSave={handleSave}
           />
         )}
       </main>
