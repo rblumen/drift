@@ -99,10 +99,7 @@ export function LandingPage({ onEnter, onDemo }: LandingPageProps) {
             </div>
             <div className="lp-micro">
               <span><span className="lp-dot"></span>Free · runs in your browser</span>
-              <span>
-                <span className="lp-dot" style={{ background: '#082855' }}></span>
-                Schwab · Fidelity · Empower CSV
-              </span>
+              <span><span className="lp-dot" style={{ background: '#082855' }}></span>No account · nothing stored</span>
             </div>
           </div>
 
@@ -148,7 +145,7 @@ export function LandingPage({ onEnter, onDemo }: LandingPageProps) {
             Your aggregator shows you the drift.<br />It never tells you the trades.
           </h2>
           <p className="lp-sub">
-            Empower, your brokerage dashboard — great at the picture. None of them will look
+            Your aggregator — great at the picture. None of them will look
             across all your accounts and say <em>sell this here, buy that there.</em> That last
             mile is where Drift lives.
           </p>
@@ -202,7 +199,7 @@ export function LandingPage({ onEnter, onDemo }: LandingPageProps) {
           <div className="lp-steps-grid">
             {([
               ['01', 'Add accounts',    "Name each account and its tax type. That's what tells Drift where things should live."],
-              ['02', 'Import positions','Drop a CSV from Schwab, Fidelity, or Empower — or type a few holdings by hand.'],
+              ['02', 'Import positions','Drop a CSV from Schwab, Fidelity, or your broker — or type a few holdings by hand.'],
               ['03', 'Set the target',  'Adjust the allocation and placement rules. Sensible defaults are already loaded.'],
               ['04', 'Get the trades',  'Per-account buys and sells, recalculating live as you tweak anything.'],
             ] as const).map(([n, title, body]) => (
@@ -255,13 +252,26 @@ export function LandingPage({ onEnter, onDemo }: LandingPageProps) {
             Works with the exports you already have.
           </h2>
           <div className="lp-works">
-            {['Schwab CSV', 'Fidelity CSV', 'Empower CSV', 'Empower totals', 'Manual entry'].map(p => (
+            {['Schwab CSV', 'Fidelity CSV', 'Manual entry'].map(p => (
               <span className="lp-pill" key={p}>{p}</span>
             ))}
             <span className="lp-pill" style={{ opacity: .5 }}>Direct connect · soon</span>
           </div>
         </div>
       </section>
+
+      {/* ── Trust strip ── */}
+      <div className="lp-trust-strip">
+        <div className="lp-wrap">
+          <div className="lp-trust-items">
+            <span className="lp-trust-item">Runs entirely in your browser</span>
+            <span className="lp-trust-sep"></span>
+            <span className="lp-trust-item">No account required</span>
+            <span className="lp-trust-sep"></span>
+            <span className="lp-trust-item">No telemetry</span>
+          </div>
+        </div>
+      </div>
 
       {/* ── Finale ─────────────────────────────────────────────────────────── */}
       <section className="lp-section">

@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Landing page: trust strip** — a monospace pill row ("Runs entirely in your browser · No account required · No telemetry") added between the broker compatibility section and the finale, reinforcing privacy at the point where users evaluate whether to sign up.
+
 - **Results: post-rebalance next-steps section** — the bottom of the Results tab is now a three-card **Next steps** layout: *Download your files* (trade report HTML + portfolio JSON save), *Execute your trades* (static reminder with broker-side note), and *Schedule your next run* (moves the existing reminder panel here). The standalone "↓ Report" button previously in the Results header has been removed in favour of the card.
 
 - **Results: feedback prompt** — below next steps, a "How did the rebalance go?" prompt lets users rate the run (Went well / Mixed / Didn't work for me). Positive path surfaces "Share Drift" (copy-link) and a "Support the project" placeholder; negative path links directly to the feedback form. Selection scrolls the follow-up into view smoothly.

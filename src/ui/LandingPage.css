@@ -153,6 +153,13 @@
 .lp-rings { display: flex; justify-content: center; gap: 7px; margin-top: 26px; }
 .lp-rings i { width: 10px; height: 10px; border-radius: 50%; display: block; }
 
+/* Trust strip */
+.lp-trust-strip  { border-top: 1px solid var(--line-2); border-bottom: 1px solid var(--line-2); padding: 18px 0; background: #f4f6f9; }
+.lp-trust-items  { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; }
+.lp-trust-item   { font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #6b7685; padding: 4px 24px; }
+.lp-trust-sep    { width: 1px; height: 14px; background: #e5e8ee; align-self: center; flex: none; }
+@media (max-width: 640px) { .lp-trust-sep { display: none; } .lp-trust-item { padding: 4px 14px; } }
+
 /* ── Footer ── */
 .lp-footer { padding: 40px 0; border-top: 1px solid #e5e8ee; margin-top: 64px; }
 .lp-foot  { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; }
