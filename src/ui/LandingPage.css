@@ -158,12 +158,53 @@
 .lp-foot  { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; }
 .lp-foot-note { font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: #6b7685; }
 
-/* ── Responsive ── */
+/* ── Responsive — tablet (≤900px) ── */
 @media (max-width: 900px) {
   .lp-hero-grid, .lp-split { grid-template-columns: 1fr; gap: 32px; }
-  .lp-feat { grid-template-columns: 1fr 1fr; }
+  .lp-feat       { grid-template-columns: 1fr 1fr; }
   .lp-steps-grid { grid-template-columns: 1fr 1fr; }
-  .lp-h1 { font-size: 38px; }
-  .lp-finale { padding: 40px 24px; }
+  .lp-h1         { font-size: 38px; }
+  .lp-finale     { padding: 40px 24px; }
   .lp-nav-links a { display: none; }
+  .lp-hero       { padding: 56px 0 48px; }
+}
+
+/* ── Responsive — mobile (≤640px) ── */
+@media (max-width: 640px) {
+  /* Spacing */
+  .lp-wrap    { padding: 0 20px; }
+  .lp-hero    { padding: 40px 0 36px; }
+  .lp-section { padding: 52px 0; }
+  .lp-tinted  { padding: 40px 0; }
+
+  /* Type */
+  .lp-h1   { font-size: 30px; letter-spacing: -.02em; }
+  .lp-h2   { font-size: 26px; }
+  .lp-lede { font-size: 16px; }
+  .lp-sub  { font-size: 15px; }
+
+  /* Grids → single column */
+  .lp-feat       { grid-template-columns: 1fr; }
+  .lp-steps-grid { grid-template-columns: 1fr; }
+
+  /* Allocation panel legend — allow wrapping */
+  .lp-legend-item { white-space: normal; }
+  .lp-donut-wrap  { gap: 14px; }
+
+  /* Code block — scrollable rather than clipped */
+  .lp-reason {
+    font-size: 11.5px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Finale */
+  .lp-finale { padding: 36px 20px; }
+  .lp-finale .lp-h2 { font-size: 26px; }
+
+  /* Broker pills — tighter */
+  .lp-pill { font-size: 11.5px; padding: 5px 12px; }
+
+  /* Footer stack */
+  .lp-foot { flex-direction: column; align-items: flex-start; gap: 10px; }
 }
