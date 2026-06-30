@@ -360,96 +360,207 @@ function ContributionSummary({ summary }: { summary: RebalanceResult['contributi
   );
 }
 
+// ── Share popover (desktop) / native share (mobile) ─────────────────────────
+
+const SHARE_URL  = 'https://drift.app';
+const SHARE_TEXT = 'Drift — free DIY portfolio rebalancer. Runs entirely in your browser, no account needed.';
+
+const IcoX = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.746l7.73-8.835L1.254 2.25H8.08l4.259 5.63L18.244 2.25zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z"/>
+  </svg>
+);
+const IcoReddit = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/>
+  </svg>
+);
+const IcoFacebook = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+  </svg>
+);
+const IcoEmail = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <rect x="2" y="4" width="20" height="16" rx="2"/>
+    <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+  </svg>
+);
+const IcoSMS = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+  </svg>
+);
+
+type ShareChannel = { label: string; icon: () => JSX.Element; color: string; href: () => string };
+const SHARE_CHANNELS: ShareChannel[] = [
+  { label: 'X / Twitter',    icon: IcoX,        color: '#000',    href: () => `https://twitter.com/intent/tweet?url=${encodeURIComponent(SHARE_URL)}&text=${encodeURIComponent(SHARE_TEXT)}` },
+  { label: 'Reddit',         icon: IcoReddit,   color: '#FF4500', href: () => `https://reddit.com/submit?url=${encodeURIComponent(SHARE_URL)}&title=${encodeURIComponent('Drift — free DIY portfolio rebalancer')}` },
+  { label: 'Facebook',       icon: IcoFacebook, color: '#1877F2', href: () => `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(SHARE_URL)}` },
+  { label: 'Email',          icon: IcoEmail,    color: BRAND,     href: () => `mailto:?subject=${encodeURIComponent('Check out Drift')}&body=${encodeURIComponent(SHARE_TEXT + '\n\n' + SHARE_URL)}` },
+  { label: 'SMS / iMessage', icon: IcoSMS,      color: '#1a7a4a', href: () => `sms:?body=${encodeURIComponent(SHARE_TEXT + ' ' + SHARE_URL)}` },
+];
+
+type ShareAnchor = { top: number; left: number; bottom: number };
+
+function SharePopover({ anchor, onClose }: { anchor: ShareAnchor; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  function copyLink() {
+    navigator.clipboard?.writeText(SHARE_URL).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  }
+
+  const popWidth = 248;
+  const left = Math.max(8, Math.min(anchor.left, window.innerWidth - popWidth - 8));
+  const flipUp = anchor.bottom + 280 > window.innerHeight;
+  const posStyle: React.CSSProperties = flipUp
+    ? { bottom: window.innerHeight - anchor.top + 6 }
+    : { top: anchor.bottom + 6 };
+
+  return (
+    <>
+      <div className="fixed inset-0 z-[199]" onClick={onClose} />
+      <div
+        className="fixed z-[200] bg-white overflow-hidden"
+        style={{
+          left, ...posStyle, width: popWidth,
+          borderRadius: 10,
+          border: '1px solid var(--line, #e5e8ee)',
+          boxShadow: '0 4px 24px rgba(8,40,85,0.13), 0 1px 4px rgba(8,40,85,0.06)',
+        }}
+      >
+        <div className="flex items-center gap-1.5 px-2.5 py-2 border-b border-gray-100"
+          style={{ background: 'var(--paper-2, #f4f6f9)' }}>
+          <span className="flex-1 truncate font-mono text-[10.5px] text-gray-400">{SHARE_URL}</span>
+          <button onClick={copyLink}
+            className="shrink-0 text-[11px] font-semibold px-2.5 py-1 rounded-md transition-colors"
+            style={{
+              fontFamily: 'var(--sans)', border: 'none', cursor: 'pointer',
+              background: copied ? '#f0faf4' : BRAND_50,
+              color: copied ? '#1a7a4a' : BRAND,
+            }}>
+            {copied ? '\u2713' : 'Copy'}
+          </button>
+        </div>
+        {SHARE_CHANNELS.map(({ label, href, icon: Icon, color }, i) => (
+          <a key={label} href={href()} target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-2.5 px-3 py-2.5 text-[13px] font-medium no-underline transition-colors"
+            style={{
+              color: 'var(--ink-2, #4a5769)',
+              borderBottom: i < SHARE_CHANNELS.length - 1 ? '1px solid var(--line-2, #eceff4)' : 'none',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = BRAND_50; }}
+            onMouseLeave={e => { e.currentTarget.style.background = ''; }}
+          >
+            <span style={{ color, flexShrink: 0, display: 'flex', alignItems: 'center' }}><Icon /></span>
+            {label}
+          </a>
+        ))}
+      </div>
+    </>
+  );
+}
+
 // ── Feedback section ────────────────────────────────────────────────────────
 
 type FeedbackState = 'none' | 'good' | 'mixed' | 'bad';
 
-const FEEDBACK_OPTIONS: { val: FeedbackState; label: string }[] = [
-  { val: 'good',  label: 'Went well' },
-  { val: 'mixed', label: 'Mixed' },
-  { val: 'bad',   label: "Didn't work for me" },
-];
-
 function FeedbackSection() {
-  const [fbState, setFbState] = useState<FeedbackState>('none');
-  const [copied,  setCopied]  = useState(false);
-  const revealRef = useRef<HTMLDivElement>(null);
+  const [fbState,     setFbState]     = useState<FeedbackState>('none');
+  const [shareAnchor, setShareAnchor] = useState<ShareAnchor | null>(null);
+  const shareRef = useRef<HTMLButtonElement>(null);
 
-  useEffect(() => {
-    if (fbState !== 'none' && revealRef.current) {
-      const top = revealRef.current.getBoundingClientRect().top + window.scrollY - 24;
-      window.scrollTo({ top, behavior: 'smooth' });
+  function handleShare() {
+    if (navigator.share) {
+      navigator.share({ title: 'Drift', text: SHARE_TEXT, url: SHARE_URL }).catch(() => {});
+      return;
     }
-  }, [fbState]);
-
-  function copyLink() {
-    navigator.clipboard?.writeText(window.location.href).catch(() => {});
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    const r = shareRef.current?.getBoundingClientRect();
+    if (r) setShareAnchor({ top: r.top, left: r.left, bottom: r.bottom });
   }
 
-  return (
-    <div className="border-t border-gray-100 pt-8 mt-2 text-center">
-      <p className="font-semibold text-[14px] text-gray-700 mb-4">
-        How did the rebalance go?
-      </p>
-      <div className={`flex gap-2 flex-wrap justify-center ${fbState !== 'none' ? 'mb-6' : ''}`}>
-        {FEEDBACK_OPTIONS.map(({ val, label }) => (
-          <button key={val}
-            onClick={() => setFbState(s => s === val ? 'none' : val)}
-            className={`text-sm font-medium px-[18px] py-2 rounded-lg border transition-colors ${
-              fbState === val
-                ? 'border-brand-400 bg-brand-50 text-brand font-semibold'
-                : 'border-gray-200 bg-white text-gray-600 hover:border-gray-400'
-            }`}>
-            {label}
-          </button>
-        ))}
-      </div>
+  const optionBtns: { val: FeedbackState; label: string }[] = [
+    { val: 'good',  label: 'Went well' },
+    { val: 'mixed', label: 'Mixed' },
+    { val: 'bad',   label: "Didn't work for me" },
+  ];
 
-      {fbState === 'good' && (
-        <div ref={revealRef} className="text-left">
-          <p className="text-[13px] text-gray-500 mb-4">Glad to hear it.</p>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-white border border-gray-200 rounded-xl p-5 flex flex-col gap-3">
-              <div>
-                <div className="font-mono text-[10.5px] text-brand-400 uppercase tracking-[.08em] mb-1.5">Share Drift</div>
-                <p className="text-[13px] text-gray-500 leading-relaxed">Know someone who manages their own portfolio? Send them this link.</p>
-              </div>
-              <button onClick={copyLink}
-                className="self-start text-[12.5px] font-medium px-3.5 py-1.5 rounded-lg border border-gray-200 hover:border-gray-400 transition-colors">
-                {copied ? '\u2713 Copied' : 'Copy link'}
+  return (
+    <div className="border-t border-gray-100 pt-8 mt-2">
+      {fbState === 'none' ? (
+        <div className="text-center">
+          <p className="font-semibold text-[14px] text-gray-700 mb-4">How did the rebalance go?</p>
+          <div className="flex gap-2 flex-wrap justify-center">
+            {optionBtns.map(({ val, label }) => (
+              <button key={val}
+                onClick={() => setFbState(val)}
+                className="text-sm font-medium px-[18px] py-2 rounded-lg border border-gray-200 bg-white text-gray-600 hover:border-gray-400 transition-colors">
+                {label}
               </button>
-            </div>
-            <div className="bg-white border border-gray-200 rounded-xl p-5 flex flex-col gap-3">
-              <div>
-                <div className="font-mono text-[10.5px] text-brand-400 uppercase tracking-[.08em] mb-1.5">Support the project</div>
-                <p className="text-[13px] text-gray-500 leading-relaxed">Drift is a solo project. If it saved you time, consider buying me a coffee.</p>
-              </div>
-              <a href="#"
-                className="self-start inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3.5 py-1.5 rounded-lg border border-gray-200 hover:border-gray-400 transition-colors">
-                Support →<span className="font-mono text-[10.5px] text-gray-400 ml-1">(coming soon)</span>
-              </a>
-            </div>
+            ))}
           </div>
         </div>
-      )}
-
-      {(fbState === 'mixed' || fbState === 'bad') && (
-        <div ref={revealRef} className="text-left">
-          <p className="text-[13px] text-gray-500 mb-4">Thanks for letting us know.</p>
-          <div className="bg-white border border-gray-200 rounded-xl p-5 flex flex-col gap-3 max-w-sm">
-            <div>
-              <div className="font-mono text-[10.5px] text-brand-400 uppercase tracking-[.08em] mb-1.5">Leave feedback</div>
-              <p className="text-[13px] text-gray-500 leading-relaxed">Your input directly shapes what gets built next. What's working? What's missing?</p>
-            </div>
-            <a
-              href={`https://docs.google.com/forms/d/e/1FAIpQLSdG-V4Zq4X-fwal9ThhM4PQSFSwinrFo8fyWpZLCWu7mGXHlA/viewform?usp=pp_url&entry.715582229=${import.meta.env.VITE_GIT_SHA ?? 'dev'}`}
-              target="_blank" rel="noopener noreferrer"
-              className="self-start text-[12.5px] font-medium px-3.5 py-1.5 rounded-lg border border-gray-200 hover:border-gray-400 transition-colors">
-              Leave feedback →
-            </a>
+      ) : (
+        <div>
+          <div className="grid items-center mb-4" style={{ gridTemplateColumns:'1fr auto 1fr' }}>
+            <span />
+            <p className="font-semibold text-[14px] text-gray-700 text-center">
+              {fbState === 'good' ? 'Glad to hear it!' : 'Thanks for letting us know.'}
+            </p>
+            <button onClick={() => setFbState('none')}
+              className="font-mono text-[11px] text-gray-400 hover:text-gray-600 transition-colors bg-transparent border-none cursor-pointer p-0 justify-self-end">
+              ← change
+            </button>
           </div>
+
+          {fbState === 'good' && (
+            <div className="flex flex-col gap-2 max-w-[400px] mx-auto">
+              <div className="bg-white border border-gray-200 rounded-xl px-[18px] py-4 flex flex-col gap-2">
+                <div>
+                  <div className="font-mono text-[10.5px] text-brand-400 uppercase tracking-[.08em] mb-1">Share Drift</div>
+                  <p className="text-[13px] text-gray-500 leading-relaxed">Know someone who manages their own portfolio? Send them this link.</p>
+                </div>
+                <button ref={shareRef} onClick={handleShare}
+                  className="self-start text-[12.5px] font-medium px-3.5 py-1.5 rounded-lg border border-gray-200 hover:border-gray-400 transition-colors">
+                  Share →
+                </button>
+                {shareAnchor && <SharePopover anchor={shareAnchor} onClose={() => setShareAnchor(null)} />}
+              </div>
+              <div className="bg-white border border-gray-200 rounded-xl px-[18px] py-4 flex flex-col gap-2">
+                <div>
+                  <div className="font-mono text-[10.5px] text-brand-400 uppercase tracking-[.08em] mb-1">Support the project</div>
+                  <p className="text-[13px] text-gray-500 leading-relaxed">Drift is a solo project. If it saved you time, consider buying me a coffee.</p>
+                </div>
+                <a href="#"
+                  className="self-start inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3.5 py-1.5 rounded-lg border border-gray-200 hover:border-gray-400 transition-colors">
+                  Support →<span className="font-mono text-[10.5px] text-gray-400 ml-1">(coming soon)</span>
+                </a>
+              </div>
+            </div>
+          )}
+
+          {(fbState === 'mixed' || fbState === 'bad') && (
+            <div className="bg-white border border-gray-200 rounded-xl px-[18px] py-4 flex flex-col gap-2 max-w-[400px] mx-auto">
+              <div>
+                <div className="font-mono text-[10.5px] text-brand-400 uppercase tracking-[.08em] mb-1">Leave feedback</div>
+                <p className="text-[13px] text-gray-500 leading-relaxed">Your input directly shapes what gets built next. What's working? What's missing?</p>
+              </div>
+              <a
+                href={`https://docs.google.com/forms/d/e/1FAIpQLSdG-V4Zq4X-fwal9ThhM4PQSFSwinrFo8fyWpZLCWu7mGXHlA/viewform?usp=pp_url&entry.715582229=${import.meta.env.VITE_GIT_SHA ?? 'dev'}`}
+                target="_blank" rel="noopener noreferrer"
+                className="self-start text-[12.5px] font-medium px-3.5 py-1.5 rounded-lg border border-gray-200 hover:border-gray-400 transition-colors">
+                Leave feedback →
+              </a>
+            </div>
+          )}
         </div>
       )}
     </div>
