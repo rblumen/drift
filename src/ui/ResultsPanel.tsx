@@ -474,12 +474,14 @@ function SharePopover({ anchor, onClose }: { anchor: ShareAnchor; onClose: () =>
 type FeedbackState = 'none' | 'good' | 'mixed' | 'bad';
 
 const FORM_BASE = `https://docs.google.com/forms/d/e/1FAIpQLSdG-V4Zq4X-fwal9ThhM4PQSFSwinrFo8fyWpZLCWu7mGXHlA/viewform?usp=pp_url&entry.715582229=${import.meta.env.VITE_GIT_SHA ?? 'dev'}`;
-// Add a "sentiment" field to the Google Form and paste its entry ID here (e.g. 'entry.123456789'):
-const FORM_ENTRY_SENTIMENT = '';
+const FORM_ENTRY_SENTIMENT = 'entry.579301839';
+const FORM_SENTIMENT_LABEL: Record<Exclude<FeedbackState, 'none'>, string> = {
+  good:  'Good',
+  mixed: 'Mixed',
+  bad:   'Not great',
+};
 function formUrl(sentiment: Exclude<FeedbackState, 'none'>) {
-  return FORM_ENTRY_SENTIMENT
-    ? `${FORM_BASE}&${FORM_ENTRY_SENTIMENT}=${encodeURIComponent(sentiment)}`
-    : FORM_BASE;
+  return `${FORM_BASE}&${FORM_ENTRY_SENTIMENT}=${encodeURIComponent(FORM_SENTIMENT_LABEL[sentiment])}`;
 }
 
 function FeedbackSection() {
