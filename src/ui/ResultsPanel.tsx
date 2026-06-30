@@ -399,8 +399,8 @@ function FeedbackSection() {
             onClick={() => setFbState(s => s === val ? 'none' : val)}
             className={`text-sm font-medium px-[18px] py-2 rounded-lg border transition-colors ${
               fbState === val
-                ? 'border-brand-400 bg-brand-50 text-brand font-semibold'
-                : 'border-gray-200 bg-white text-gray-600 hover:border-gray-400'
+                ? 'border-brand-700 bg-brand-700 text-white font-semibold'
+                : 'border-brand bg-brand text-white hover:bg-brand-700 hover:border-brand-700'
             }`}>
             {label}
           </button>
@@ -417,7 +417,7 @@ function FeedbackSection() {
                 <p className="text-[13px] text-gray-500 leading-relaxed">Know someone who manages their own portfolio? Send them this link.</p>
               </div>
               <button onClick={copyLink}
-                className="self-start text-[12.5px] font-medium px-3.5 py-1.5 rounded-lg border border-gray-200 hover:border-gray-400 transition-colors">
+                className="self-center text-[12.5px] font-medium px-3.5 py-1.5 rounded-lg border border-brand bg-brand text-white hover:bg-brand-700 hover:border-brand-700 transition-colors">
                 {copied ? '\u2713 Copied' : 'Copy link'}
               </button>
             </div>
@@ -426,10 +426,10 @@ function FeedbackSection() {
                 <div className="font-mono text-[10.5px] text-brand-400 uppercase tracking-[.08em] mb-1.5">Support the project</div>
                 <p className="text-[13px] text-gray-500 leading-relaxed">Drift is a solo project. If it saved you time, consider buying me a coffee.</p>
               </div>
-              <a href="#"
-                className="self-start inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3.5 py-1.5 rounded-lg border border-gray-200 hover:border-gray-400 transition-colors">
-                Support →<span className="font-mono text-[10.5px] text-gray-400 ml-1">(coming soon)</span>
-              </a>
+              <a href="https://ko-fi.com/driftrebalance" target="_blank" rel="noopener noreferrer"
+                className="self-center inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3.5 py-1.5 rounded-lg border border-brand bg-brand text-white hover:bg-brand-700 hover:border-brand-700 transition-colors">
+                Support (Ko-fi)
+</a>
             </div>
           </div>
         </div>
@@ -446,8 +446,8 @@ function FeedbackSection() {
             <a
               href={`https://docs.google.com/forms/d/e/1FAIpQLSdG-V4Zq4X-fwal9ThhM4PQSFSwinrFo8fyWpZLCWu7mGXHlA/viewform?usp=pp_url&entry.715582229=${import.meta.env.VITE_GIT_SHA ?? 'dev'}`}
               target="_blank" rel="noopener noreferrer"
-              className="self-start text-[12.5px] font-medium px-3.5 py-1.5 rounded-lg border border-gray-200 hover:border-gray-400 transition-colors">
-              Leave feedback →
+              className="self-center text-[12.5px] font-medium px-3.5 py-1.5 rounded-lg border border-brand bg-brand text-white hover:bg-brand-700 hover:border-brand-700 transition-colors">
+              Leave feedback
             </a>
           </div>
         </div>
