@@ -412,7 +412,17 @@ export default function App() {
 
       {/* ── Footer ─────────────────────────────────────────────────────────── */}
       <footer className="max-w-5xl mx-auto px-4 py-6 mt-8 border-t border-gray-100 text-xs text-gray-400 flex items-center justify-between">
-        <span>All computation is local — no data leaves your browser.</span>
+        <span className="flex items-center gap-3">
+          <span>© {new Date().getFullYear()} Drift</span>
+          <span className="text-gray-200">·</span>
+          <span>All computation is local — no data leaves your browser.</span>
+          {(__APP_VERSION__ && __APP_VERSION__ !== '0.0.0') && (
+            <>
+              <span className="text-gray-200">·</span>
+              <span className="font-mono" style={{ fontSize: 10 }}>v{__APP_VERSION__}{__COMMIT_SHA__ && __COMMIT_SHA__ !== 'unknown' ? ` (${__COMMIT_SHA__})` : ''}</span>
+            </>
+          )}
+        </span>
         <span className="flex items-center gap-4">
           <a
             href={`https://docs.google.com/forms/d/e/1FAIpQLSdG-V4Zq4X-fwal9ThhM4PQSFSwinrFo8fyWpZLCWu7mGXHlA/viewform?usp=pp_url&entry.715582229=${__COMMIT_SHA__}`}
