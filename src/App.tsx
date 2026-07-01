@@ -263,7 +263,7 @@ export default function App() {
           <div className="mb-2 bg-amber-50 border-b border-amber-200 -mx-4 px-4 py-1.5 text-xs text-amber-800 flex items-center justify-center gap-1.5">
             <span>Drift is in early beta.</span>
             <a
-              href={`https://docs.google.com/forms/d/e/1FAIpQLSdG-V4Zq4X-fwal9ThhM4PQSFSwinrFo8fyWpZLCWu7mGXHlA/viewform?usp=pp_url&entry.715582229=${import.meta.env.VITE_GIT_SHA ?? 'dev'}`}
+              href={`https://docs.google.com/forms/d/e/1FAIpQLSdG-V4Zq4X-fwal9ThhM4PQSFSwinrFo8fyWpZLCWu7mGXHlA/viewform?usp=pp_url&entry.715582229=${__COMMIT_SHA__}`}
               target="_blank"
               rel="noopener noreferrer"
               className="font-medium underline underline-offset-2 hover:text-amber-900"
@@ -415,7 +415,7 @@ export default function App() {
         <span>All computation is local — no data leaves your browser.</span>
         <span className="flex items-center gap-4">
           <a
-            href={`https://docs.google.com/forms/d/e/1FAIpQLSdG-V4Zq4X-fwal9ThhM4PQSFSwinrFo8fyWpZLCWu7mGXHlA/viewform?usp=pp_url&entry.715582229=${import.meta.env.VITE_GIT_SHA ?? 'dev'}`}
+            href={`https://docs.google.com/forms/d/e/1FAIpQLSdG-V4Zq4X-fwal9ThhM4PQSFSwinrFo8fyWpZLCWu7mGXHlA/viewform?usp=pp_url&entry.715582229=${__COMMIT_SHA__}`}
             target="_blank"
             rel="noopener noreferrer"
             className="hover:text-gray-600 underline underline-offset-2"

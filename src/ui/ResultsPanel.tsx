@@ -473,7 +473,7 @@ function SharePopover({ anchor, onClose }: { anchor: ShareAnchor; onClose: () =>
 
 type FeedbackState = 'none' | 'good' | 'mixed' | 'bad';
 
-const FORM_BASE = `https://docs.google.com/forms/d/e/1FAIpQLSdG-V4Zq4X-fwal9ThhM4PQSFSwinrFo8fyWpZLCWu7mGXHlA/viewform?usp=pp_url&entry.715582229=${import.meta.env.VITE_GIT_SHA ?? 'dev'}`;
+const FORM_BASE = `https://docs.google.com/forms/d/e/1FAIpQLSdG-V4Zq4X-fwal9ThhM4PQSFSwinrFo8fyWpZLCWu7mGXHlA/viewform?usp=pp_url&entry.715582229=${__COMMIT_SHA__}`;
 const FORM_ENTRY_SENTIMENT = 'entry.579301839';
 const FORM_SENTIMENT_LABEL: Record<Exclude<FeedbackState, 'none'>, string> = {
   good:  'Good',
