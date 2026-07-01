@@ -268,7 +268,6 @@ function buildHtml(result: RebalanceResult, accounts: Account[], resolvedTrades:
     ...flags.filter(f => f.kind === 'WITHDRAWAL_SHORTFALL'),
     ...flags.filter(f => f.kind === 'REVISIT_PLACEMENT'),
     ...flags.filter(f => f.kind === 'UNMAPPED_HOLDING'),
-    ...flags.filter(f => f.kind === 'FIVE_TWENTY_NINE_REBALANCE_LIMIT'),
     ...flags.filter(f => f.kind === 'TAXABLE_SALE'),
     ...flags.filter(f => f.kind === 'BLENDED_FUND_OVERSELL'),
     ...flags.filter(f => f.kind === 'BLENDED_FUND_SOLD'),
@@ -285,11 +284,6 @@ function buildHtml(result: RebalanceResult, accounts: Account[], resolvedTrades:
       return `<div class="flag flag-orange"><strong>Revisit placement strategy.</strong> Taxable accounts hold ${fmtPct(f.taxableShare)} of household value, exceeding the ${fmtPct(f.fixedIncomeTarget)} fixed-income target. Equities must land in taxable accounts.</div>`;
     if (f.kind === 'UNMAPPED_HOLDING')
       return `<div class="flag flag-warn"><strong>Unmapped holding:</strong> Ticker <code>${esc(f.ticker)}</code> has no asset class — excluded from rebalance. Assign it in the Classify tab.</div>`;
-    if (f.kind === 'FIVE_TWENTY_NINE_REBALANCE_LIMIT') {
-      const names = f.accountIds.map(id => esc(acctName(id))).join(', ');
-      const year = new Date().getFullYear();
-      return `<div class="flag flag-warn"><strong>529 rebalance limit:</strong> Trades are recommended for ${names}. The IRS allows only <strong>2 investment-direction changes per 529 account per calendar year.</strong> Confirm you have not already rebalanced this account in ${year} before executing.</div>`;
-    }
     if (f.kind === 'TAXABLE_SALE')
       return `<div class="flag flag-warn"><strong>Taxable sale:</strong> Selling ${fmtUsd(f.amountUsd)} of ${esc(AC_LABEL[f.assetClass])} in <em>${esc(acctName(f.accountId))}</em> may trigger a capital gain. Review before executing.</div>`;
     if (f.kind === 'BLENDED_FUND_SOLD')

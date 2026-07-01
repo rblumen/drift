@@ -325,8 +325,4 @@ export type Flag =
    *  suppressed only when cost basis is known for the sold class and the sale is
    *  a gain (no loss to disallow); kept when basis is missing/implausible. One
    *  flag per taxable-account × class × buy-account triple. */
-  | { kind: 'WASH_SALE_RISK'; taxableAccountId: string; assetClass: AssetClass; buyAccountId: string }
-  /** 529 rebalance limit (#6): one or more trades touch a 529 account. The IRS
-   *  allows only two investment-direction changes per 529 account per calendar year.
-   *  accountIds lists the affected 529 accounts. */
-  | { kind: 'FIVE_TWENTY_NINE_REBALANCE_LIMIT'; accountIds: string[] };
+  | { kind: 'WASH_SALE_RISK'; taxableAccountId: string; assetClass: AssetClass; buyAccountId: string };

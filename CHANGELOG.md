@@ -9,8 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **529 rebalance limit warning** ([#6](https://github.com/rblumen/drift/issues/6)) — when any recommended trades touch a 529 account, Results and the exported report now display a callout reminding you that the IRS allows only 2 investment-direction changes per 529 account per calendar year.
-
 - **Landing page: trust strip** — a monospace pill row ("Runs entirely in your browser · No account required · No telemetry") added between the broker compatibility section and the finale, reinforcing privacy at the point where users evaluate whether to sign up.
 
 - **Results: post-rebalance next-steps section** — the bottom of the Results tab is now a three-card **Next steps** layout: *Download your files* (trade report HTML + portfolio JSON save), *Execute your trades* (static reminder with broker-side note), and *Schedule your next run* (moves the existing reminder panel here). The standalone "↓ Report" button previously in the Results header has been removed in favour of the card.
