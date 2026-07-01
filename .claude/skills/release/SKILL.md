@@ -75,6 +75,7 @@ Ready to release vX.Y.Z. Here's what will happen:
   • Merge PR (squash) and delete the branch
   • Push tag vX.Y.Z
   • Create GitHub Release
+  • Push main → stable (triggers Vercel production deployment)
 
 Proceed? (yes / no)
 ```
@@ -142,7 +143,19 @@ gh release create vX.Y.Z \
 
 ---
 
-## Phase 10: Return to main
+## Phase 10: Promote stable
+
+Fast-forward the `stable` branch to the release commit. This is what triggers the Vercel production deployment.
+
+```
+git push origin main:stable
+```
+
+If `stable` doesn't exist yet (first release), this command creates it. Vercel must be configured to deploy production from `stable` for this to take effect.
+
+---
+
+## Phase 11: Return to main
 
 ```
 git checkout main
