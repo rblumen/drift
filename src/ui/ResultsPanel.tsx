@@ -181,7 +181,6 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
       </div>
     );
   }
-
   return null;
 }
 
@@ -527,7 +526,7 @@ function FeedbackSection() {
             {optionBtns.map(({ val, label }) => (
               <button key={val}
                 onClick={() => setFbState(val)}
-                className="text-sm font-medium px-[18px] py-2 rounded-lg border border-gray-200 bg-white text-gray-600 hover:border-gray-400 transition-colors">
+                className="text-sm font-medium px-[18px] py-2 rounded-lg border border-brand bg-brand text-white hover:bg-brand-700 hover:border-brand-700 transition-colors">
                 {label}
               </button>
             ))}
@@ -554,8 +553,8 @@ function FeedbackSection() {
                   <p className="text-[13px] text-gray-500 leading-relaxed">Know someone who manages their own portfolio? Send them this link.</p>
                 </div>
                 <button ref={shareRef} onClick={handleShare}
-                  className="self-start text-[12.5px] font-medium px-3.5 py-1.5 rounded-lg border border-gray-200 hover:border-gray-400 transition-colors">
-                  Share →
+                  className="self-center text-[12.5px] font-medium px-3.5 py-1.5 rounded-lg border border-brand bg-brand text-white hover:bg-brand-700 hover:border-brand-700 transition-colors">
+                  Share
                 </button>
                 {shareAnchor && <SharePopover anchor={shareAnchor} onClose={() => setShareAnchor(null)} />}
               </div>
@@ -565,8 +564,8 @@ function FeedbackSection() {
                   <p className="text-[13px] text-gray-500 leading-relaxed">Tell us what worked — it shapes what gets built next.</p>
                 </div>
                 <a href={formUrl('good')} target="_blank" rel="noopener noreferrer"
-                  className="self-start text-[12.5px] font-medium px-3.5 py-1.5 rounded-lg border border-gray-200 hover:border-gray-400 transition-colors">
-                  Leave feedback →
+                  className="self-center text-[12.5px] font-medium px-3.5 py-1.5 rounded-lg border border-brand bg-brand text-white hover:bg-brand-700 hover:border-brand-700 transition-colors">
+                  Leave feedback
                 </a>
               </div>
               <div className="bg-white border border-gray-200 rounded-xl px-[18px] py-4 flex flex-col gap-2">
@@ -574,9 +573,9 @@ function FeedbackSection() {
                   <div className="font-mono text-[10.5px] text-brand-400 uppercase tracking-[.08em] mb-1">Support the project</div>
                   <p className="text-[13px] text-gray-500 leading-relaxed">Drift is a solo project. If it saved you time, consider buying me a coffee.</p>
                 </div>
-                <a href="#"
-                  className="self-start inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3.5 py-1.5 rounded-lg border border-gray-200 hover:border-gray-400 transition-colors">
-                  Support →<span className="font-mono text-[10.5px] text-gray-400 ml-1">(coming soon)</span>
+                <a href="https://ko-fi.com/driftrebalance" target="_blank" rel="noopener noreferrer"
+                  className="self-center inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3.5 py-1.5 rounded-lg border border-brand bg-brand text-white hover:bg-brand-700 hover:border-brand-700 transition-colors">
+                  Support (Ko-fi)
                 </a>
               </div>
             </div>
@@ -591,8 +590,8 @@ function FeedbackSection() {
               <a
                 href={formUrl(fbState as Exclude<FeedbackState, 'none'>)}
                 target="_blank" rel="noopener noreferrer"
-                className="self-start text-[12.5px] font-medium px-3.5 py-1.5 rounded-lg border border-gray-200 hover:border-gray-400 transition-colors">
-                Leave feedback →
+                className="self-center text-[12.5px] font-medium px-3.5 py-1.5 rounded-lg border border-brand bg-brand text-white hover:bg-brand-700 hover:border-brand-700 transition-colors">
+                Leave feedback
               </a>
             </div>
           )}
