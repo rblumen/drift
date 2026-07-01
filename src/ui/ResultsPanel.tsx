@@ -703,6 +703,7 @@ export function ResultsPanel({
     ...flags.filter(f => f.kind === 'NO_ELIGIBLE_ACCOUNT'),
     ...flags.filter(f => f.kind === 'PROJECTED_OFF_TARGET'),
     ...flags.filter(f => f.kind === 'REVISIT_PLACEMENT'),
+    ...flags.filter(f => f.kind === 'FIVE_TWENTY_NINE_REBALANCE_LIMIT'),
     ...flags.filter(f => f.kind === 'UNMAPPED_HOLDING'),
     ...flags.filter(f => f.kind === 'TAXABLE_REBALANCE_AVOIDABLE'),
     ...flags.filter(f => f.kind === 'TAXABLE_SALE'),
