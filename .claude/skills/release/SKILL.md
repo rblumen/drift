@@ -40,6 +40,20 @@ For a pre-1.0 project (current major = 0), breaking changes increment the minor 
 
 Propose the new version with your reasoning (e.g. "The [Unreleased] section has Added and Fixed entries but no breaking changes → bump minor → **0.2.0**"). Then **pause and ask the user to confirm or override** before proceeding. This is the one decision you shouldn't make unilaterally.
 
+Once the version is confirmed, **immediately check for conflicts** before touching any files:
+
+```
+git tag -l vX.Y.Z
+git ls-remote --tags origin vX.Y.Z
+gh release view vX.Y.Z
+```
+
+If a local tag, remote tag, or GitHub Release already exists for `vX.Y.Z`:
+- Check what commit the tag points to (`git log -1 --format="%H %ci %s" vX.Y.Z`) and whether a GitHub Release is attached.
+- Report the conflict to the user with that context (commit date/message, whether a Release exists) and **stop for their decision** — do not silently move or delete a tag. Options are typically: pick the next version number instead, or confirm the existing tag is stale/accidental and safe to move (only if no GitHub Release is attached — a tag with a published Release is user-facing and should not be touched without explicit say-so).
+
+Only proceed to Phase 3 once the target `vX.Y.Z` is confirmed clear of conflicts.
+
 ---
 
 ## Phase 3: Update CHANGELOG.md
@@ -171,4 +185,5 @@ Report the release URL (from `gh release create` output) and a brief summary of 
 - Never force-push to `main`.
 - Never skip the confirmation checkpoint (Phase 5).
 - Never tag before the PR is merged.
+- Never move or delete an existing tag, or touch a tag with a published GitHub Release attached, without explicit user confirmation.
 - If anything fails after Phase 6 (i.e., after the commit), tell the user exactly where things stopped and what needs to be done manually — don't try to silently retry destructive steps.
