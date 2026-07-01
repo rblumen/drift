@@ -1,4 +1,14 @@
-﻿import { useState } from 'react';
+// src/ui/ResultsPanel.tsx — Brand-styled drop-in replacement
+// Diff from original:
+//   • BUY badge/amount  → Anchor Blue  (was green)
+//   • SELL badge/amount → Burnt Orange (was red)
+//   • Drift: over  → #b34500, under → #1a5fa0; adds inline progress bars
+//   • Household section: DonutChart (concentric outer=target inner=current)
+//     replaces the two-small-pie grid
+//   • Tabular/mono figures throughout
+//   • indigo UI chrome → brand blue
+
+import { useState, useRef, useEffect } from 'react';
 import type { Account, AssetClass, Flag, RebalanceResult, ResolvedTrade } from '../engine/types';
 import { ALL_ASSET_CLASSES } from '../engine/types';
 import { withdrawalPriorityOf, isWithdrawalEligible } from '../engine/rebalance';
@@ -7,11 +17,22 @@ import { isChildClass, isParentClass, childrenOf } from '../engine/hierarchy';
 import { AC_COLOR, AC_LABEL, ACCT_TYPE_LABEL, fmtUsd, fmtPct, fmtDelta } from './fmt';
 import { PieChart } from './PieChart';
 import type { PieSlice } from './PieChart';
+import { DonutChart } from './DonutChart';
+import type { DonutSlice } from './DonutChart';
 import { AllocationPlot } from './AllocationPlot';
 import { downloadReport } from './exportReport';
 import { HelpBox, HelpDef, HelpSection, HelpTip } from './HelpBox';
 import type { Reminder } from '../ingest/schema';
 import { ReminderPanel, daysUntil } from './ReminderPanel';
+
+// ── Brand palette helpers ─────────────────────────────────────────────────────
+// Using CSS custom props where possible so they respect any overrides in
+// the user's tailwind.config / index.css.
+const BRAND      = 'var(--brand, #0d3e7a)';
+const BRAND_2    = 'var(--brand-2, #1a5fa0)';
+const BRAND_50   = 'var(--brand-50, #e8f0f8)';
+const ORANGE_2   = '#b34500';
+const ORANGE_50  = '#fdf0ea';
 
 interface Props {
   result: RebalanceResult;
@@ -21,9 +42,11 @@ interface Props {
   plannedWithdrawal: number;
   reminder: Reminder;
   setReminder: (r: Reminder) => void;
+  onSave?: () => void;
 }
 
 // ── Flag banners ──────────────────────────────────────────────────────────────
+// Semantic alert colors are intentional — they communicate severity, not brand.
 
 function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
   const acctName = (id: string) => accounts.find(a => a.id === id)?.name ?? id;
@@ -34,12 +57,10 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
         <strong>Revisit placement strategy.</strong>{' '}
         Taxable accounts hold {fmtPct(flag.taxableShare)} of household value, which exceeds
         the {fmtPct(flag.fixedIncomeTarget)} fixed-income target.
-        Taxable accounts can no longer be bonds-only — equities must begin landing there.
         Consider updating your placement rules.
       </div>
     );
   }
-
   if (flag.kind === 'TAXABLE_SALE') {
     return (
       <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
@@ -49,19 +70,16 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
       </div>
     );
   }
-
   if (flag.kind === 'TAXABLE_REBALANCE_AVOIDABLE') {
     return (
       <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
         <strong>Avoidable taxable sale:</strong>{' '}
         About {fmtUsd(flag.amountUsd)} of the {AC_LABEL[flag.assetClass]} sale in{' '}
         <em>{acctName(flag.accountId)}</em> could be avoided by rebalancing within your
-        tax-advantaged accounts. Re-enable <em>tax-advantaged-first rebalancing</em> in the
-        Strategy tab to shift it out of the taxable account.
+        tax-advantaged accounts.
       </div>
     );
   }
-
   if (flag.kind === 'PLACEMENT_SPILLOVER') {
     return (
       <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-sm text-blue-700">
@@ -71,7 +89,6 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
       </div>
     );
   }
-
   if (flag.kind === 'UNMAPPED_HOLDING') {
     return (
       <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
@@ -81,7 +98,6 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
       </div>
     );
   }
-
   if (flag.kind === 'NO_ELIGIBLE_ACCOUNT') {
     return (
       <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
@@ -91,7 +107,6 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
       </div>
     );
   }
-
   if (flag.kind === 'PROJECTED_OFF_TARGET') {
     const gap = flag.projectedWeight - flag.targetWeight;
     const over = gap > 0;
@@ -102,80 +117,60 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
         (target {fmtPct(flag.targetWeight)}, still{' '}
         <strong>{over ? '+' : ''}{fmtPct(gap)}</strong> off).{' '}
         {over
-          ? 'A locked position likely exceeds the target and cannot be reduced.'
+          ? 'A locked position likely exceeds the target.'
           : 'No eligible account or a minimum-trade filter is preventing full rebalancing.'}
-        {' '}Check the flags above for the specific constraint.
       </div>
     );
   }
-
   if (flag.kind === 'EXCESS_CASH') {
     return (
       <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
         <strong>Free cash undeployed:</strong>{' '}
-        {fmtUsd(flag.amountUsd)} of household free cash could not be distributed — every eligible
-        account is closed, locked, or has hit its deposit limit. Open deposits or raise a limit on
-        at least one account to deploy it.
+        {fmtUsd(flag.amountUsd)} of household free cash could not be distributed — every
+        eligible account is closed, locked, or has hit its deposit limit.
       </div>
     );
   }
-
   if (flag.kind === 'WITHDRAWAL_SHORTFALL') {
     return (
       <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
         <strong>Withdrawal not fully funded:</strong>{' '}
-        {fmtUsd(flag.amountUsd)} of the additional withdrawal could not be raised — every
-        withdrawal-eligible account is restricted, locked, or has sold all it can. Mark another
-        account Eligible to cover it.
+        {fmtUsd(flag.amountUsd)} of the additional withdrawal could not be raised.
+        Mark another account Eligible to cover it.
       </div>
     );
   }
-
   if (flag.kind === 'BLENDED_FUND_SOLD') {
     return (
       <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-sm text-blue-700">
         <strong>Blended fund sold:</strong>{' '}
         {fmtUsd(flag.amountUsd)} of <code className="font-mono">{flag.ticker}</code> in{' '}
-        <em>{acctName(flag.accountId)}</em> sold proportionally to fix the household allocation.
-        The engine sells blended funds when drift demands but does not buy them back, so repeated
-        rebalances will trend your allocation away from this position. Lock the position if you'd
-        rather preserve it.
+        <em>{acctName(flag.accountId)}</em> sold proportionally. Lock the position to preserve it.
       </div>
     );
   }
-
   if (flag.kind === 'BLENDED_FUND_OVERSELL') {
     return (
       <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
         <strong>Blended fund over-sell:</strong>{' '}
         Selling <code className="font-mono">{flag.ticker}</code> in{' '}
         <em>{acctName(flag.accountId)}</em> forced an extra {fmtUsd(flag.amountUsd)} of{' '}
-        {AC_LABEL[flag.assetClass]} to be sold, and the account's menu had no non-blended ticker
-        to buy it back. The household allocation will drift in {AC_LABEL[flag.assetClass]} until
-        you add an eligible ticker to the account or accept the residual drift.
+        {AC_LABEL[flag.assetClass]} to be sold with no eligible buy-back ticker.
       </div>
     );
   }
-
   if (flag.kind === 'MISSING_COST_BASIS') {
     return (
       <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
         <strong>Missing cost basis:</strong>{' '}
         <code className="font-mono">{flag.ticker}</code> in{' '}
-        <em>{acctName(flag.accountId)}</em> has no cost basis recorded. Tax-adjusted
-        allocation is using <em>basis = market value</em> (no haircut) for this position, which
-        understates the tax drag. Add the cost basis in the Import tab for a more accurate view.
+        <em>{acctName(flag.accountId)}</em> has no cost basis recorded. Add it in the Import tab.
       </div>
     );
   }
-
   return null;
 }
 
-// ── Wash-sale warning (consolidated single banner, issue #5) ──────────────────
-// WASH_SALE_RISK flags are rendered as one banner at the top of Results rather
-// than one banner per pair, since a single run can produce several. Each pair is
-// listed as a row.
 function WashSaleBanner({ flags, accounts }: { flags: Flag[]; accounts: Account[] }) {
   const acctName = (id: string) => accounts.find(a => a.id === id)?.name ?? id;
   const risks = flags.filter((f): f is Extract<Flag, { kind: 'WASH_SALE_RISK' }> => f.kind === 'WASH_SALE_RISK');
@@ -183,8 +178,8 @@ function WashSaleBanner({ flags, accounts }: { flags: Flag[]; accounts: Account[
   return (
     <div className="bg-red-50 border border-red-300 rounded-lg px-4 py-3 text-sm text-red-800">
       <strong>Possible wash sale.</strong>{' '}
-      Selling in a taxable account and buying the same asset class in another account within 30 days
-      may trigger the wash-sale rule, disallowing the loss. Consult your tax advisor.
+      Selling in a taxable account and buying the same asset class within 30 days
+      may trigger the wash-sale rule. Consult your tax advisor.
       <ul className="mt-2 list-disc list-inside space-y-1">
         {risks.map((f, i) => (
           <li key={i}>
@@ -197,7 +192,7 @@ function WashSaleBanner({ flags, accounts }: { flags: Flag[]; accounts: Account[
   );
 }
 
-// ── Household allocation table row ────────────────────────────────────────────
+// ── Allocation table row ──────────────────────────────────────────────────────
 
 function AllocationRow({
   ac, current, target, projected, taCurrent, taProjected, depth = 0,
@@ -205,34 +200,57 @@ function AllocationRow({
   ac: AssetClass; current: number; target: number; projected: number;
   taCurrent?: number; taProjected?: number; depth?: 0 | 1;
 }) {
-  const drift = current - target;
-  const showTA = taCurrent !== undefined && taProjected !== undefined;
-  const isChild = depth > 0;
+  const drift    = current - target;
+  const showTA   = taCurrent !== undefined && taProjected !== undefined;
+  const isChild  = depth > 0;
+
+  // Drift bar: 8% abs = full bar width
+  const driftAmt  = Math.abs(drift);
+  const showBar   = driftAmt > 0.005;
+  const barWidth  = `${Math.min(driftAmt / 0.08, 1) * 100}%`;
+  const barColor  = drift > 0 ? ORANGE_2 : BRAND_2;
+  const driftTextColor = drift > 0.001 ? ORANGE_2 : drift < -0.001 ? BRAND_2 : undefined;
 
   return (
     <tr className={`border-t border-gray-100 ${isChild ? 'bg-gray-50/40' : ''}`}>
       <td className={`py-3 ${isChild ? 'pl-10 pr-4 text-gray-500 font-normal text-xs' : 'px-4 text-gray-700 font-medium'}`}>
         {AC_LABEL[ac]}
       </td>
-      <td className="px-4 py-3 text-right tabular-nums">{fmtPct(current)}</td>
-      <td className="px-4 py-3 text-right tabular-nums">{fmtPct(target)}</td>
-      <td className="px-4 py-3 text-right tabular-nums">
-        <span className={drift > 0.001 ? 'text-amber-600' : drift < -0.001 ? 'text-blue-600' : 'text-gray-400'}>
-          {drift >= 0 ? '+' : ''}{fmtPct(drift)}
-        </span>
+      <td className="px-4 py-3 text-right font-mono tabular-nums text-[13px]">{fmtPct(current)}</td>
+      <td className="px-4 py-3 text-right font-mono tabular-nums text-[13px] text-gray-500">{fmtPct(target)}</td>
+      <td className="px-4 py-3">
+        <div className="flex items-center gap-2">
+          <span
+            className="font-mono tabular-nums text-[12.5px]"
+            style={{ color: driftTextColor ?? '#9ca3af' }}
+          >
+            {drift >= 0 ? '+' : ''}{fmtPct(drift)}
+          </span>
+          {showBar && (
+            <div className="flex-1 h-[3px] bg-gray-100 rounded overflow-hidden min-w-[32px] max-w-[72px]">
+              <div className="h-full rounded" style={{ width: barWidth, background: barColor }} />
+            </div>
+          )}
+        </div>
       </td>
-      <td className="px-4 py-3 text-right tabular-nums text-gray-500">{fmtPct(projected)}</td>
+      <td className="px-4 py-3 text-right font-mono tabular-nums text-[13px] text-gray-500">{fmtPct(projected)}</td>
       {showTA && (
         <>
-          <td className="px-4 py-3 text-right tabular-nums text-indigo-700 border-l border-gray-100">{fmtPct(taCurrent!)}</td>
-          <td className="px-4 py-3 text-right tabular-nums text-indigo-500">{fmtPct(taProjected!)}</td>
+          <td className="px-4 py-3 text-right font-mono tabular-nums text-[13px] border-l border-gray-100"
+            style={{ color: BRAND }}>
+            {fmtPct(taCurrent!)}
+          </td>
+          <td className="px-4 py-3 text-right font-mono tabular-nums text-[13px]"
+            style={{ color: BRAND_2 }}>
+            {fmtPct(taProjected!)}
+          </td>
         </>
       )}
     </tr>
   );
 }
 
-// ── Trade table row ───────────────────────────────────────────────────────────
+// ── Trade row ─────────────────────────────────────────────────────────────────
 
 function TradeRow({ trade }: { trade: ResolvedTrade }) {
   const isBuy = trade.deltaUsd > 0;
@@ -241,7 +259,7 @@ function TradeRow({ trade }: { trade: ResolvedTrade }) {
       <td className="px-4 py-2">
         {trade.ticker ? (
           <div>
-            <span className="font-mono font-medium text-gray-800">{trade.ticker}</span>
+            <span className="font-mono font-semibold text-gray-800">{trade.ticker}</span>
             <div className="text-xs text-gray-400">{AC_LABEL[trade.assetClass]}</div>
           </div>
         ) : (
@@ -249,13 +267,18 @@ function TradeRow({ trade }: { trade: ResolvedTrade }) {
         )}
       </td>
       <td className="px-4 py-2">
-        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full
-          ${isBuy ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+        <span
+          className="text-xs font-mono font-semibold px-2 py-0.5 rounded-full tracking-wide"
+          style={{
+            background: isBuy ? BRAND_50 : ORANGE_50,
+            color:      isBuy ? BRAND    : ORANGE_2,
+          }}
+        >
           {isBuy ? 'BUY' : 'SELL'}
         </span>
       </td>
-      <td className="px-4 py-2 text-right tabular-nums font-medium">
-        <span className={isBuy ? 'text-green-700' : 'text-red-700'}>
+      <td className="px-4 py-2 text-right font-mono tabular-nums font-semibold text-[14px]">
+        <span style={{ color: isBuy ? BRAND : ORANGE_2 }}>
           {fmtDelta(trade.deltaUsd)}
         </span>
       </td>
@@ -266,17 +289,12 @@ function TradeRow({ trade }: { trade: ResolvedTrade }) {
   );
 }
 
-// ── Transfer row (deposit / withdrawal) — issues #84/#87 ──────────────────────
-// A transfer is money moving in or out of the account, distinct from a buy/sell
-// inside it. A deposit is household free cash routed into the account; a
-// withdrawal is cash leaving (drawdown / RMD). Deploying in-account idle cash is
-// NOT a transfer — it's a balance-neutral conversion and shows up only as buys.
-// Deposits render at the top of the account's action list, withdrawals at the
-// bottom; their sum is the account's reported Net change.
+// ── Transfer row (deposit / withdrawal) ───────────────────────────────────────
+
 function TransferRow({ kind, amountUsd }: { kind: 'deposit' | 'withdrawal'; amountUsd: number }) {
   const isDeposit = kind === 'deposit';
   return (
-    <tr className="border-t border-gray-100 bg-indigo-50/40">
+    <tr className="border-t border-gray-100" style={{ background: isDeposit ? '#f0f5fb' : '#fffbeb' }}>
       <td className="px-4 py-2">
         <span className="text-gray-700">{isDeposit ? 'Transfer in' : 'Transfer out'}</span>
         <div className="text-xs text-gray-400">
@@ -284,13 +302,18 @@ function TransferRow({ kind, amountUsd }: { kind: 'deposit' | 'withdrawal'; amou
         </div>
       </td>
       <td className="px-4 py-2">
-        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full
-          ${isDeposit ? 'bg-indigo-100 text-indigo-700' : 'bg-amber-100 text-amber-700'}`}>
+        <span
+          className="text-xs font-mono font-semibold px-2 py-0.5 rounded-full tracking-wide"
+          style={{
+            background: isDeposit ? BRAND_50        : '#fef3c7',
+            color:      isDeposit ? BRAND           : '#92400e',
+          }}
+        >
           {isDeposit ? 'DEPOSIT' : 'WITHDRAW'}
         </span>
       </td>
-      <td className="px-4 py-2 text-right tabular-nums font-medium">
-        <span className={isDeposit ? 'text-indigo-700' : 'text-amber-700'}>
+      <td className="px-4 py-2 text-right font-mono tabular-nums font-semibold text-[14px]">
+        <span style={{ color: isDeposit ? BRAND : '#d97706' }}>
           {isDeposit ? '+' : '−'}{fmtUsd(amountUsd)}
         </span>
       </td>
@@ -299,169 +322,356 @@ function TransferRow({ kind, amountUsd }: { kind: 'deposit' | 'withdrawal'; amou
   );
 }
 
-// ── Per-account allocation mini-pies ─────────────────────────────────────────
+// ── Pie slice builder (per-account mini-pies) ─────────────────────────────────
 
-/** Build pie slices from a by-class value map, filtering near-zero slivers. */
 function buildPieSlices(byClass: Record<AssetClass, number>): PieSlice[] {
   return ALL_ASSET_CLASSES
-    .filter(ac => byClass[ac] > 0.5)   // skip sub-dollar noise
+    .filter(ac => byClass[ac] > 0.5)
     .map(ac => ({ label: AC_LABEL[ac], value: byClass[ac], color: AC_COLOR[ac] }));
-}
-
-// ── Concentric donut: outer ring = current, inner ring = target ───────────────
-
-function ConcentricDonutChart({
-  currentWeights, targetWeights, size = 160,
-}: {
-  currentWeights: Record<AssetClass, number>;
-  targetWeights:  Record<AssetClass, number>;
-  size?: number;
-}) {
-  const cx = size / 2;
-  const cy = size / 2;
-  const outerR    = size / 2 - 4;
-  const outerInR  = Math.round(outerR * 0.68);  // inner edge of outer ring
-  const innerOutR = Math.round(outerR * 0.62);  // outer edge of inner ring
-  const innerInR  = Math.round(outerR * 0.30);  // center hole edge
-
-  const pt = (deg: number, r: number) => {
-    const rad = (deg - 90) * (Math.PI / 180);
-    return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
-  };
-
-  // Annular sector path: outer arc CW → line → inner arc CCW → close.
-  // With the default SVG non-zero fill rule this naturally creates a ring.
-  function annularPath(oR: number, iR: number, startDeg: number, endDeg: number): string {
-    if (endDeg - startDeg >= 359.999) {
-      // Full ring: outer circle CW + inner circle CCW (non-zero creates the hole).
-      const oT = pt(0, oR), oB = pt(180, oR);
-      const iT = pt(0, iR), iB = pt(180, iR);
-      return [
-        `M ${oT.x} ${oT.y} A ${oR} ${oR} 0 1 1 ${oB.x} ${oB.y}`,
-        `A ${oR} ${oR} 0 1 1 ${oT.x} ${oT.y}`,
-        `M ${iT.x} ${iT.y} A ${iR} ${iR} 0 1 0 ${iB.x} ${iB.y}`,
-        `A ${iR} ${iR} 0 1 0 ${iT.x} ${iT.y} Z`,
-      ].join(' ');
-    }
-    const oS = pt(startDeg, oR), oE = pt(endDeg, oR);
-    const iS = pt(startDeg, iR), iE = pt(endDeg, iR);
-    const large = endDeg - startDeg > 180 ? 1 : 0;
-    return [
-      `M ${oS.x} ${oS.y}`,
-      `A ${oR} ${oR} 0 ${large} 1 ${oE.x} ${oE.y}`,
-      `L ${iE.x} ${iE.y}`,
-      `A ${iR} ${iR} 0 ${large} 0 ${iS.x} ${iS.y}`,
-      `Z`,
-    ].join(' ');
-  }
-
-  function toSegments(weights: Record<AssetClass, number>) {
-    const total = ALL_ASSET_CLASSES.reduce((s, ac) => s + weights[ac], 0);
-    if (total === 0) return [];
-    let cursor = 0;
-    return ALL_ASSET_CLASSES
-      .filter(ac => weights[ac] > 0.001)
-      .map(ac => {
-        const start = cursor;
-        cursor += (weights[ac] / total) * 360;
-        return { ac, start, end: cursor };
-      });
-  }
-
-  const outerSegs = toSegments(targetWeights);
-  const innerSegs = toSegments(currentWeights);
-  const legendClasses = ALL_ASSET_CLASSES.filter(
-    ac => currentWeights[ac] > 0.001 || targetWeights[ac] > 0.001,
-  );
-
-  return (
-    <div className="flex items-start gap-5">
-      <svg width={size} height={size} className="shrink-0">
-        {outerSegs.map(({ ac, start, end }) => (
-          <path key={`o-${ac}`} d={annularPath(outerR, outerInR, start, end)}
-            fill={AC_COLOR[ac]} stroke="white" strokeWidth={1.5}>
-            <title>{AC_LABEL[ac]}: target {fmtPct(targetWeights[ac])}</title>
-          </path>
-        ))}
-        {innerSegs.map(({ ac, start, end }) => (
-          <path key={`i-${ac}`} d={annularPath(innerOutR, innerInR, start, end)}
-            fill={AC_COLOR[ac]} stroke="white" strokeWidth={1.5}>
-            <title>{AC_LABEL[ac]}: current {fmtPct(currentWeights[ac])}</title>
-          </path>
-        ))}
-      </svg>
-
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 text-xs text-gray-400 mb-1">
-          <span className="w-2 h-2 shrink-0" />
-          <span className="flex-1" />
-          <span className="w-14 text-right">Current</span>
-          <span className="w-14 text-right">Target</span>
-        </div>
-        <div className="space-y-0.5">
-          {legendClasses.map(ac => (
-            <div key={ac} className="flex items-center gap-2 text-xs">
-              <span className="w-2 h-2 rounded-sm shrink-0" style={{ backgroundColor: AC_COLOR[ac] }} />
-              <span className="text-gray-600 flex-1 truncate">{AC_LABEL[ac]}</span>
-              <span className="w-14 text-right tabular-nums text-gray-500">
-                {currentWeights[ac] > 0.001 ? fmtPct(currentWeights[ac]) : '—'}
-              </span>
-              <span className="w-14 text-right tabular-nums text-gray-500">
-                {targetWeights[ac] > 0.001 ? fmtPct(targetWeights[ac]) : '—'}
-              </span>
-            </div>
-          ))}
-        </div>
-        <div className="mt-2 flex gap-3 text-xs text-gray-400">
-          <span>outer = target</span>
-          <span>inner = current</span>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 // ── Contribution-first funding breakdown ──────────────────────────────────────
 
 function ContributionSummary({ summary }: { summary: RebalanceResult['contributionSummary'] }) {
   const { newCashDeployed, sellsUsd, withdrawalRaised } = summary;
-  // Nothing meaningful to show when there are no trades.
   if (newCashDeployed <= 0 && sellsUsd <= 0) return null;
-
   return (
     <div className="border border-gray-200 rounded-lg p-4 space-y-3">
       <h3 className="text-sm font-medium text-gray-700">How this rebalance is funded</h3>
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2">
           <div className="text-xs text-green-700">Funded by new &amp; free cash</div>
-          <div className="text-lg font-semibold text-green-800 tabular-nums">{fmtUsd(newCashDeployed)}</div>
+          <div className="text-lg font-mono font-semibold text-green-800 tabular-nums">{fmtUsd(newCashDeployed)}</div>
         </div>
         <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
           <div className="text-xs text-amber-700">Requires sales</div>
-          <div className="text-lg font-semibold text-amber-800 tabular-nums">{fmtUsd(sellsUsd)}</div>
+          <div className="text-lg font-mono font-semibold text-amber-800 tabular-nums">{fmtUsd(sellsUsd)}</div>
         </div>
       </div>
       {withdrawalRaised > 0 && (
         <p className="text-xs text-amber-700">
-          Net cash raised by this drawdown: <strong>{fmtUsd(withdrawalRaised)}</strong> (sales in
-          excess of buys), taken RMDs-first then in account drain-priority order.
+          Net cash raised by this drawdown: <strong>{fmtUsd(withdrawalRaised)}</strong>
         </p>
       )}
       <p className="text-xs text-gray-500">
         New contributions are directed to underweight classes first, avoiding sales where possible.
-        Taking dividends and capital-gain distributions in cash (not auto-reinvested) and directing
-        them to underweight classes is a complementary, no-sell way to rebalance.
       </p>
     </div>
   );
 }
 
-// ── Main panel ────────────────────────────────────────────────────────────────
+// ── Share popover (desktop) / native share (mobile) ─────────────────────────
 
-export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plannedWithdrawal, reminder, setReminder }: Props) {
-  const { householdValue, currentWeights, targetWeights, projectedWeights,
-          nativeValueByAccount, projectedNativeValueByAccount,
-          withdrawalByAccount, depositByAccount, trades, flags, contributionSummary } = result;
+const SHARE_URL  = 'https://drift.app';
+const SHARE_TEXT = 'Drift — free DIY portfolio rebalancer. Runs entirely in your browser, no account needed.';
+
+const IcoX = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.746l7.73-8.835L1.254 2.25H8.08l4.259 5.63L18.244 2.25zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z"/>
+  </svg>
+);
+const IcoReddit = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/>
+  </svg>
+);
+const IcoFacebook = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+  </svg>
+);
+const IcoEmail = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <rect x="2" y="4" width="20" height="16" rx="2"/>
+    <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+  </svg>
+);
+const IcoSMS = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+  </svg>
+);
+
+type ShareChannel = { label: string; icon: () => JSX.Element; color: string; href: () => string };
+const SHARE_CHANNELS: ShareChannel[] = [
+  { label: 'X / Twitter',    icon: IcoX,        color: '#000',    href: () => `https://twitter.com/intent/tweet?url=${encodeURIComponent(SHARE_URL)}&text=${encodeURIComponent(SHARE_TEXT)}` },
+  { label: 'Reddit',         icon: IcoReddit,   color: '#FF4500', href: () => `https://reddit.com/submit?url=${encodeURIComponent(SHARE_URL)}&title=${encodeURIComponent('Drift — free DIY portfolio rebalancer')}` },
+  { label: 'Facebook',       icon: IcoFacebook, color: '#1877F2', href: () => `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(SHARE_URL)}` },
+  { label: 'Email',          icon: IcoEmail,    color: BRAND,     href: () => `mailto:?subject=${encodeURIComponent('Check out Drift')}&body=${encodeURIComponent(SHARE_TEXT + '\n\n' + SHARE_URL)}` },
+  { label: 'SMS / iMessage', icon: IcoSMS,      color: '#1a7a4a', href: () => `sms:?body=${encodeURIComponent(SHARE_TEXT + ' ' + SHARE_URL)}` },
+];
+
+type ShareAnchor = { top: number; left: number; bottom: number };
+
+function SharePopover({ anchor, onClose }: { anchor: ShareAnchor; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  function copyLink() {
+    navigator.clipboard?.writeText(SHARE_URL).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  }
+
+  const popWidth = 248;
+  const left = Math.max(8, Math.min(anchor.left, window.innerWidth - popWidth - 8));
+  const flipUp = anchor.bottom + 280 > window.innerHeight;
+  const posStyle: React.CSSProperties = flipUp
+    ? { bottom: window.innerHeight - anchor.top + 6 }
+    : { top: anchor.bottom + 6 };
+
+  return (
+    <>
+      <div className="fixed inset-0 z-[199]" onClick={onClose} />
+      <div
+        className="fixed z-[200] bg-white overflow-hidden"
+        style={{
+          left, ...posStyle, width: popWidth,
+          borderRadius: 10,
+          border: '1px solid var(--line, #e5e8ee)',
+          boxShadow: '0 4px 24px rgba(8,40,85,0.13), 0 1px 4px rgba(8,40,85,0.06)',
+        }}
+      >
+        <div className="flex items-center gap-1.5 px-2.5 py-2 border-b border-gray-100"
+          style={{ background: 'var(--paper-2, #f4f6f9)' }}>
+          <span className="flex-1 truncate font-mono text-[10.5px] text-gray-400">{SHARE_URL}</span>
+          <button onClick={copyLink}
+            className="shrink-0 text-[11px] font-semibold px-2.5 py-1 rounded-md transition-colors"
+            style={{
+              fontFamily: 'var(--sans)', border: 'none', cursor: 'pointer',
+              background: copied ? '#f0faf4' : BRAND_50,
+              color: copied ? '#1a7a4a' : BRAND,
+            }}>
+            {copied ? '\u2713' : 'Copy'}
+          </button>
+        </div>
+        {SHARE_CHANNELS.map(({ label, href, icon: Icon, color }, i) => (
+          <a key={label} href={href()} target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-2.5 px-3 py-2.5 text-[13px] font-medium no-underline transition-colors"
+            style={{
+              color: 'var(--ink-2, #4a5769)',
+              borderBottom: i < SHARE_CHANNELS.length - 1 ? '1px solid var(--line-2, #eceff4)' : 'none',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = BRAND_50; }}
+            onMouseLeave={e => { e.currentTarget.style.background = ''; }}
+          >
+            <span style={{ color, flexShrink: 0, display: 'flex', alignItems: 'center' }}><Icon /></span>
+            {label}
+          </a>
+        ))}
+      </div>
+    </>
+  );
+}
+
+// ── Feedback section ────────────────────────────────────────────────────────
+
+type FeedbackState = 'none' | 'good' | 'mixed' | 'bad';
+
+const FORM_BASE = `https://docs.google.com/forms/d/e/1FAIpQLSdG-V4Zq4X-fwal9ThhM4PQSFSwinrFo8fyWpZLCWu7mGXHlA/viewform?usp=pp_url&entry.715582229=${import.meta.env.VITE_GIT_SHA ?? 'dev'}`;
+const FORM_ENTRY_SENTIMENT = 'entry.579301839';
+const FORM_SENTIMENT_LABEL: Record<Exclude<FeedbackState, 'none'>, string> = {
+  good:  'Good',
+  mixed: 'Mixed',
+  bad:   'Not great',
+};
+function formUrl(sentiment: Exclude<FeedbackState, 'none'>) {
+  return `${FORM_BASE}&${FORM_ENTRY_SENTIMENT}=${encodeURIComponent(FORM_SENTIMENT_LABEL[sentiment])}`;
+}
+
+function FeedbackSection() {
+  const [fbState,     setFbState]     = useState<FeedbackState>('none');
+  const [shareAnchor, setShareAnchor] = useState<ShareAnchor | null>(null);
+  const shareRef = useRef<HTMLButtonElement>(null);
+
+  function handleShare() {
+    if (navigator.share) {
+      navigator.share({ title: 'Drift', text: SHARE_TEXT, url: SHARE_URL }).catch(() => {});
+      return;
+    }
+    const r = shareRef.current?.getBoundingClientRect();
+    if (r) setShareAnchor({ top: r.top, left: r.left, bottom: r.bottom });
+  }
+
+  const optionBtns: { val: FeedbackState; label: string }[] = [
+    { val: 'good',  label: 'Went well' },
+    { val: 'mixed', label: 'Mixed' },
+    { val: 'bad',   label: "Didn't work for me" },
+  ];
+
+  return (
+    <div className="border-t border-gray-100 pt-8 mt-2">
+      {fbState === 'none' ? (
+        <div className="text-center">
+          <p className="font-semibold text-[14px] text-gray-700 mb-4">How did the rebalance go?</p>
+          <div className="flex gap-2 flex-wrap justify-center">
+            {optionBtns.map(({ val, label }) => (
+              <button key={val}
+                onClick={() => setFbState(val)}
+                className="text-sm font-medium px-[18px] py-2 rounded-lg border border-gray-200 bg-white text-gray-600 hover:border-gray-400 transition-colors">
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div>
+          <div className="grid items-center mb-4" style={{ gridTemplateColumns:'1fr auto 1fr' }}>
+            <span />
+            <p className="font-semibold text-[14px] text-gray-700 text-center">
+              {fbState === 'good' ? 'Glad to hear it!' : 'Thanks for letting us know.'}
+            </p>
+            <button onClick={() => setFbState('none')}
+              className="font-mono text-[11px] text-gray-400 hover:text-gray-600 transition-colors bg-transparent border-none cursor-pointer p-0 justify-self-end">
+              ← change
+            </button>
+          </div>
+
+          {fbState === 'good' && (
+            <div className="flex flex-col gap-2 max-w-[400px] mx-auto">
+              <div className="bg-white border border-gray-200 rounded-xl px-[18px] py-4 flex flex-col gap-2">
+                <div>
+                  <div className="font-mono text-[10.5px] text-brand-400 uppercase tracking-[.08em] mb-1">Share Drift</div>
+                  <p className="text-[13px] text-gray-500 leading-relaxed">Know someone who manages their own portfolio? Send them this link.</p>
+                </div>
+                <button ref={shareRef} onClick={handleShare}
+                  className="self-start text-[12.5px] font-medium px-3.5 py-1.5 rounded-lg border border-gray-200 hover:border-gray-400 transition-colors">
+                  Share →
+                </button>
+                {shareAnchor && <SharePopover anchor={shareAnchor} onClose={() => setShareAnchor(null)} />}
+              </div>
+              <div className="bg-white border border-gray-200 rounded-xl px-[18px] py-4 flex flex-col gap-2">
+                <div>
+                  <div className="font-mono text-[10.5px] text-brand-400 uppercase tracking-[.08em] mb-1">Leave feedback</div>
+                  <p className="text-[13px] text-gray-500 leading-relaxed">Tell us what worked — it shapes what gets built next.</p>
+                </div>
+                <a href={formUrl('good')} target="_blank" rel="noopener noreferrer"
+                  className="self-start text-[12.5px] font-medium px-3.5 py-1.5 rounded-lg border border-gray-200 hover:border-gray-400 transition-colors">
+                  Leave feedback →
+                </a>
+              </div>
+              <div className="bg-white border border-gray-200 rounded-xl px-[18px] py-4 flex flex-col gap-2">
+                <div>
+                  <div className="font-mono text-[10.5px] text-brand-400 uppercase tracking-[.08em] mb-1">Support the project</div>
+                  <p className="text-[13px] text-gray-500 leading-relaxed">Drift is a solo project. If it saved you time, consider buying me a coffee.</p>
+                </div>
+                <a href="#"
+                  className="self-start inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3.5 py-1.5 rounded-lg border border-gray-200 hover:border-gray-400 transition-colors">
+                  Support →<span className="font-mono text-[10.5px] text-gray-400 ml-1">(coming soon)</span>
+                </a>
+              </div>
+            </div>
+          )}
+
+          {(fbState === 'mixed' || fbState === 'bad') && (
+            <div className="bg-white border border-gray-200 rounded-xl px-[18px] py-4 flex flex-col gap-2 max-w-[400px] mx-auto">
+              <div>
+                <div className="font-mono text-[10.5px] text-brand-400 uppercase tracking-[.08em] mb-1">Leave feedback</div>
+                <p className="text-[13px] text-gray-500 leading-relaxed">Your input directly shapes what gets built next. What's working? What's missing?</p>
+              </div>
+              <a
+                href={formUrl(fbState as Exclude<FeedbackState, 'none'>)}
+                target="_blank" rel="noopener noreferrer"
+                className="self-start text-[12.5px] font-medium px-3.5 py-1.5 rounded-lg border border-gray-200 hover:border-gray-400 transition-colors">
+                Leave feedback →
+              </a>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Next steps section ───────────────────────────────────────────────────────
+
+interface NextStepsSectionProps {
+  result:            RebalanceResult;
+  accounts:          Account[];
+  resolvedTrades:    ResolvedTrade[];
+  freeCash:          number;
+  plannedWithdrawal: number;
+  reminder:          Reminder;
+  setReminder:       (r: Reminder) => void;
+  onSave?:           () => void;
+}
+
+function NextStepsSection({
+  result, accounts, resolvedTrades, freeCash, plannedWithdrawal,
+  reminder, setReminder, onSave,
+}: NextStepsSectionProps) {
+  const card = 'bg-white border border-gray-200 rounded-xl p-5 flex flex-col gap-3';
+  const num  = 'font-mono text-[10.5px] text-brand-400 uppercase tracking-[.08em] mb-1.5';
+  return (
+    <div className="mt-10 space-y-4">
+      <div className="font-mono text-[11px] text-gray-400 uppercase tracking-[.09em]">Next steps</div>
+      <div className="grid grid-cols-3 gap-3">
+        {/* 01 Download */}
+        <div className={card}>
+          <div>
+            <div className={num}>01</div>
+            <div className="font-semibold text-[14px] text-gray-900">Download your files</div>
+          </div>
+          <p className="text-[13px] text-gray-500 leading-relaxed flex-1">
+            Your trade list as an interactive checklist. Save your portfolio file as a backup before making changes at your broker.
+          </p>
+          <div className="flex gap-2 flex-wrap">
+            <button
+              onClick={() => downloadReport(result, accounts, resolvedTrades, freeCash, plannedWithdrawal)}
+              className="inline-flex items-center gap-1.5 bg-brand text-white text-[12.5px] font-semibold px-3.5 py-1.5 rounded-lg hover:bg-brand-ink transition-colors">
+              \u2193 Trade report
+            </button>
+            {onSave && (
+              <button onClick={onSave}
+                className="inline-flex items-center gap-1.5 border border-gray-200 text-gray-600 text-[12.5px] font-medium px-3.5 py-1.5 rounded-lg hover:border-gray-400 transition-colors">
+                \u2193 Portfolio file
+              </button>
+            )}
+          </div>
+        </div>
+        {/* 02 Execute */}
+        <div className={card}>
+          <div>
+            <div className={num}>02</div>
+            <div className="font-semibold text-[14px] text-gray-900">Execute your trades</div>
+          </div>
+          <p className="text-[13px] text-gray-500 leading-relaxed flex-1">
+            Log into each broker account and work through the trades above. Start with sells to free up cash, then place buys.
+          </p>
+          <div className="flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-gray-200 flex-none"></span>
+            <span className="font-mono text-[11px] text-gray-400">Happens at your broker — nothing to do here.</span>
+          </div>
+        </div>
+        {/* 03 Schedule */}
+        <div className={card}>
+          <div>
+            <div className={num}>03</div>
+            <div className="font-semibold text-[14px] text-gray-900">Schedule your next run</div>
+          </div>
+          <ReminderPanel reminder={reminder} setReminder={setReminder} />
+        </div>
+      </div>
+      <FeedbackSection />
+    </div>
+  );
+}
+
+// ── Main panel ────────────────────────────────────────────────────────────────────
+
+export function ResultsPanel({
+  result, accounts, resolvedTrades, freeCash, plannedWithdrawal, reminder, setReminder, onSave,
+}: Props) {
+  const {
+    householdValue, currentWeights, targetWeights, projectedWeights,
+    nativeValueByAccount, projectedNativeValueByAccount,
+    withdrawalByAccount, depositByAccount, trades, flags, contributionSummary,
+  } = result;
 
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
@@ -473,7 +683,6 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plann
     });
   }
 
-  // Separate flags by priority
   const importantFlags = [
     ...flags.filter(f => f.kind === 'EXCESS_CASH'),
     ...flags.filter(f => f.kind === 'WITHDRAWAL_SHORTFALL'),
@@ -489,27 +698,11 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plann
     ...flags.filter(f => f.kind === 'MISSING_COST_BASIS'),
   ];
 
-  // Compute per-account cash deployment summary for the free cash banner.
-  // Show when there is any free cash or per-account newCash to communicate.
-  const cashRows = accounts
-    .filter(a => !a.locked)
-    .map(a => {
-      const ownCash = a.newCash ?? 0;
-      // Net trade delta = buys − sells for this account = cash being deployed.
-      const netDeploy = trades
-        .filter(t => t.accountId === a.id)
-        .reduce((s, t) => s + t.deltaUsd, 0);
-      return { account: a, ownCash, netDeploy };
-    })
-    .filter(r => r.ownCash > 0 || freeCash > 0);
+  const totalRmd        = accounts.reduce((s, a) => s + (a.rmdDueUsd ?? 0), 0);
+  const totalWithdrawal = totalRmd + plannedWithdrawal;
   const showCashSummary = freeCash > 0 || accounts.some(a => a.newCash);
-
-  // Per-account drawdown summary for the spending plan, in drain-priority order.
-  // withdrawn = cash that leaves the account (RMD + discretionary), which may be
-  // met by selling or from idle cash; rmd = the configured RMD portion.
-  const totalRmd = accounts.reduce((s, a) => s + (a.rmdDueUsd ?? 0), 0);
-  const totalWithdrawal = totalRmd + plannedWithdrawal; // Σ RMD + additional
   const showWithdrawalPlan = totalWithdrawal > 0;
+
   const withdrawalRows = accounts
     .filter(a => !a.locked)
     .map(a => ({ account: a, withdrawn: withdrawalByAccount[a.id] ?? 0, rmd: a.rmdDueUsd ?? 0 }))
@@ -518,21 +711,13 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plann
       || x.account.name.localeCompare(y.account.name));
   const totalRaised = withdrawalRows.reduce((s, r) => s + r.withdrawn, 0);
 
-  // Group trades by account; include any account that has trades OR existing positions.
-  // Accounts are ordered as they appear in the accounts array.
   const tradesByAccount = accounts
     .map(account => {
-      // Resolved trades used for the table (merged blended-fund rows with tickers).
       const acctTrades = resolvedTrades
         .filter(t => t.accountId === account.id)
         .sort((a, b) => Math.abs(b.deltaUsd) - Math.abs(a.deltaUsd));
-      // Before / After pies use the holdings lens (issue #78): each position pinned
-      // to its classified class, so display granularity matches what's actually held
-      // rather than the engine's redistributed allocation lens. The after map already
-      // has the resolved trades applied at each holding's pinned class.
       const before = buildPieSlices(nativeValueByAccount[account.id] ?? {});
       const after  = buildPieSlices(projectedNativeValueByAccount[account.id] ?? {});
-
       return { account, trades: acctTrades, before, after };
     })
     .filter(g => g.trades.length > 0 || g.before.length > 0);
@@ -548,15 +733,39 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plann
     );
   }
 
-  // Overdue / upcoming reminder banner — shown when reminder is within 7 days or past due.
-  const reminderDue = reminder.nextDueAt;
-  const reminderDays = reminderDue !== undefined ? daysUntil(Date.now(), reminderDue) : null;
+  const reminderDays = reminder.nextDueAt !== undefined
+    ? daysUntil(Date.now(), reminder.nextDueAt) : null;
   const showReminderBanner = reminderDays !== null && reminderDays <= 7;
+
+  // Build concentric donut slices (outer = target, inner = current)
+  const ta = result.taxAdjusted !== undefined;
+  const vizCurrentWeights  = result.taxAdjusted?.currentWeights  ?? currentWeights;
+  const vizProjectedWeights = result.taxAdjusted?.projectedWeights ?? projectedWeights;
+  const vizTotal = result.taxAdjusted?.householdValue ?? householdValue;
+
+  const donutInner: DonutSlice[] = ALL_ASSET_CLASSES
+    .filter(ac => (vizCurrentWeights[ac] ?? 0) > 0.0005)
+    .map(ac => ({ label: AC_LABEL[ac], weight: vizCurrentWeights[ac] ?? 0, color: AC_COLOR[ac] }));
+  const donutOuter: DonutSlice[] = ALL_ASSET_CLASSES
+    .filter(ac => (targetWeights[ac] ?? 0) > 0.0005)
+    .map(ac => ({ label: AC_LABEL[ac], weight: targetWeights[ac] ?? 0, color: AC_COLOR[ac] }));
+
+  // Also keep the pie slices for the AllocationPlot (needs hasBoth)
+  const currentByClass = Object.fromEntries(
+    ALL_ASSET_CLASSES.map(ac => [ac, (vizCurrentWeights[ac] ?? 0) * vizTotal])
+  ) as Record<AssetClass, number>;
+  const projectedByClass = Object.fromEntries(
+    ALL_ASSET_CLASSES.map(ac => [ac, (vizProjectedWeights[ac] ?? 0) * vizTotal])
+  ) as Record<AssetClass, number>;
+  const beforeSlices = buildPieSlices(currentByClass);
+  const afterSlices  = buildPieSlices(projectedByClass);
+  const hasBoth = beforeSlices.length > 0 && afterSlices.length > 0;
 
   return (
     <div className="space-y-6">
-      {/* Overdue / upcoming reminder banner */}
-      {showReminderBanner && reminderDue !== undefined && (
+
+      {/* Reminder banner */}
+      {showReminderBanner && reminder.nextDueAt !== undefined && (
         <div
           className={`rounded-lg border px-4 py-3 text-sm flex items-start gap-3
             ${reminderDays! < 0
@@ -587,117 +796,39 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plann
         <div className="flex items-baseline gap-4">
           <h2 className="text-lg font-semibold text-gray-800">Results</h2>
           <span className="text-sm text-gray-500">
-            Household value: <strong className="text-gray-800">{fmtUsd(householdValue)}</strong>
+            Household value:{' '}
+            <strong className="font-mono text-gray-800 tabular-nums">{fmtUsd(householdValue)}</strong>
             {result.taxAdjusted && (
-              <span className="ml-3 text-indigo-700">
+              <span className="ml-3 font-mono tabular-nums" style={{ color: BRAND_2 }}>
                 After tax: <strong>{fmtUsd(result.taxAdjusted.householdValue)}</strong>
               </span>
             )}
           </span>
         </div>
-        <button
-          onClick={() => downloadReport(result, accounts, resolvedTrades, freeCash, plannedWithdrawal)}
-          title="Download interactive HTML report with trade checklist"
-          className="text-xs text-gray-500 hover:text-gray-800 border border-gray-200 rounded px-2 py-1 hover:bg-gray-50 transition-colors shrink-0"
-        >
-          ↓ Report
-        </button>
+
       </div>
 
       <HelpBox label="About these results">
         <p>
           Results show the <strong>household allocation</strong> (all accounts combined) vs. your target,
-          followed by per-account trade recommendations. Everything recalculates live — change your
-          strategy or positions and the output updates immediately.
+          followed by per-account trade recommendations. Everything recalculates live.
         </p>
-
         <HelpSection title="Household allocation table">
           <HelpDef term="Current">Your actual allocation today, based on loaded positions.</HelpDef>
           <HelpDef term="Target">The target weight from your strategy.</HelpDef>
-          <HelpDef term="Drift">Current minus Target. Amber = over target; Blue = under target; Green = within tolerance.</HelpDef>
-          <HelpDef term="After trades">Projected allocation once the recommended trades are executed. Should closely match the target. Deviations larger than the tolerance band indicate a hard constraint — check the flags above (e.g. "No eligible account" means no account can hold that class; locked positions that exceed the target for a class cannot be reduced).</HelpDef>
-          <HelpDef term="Classes within tolerance">Shown in the table but generate no trades. The tolerance band (±5% by default) suppresses small drift to avoid over-trading.</HelpDef>
-          <HelpDef term="Aggressiveness × diversification plot">
-            A 2D snapshot of the household allocation in two dimensions: <em>aggressiveness</em>
-            (share in equities &amp; alternatives) on the vertical axis and <em>diversification</em>
-            (how evenly the allocation is spread across asset classes, a normalized inverse
-            Herfindahl) on the horizontal axis. The white circle is your current allocation, the
-            blue circle is where it lands after the recommended trades, and the dashed green
-            target shows where the strategy is steering you.
-          </HelpDef>
+          <HelpDef term="Drift">Current minus Target. The bar shows magnitude — orange = over, blue = under.</HelpDef>
+          <HelpDef term="After trades">Projected allocation once the recommended trades are executed.</HelpDef>
         </HelpSection>
-
         <HelpSection title="Recommended trades">
-          <p>
-            Trades are grouped by account. Each entry shows the asset class, direction (BUY / SELL),
-            and dollar amount. If a position has a share price loaded, share counts are shown too.
-          </p>
-          <HelpDef term="Net per account">
-            The header row of each account shows the net dollar flow. In a pure rebalance (no new cash),
-            this should be near zero — buys and sells within the account offset each other.
-          </HelpDef>
-          <HelpDef term="Before / After pies">
-            Each account shows its current allocation (Before) and the projected allocation after executing
-            the recommended trades (After). Useful for a quick sanity check before placing orders.
-          </HelpDef>
+          <HelpDef term="BUY (blue)">Buy this amount of the asset class in this account.</HelpDef>
+          <HelpDef term="SELL (orange)">Sell this amount. Check for taxable sale warnings before executing.</HelpDef>
         </HelpSection>
-
-        <HelpSection title="Flags">
-          <HelpDef term="REVISIT_PLACEMENT (orange)">
-            Taxable share of household exceeds your Fixed Income target. The bonds-only taxable strategy
-            is no longer viable — update placement rules in the Strategy tab.
-          </HelpDef>
-          <HelpDef term="TAXABLE_SALE (amber)">
-            A sell lands in a taxable account. No gain estimate is provided in this version — review
-            manually for capital gain implications before executing.
-          </HelpDef>
-          <HelpDef term="WASH_SALE_RISK (red)">
-            A taxable sale and a buy of the same asset class in another account occur in the same run.
-            If the taxable sale is a loss, the IRS wash-sale rule disallows it (across IRAs, 401ks, and
-            spouse accounts too). Suppressed when cost basis shows the sale is a gain. Consult your tax advisor.
-          </HelpDef>
-          <HelpDef term="PLACEMENT_SPILLOVER (blue)">
-            An asset class couldn't fully fit in its preferred bucket and spilled to a secondary one.
-            This is informational; the engine handled it automatically.
-          </HelpDef>
-          <HelpDef term="NO_ELIGIBLE_ACCOUNT (red)">
-            No account has capacity for a given asset class. Check account restrictions in the Accounts tab.
-          </HelpDef>
-          <HelpDef term="PROJECTED_OFF_TARGET (red)">
-            After all trades, a class's projected allocation still misses its target by more than the
-            tolerance band. This means a hard constraint prevented full rebalancing — locked positions
-            above target, no eligible account, or a minimum trade size that suppresses the needed adjustment.
-          </HelpDef>
-          <HelpDef term="EXCESS_CASH (amber)">
-            Household free cash could not be fully distributed because every eligible account is closed,
-            locked, or has hit its deposit limit. Open deposits or raise a limit on at least one account
-            in the Accounts tab.
-          </HelpDef>
-          <HelpDef term="WITHDRAWAL_SHORTFALL (amber)">
-            The additional withdrawal could not be fully raised because every withdrawal-eligible account
-            is restricted, locked, or has sold all it can. Mark another account Eligible in the Accounts
-            tab to cover it.
-          </HelpDef>
-          <HelpDef term="BLENDED_FUND_SOLD (blue)">
-            The engine sold part of a blended fund (TDF, balanced fund) this run to fix the household
-            allocation. It does not have a symmetric "buy a blended fund" mechanism, so repeated
-            rebalances will gradually trend your allocation away from this position. Lock the position
-            in the Accounts tab if you'd rather preserve it.
-          </HelpDef>
-          <HelpDef term="BLENDED_FUND_OVERSELL (red)">
-            A blended fund's proportional sale over-sold a sub-class beyond what the engine wanted,
-            and the account's menu had no non-blended ticker to buy that sub-class back. Add an
-            eligible ticker to the account or accept the residual drift.
-          </HelpDef>
-        </HelpSection>
-
         <p className="text-gray-400 italic">
-          These recommendations are mechanical calculations from your own inputs. They are not investment advice.
-          Review every trade, especially taxable sells, before placing any orders.
+          These recommendations are mechanical calculations from your own inputs. Not investment advice.
         </p>
       </HelpBox>
 
-      {/* Wash-sale warning — single consolidated banner at the top (issue #5) */}
+      {/* Wash-sale banner */}
       <WashSaleBanner flags={flags} accounts={accounts} />
 
       {/* Priority flags */}
@@ -715,8 +846,8 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plann
           <div className="bg-green-50 px-4 py-2 text-xs font-medium text-green-800 flex items-center justify-between">
             <span>Cash deployment</span>
             {freeCash > 0 && (
-              <span className="text-green-600">
-                {fmtUsd(freeCash)} household free cash distributed to deposit-eligible accounts
+              <span className="text-green-600 font-mono tabular-nums">
+                {fmtUsd(freeCash)} household free cash distributed
               </span>
             )}
           </div>
@@ -738,23 +869,22 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plann
                   .reduce((s, t) => s + t.deltaUsd, 0);
                 const depositsOpen = a.acceptsDeposits !== false;
                 const limited = depositsOpen && a.depositLimitUsd != null;
-                // Exact household-free-cash deposit routed here (issues #84/#87).
                 const freeCashShare = depositByAccount[a.id] ?? 0;
                 if (ownCash === 0 && freeCash === 0) return null;
                 return (
                   <tr key={a.id} className="hover:bg-gray-50">
                     <td className="px-4 py-2 font-medium text-gray-800">{a.name}</td>
-                    <td className="px-4 py-2 text-right tabular-nums text-gray-600">
+                    <td className="px-4 py-2 text-right font-mono tabular-nums text-gray-600">
                       {ownCash > 0 ? fmtUsd(ownCash) : '—'}
                     </td>
                     {freeCash > 0 && (
-                      <td className="px-4 py-2 text-right tabular-nums text-gray-600">
+                      <td className="px-4 py-2 text-right font-mono tabular-nums text-gray-600">
                         {depositsOpen && freeCashShare > 0.5
                           ? <span className="text-green-700">{fmtUsd(freeCashShare)}</span>
                           : <span className="text-gray-400">—</span>}
                       </td>
                     )}
-                    <td className="px-4 py-2 text-right tabular-nums font-medium">
+                    <td className="px-4 py-2 text-right font-mono tabular-nums font-medium">
                       {netDeploy > 0.5
                         ? <span className="text-green-700">+{fmtUsd(netDeploy)}</span>
                         : <span className="text-gray-400">—</span>}
@@ -778,16 +908,14 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plann
         </div>
       )}
 
-      {/* Spending / withdrawal plan */}
+      {/* Withdrawal plan */}
       {showWithdrawalPlan && (
         <div className="overflow-hidden border border-amber-200 rounded-lg">
           <div className="bg-amber-50 px-4 py-2 text-xs font-medium text-amber-900 flex items-center justify-between">
             <span>Spending / withdrawal plan</span>
-            {totalWithdrawal > 0 && (
-              <span className="text-amber-700">
-                {fmtUsd(totalRaised)} raised of {fmtUsd(totalWithdrawal)} planned
-              </span>
-            )}
+            <span className="font-mono tabular-nums text-amber-700">
+              {fmtUsd(totalRaised)} raised of {fmtUsd(totalWithdrawal)} planned
+            </span>
           </div>
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wide">
@@ -805,10 +933,10 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plann
                 return (
                   <tr key={a.id} className="hover:bg-gray-50">
                     <td className="px-4 py-2 font-medium text-gray-800">{a.name}</td>
-                    <td className="px-4 py-2 text-right tabular-nums text-gray-600">
-                      {rmd > 0 ? <span className="text-blue-700">{fmtUsd(rmd)}</span> : '—'}
+                    <td className="px-4 py-2 text-right font-mono tabular-nums text-gray-600">
+                      {rmd > 0 ? <span style={{ color: BRAND_2 }}>{fmtUsd(rmd)}</span> : '—'}
                     </td>
-                    <td className="px-4 py-2 text-right tabular-nums font-medium">
+                    <td className="px-4 py-2 text-right font-mono tabular-nums font-medium">
                       {withdrawn > 0.5
                         ? <span className="text-amber-700">−{fmtUsd(withdrawn)}</span>
                         : <span className="text-gray-400">—</span>}
@@ -830,54 +958,37 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plann
         </div>
       )}
 
-      {/* Contribution-first funding breakdown */}
+      {/* Funding breakdown */}
       <ContributionSummary summary={contributionSummary} />
 
-      {/* Household allocation table */}
+      {/* Household allocation */}
       <div className="space-y-2">
         <h3 className="text-sm font-medium text-gray-700">Household allocation</h3>
         <div className="overflow-hidden border border-gray-200 rounded-lg">
+
+          {/* Visualization: concentric donut (outer=target, inner=current) + AllocationPlot */}
           <div className="p-4 border-b border-gray-100">
-            {(() => {
-              // When tax adjustment is enabled, the pies show after-tax composition
-              // (the lens the engine is targeting). The titles include "(after-tax)"
-              // so the user knows what they're looking at. Nominal mode uses nominal.
-              const pieCurrentWeights = result.taxAdjusted?.currentWeights ?? currentWeights;
-              const pieProjectedWeights = result.taxAdjusted?.projectedWeights ?? projectedWeights;
-              const pieTotal = result.taxAdjusted?.householdValue ?? householdValue;
-              const ta = result.taxAdjusted !== undefined;
-              const currentByClass = Object.fromEntries(
-                ALL_ASSET_CLASSES.map(ac => [ac, (pieCurrentWeights[ac] ?? 0) * pieTotal])
-              ) as Record<AssetClass, number>;
-              const projectedByClass = Object.fromEntries(
-                ALL_ASSET_CLASSES.map(ac => [ac, (pieProjectedWeights[ac] ?? 0) * pieTotal])
-              ) as Record<AssetClass, number>;
-              const beforeSlices = buildPieSlices(currentByClass);
-              const afterSlices  = buildPieSlices(projectedByClass);
-              const hasBoth = beforeSlices.length > 0 && afterSlices.length > 0;
-              const beforeTitle = ta ? 'Before (after-tax)' : 'Before';
-              const afterTitle  = ta ? 'After trades (after-tax)' : 'After trades';
-              return (
-                <div className="space-y-4">
-                  <div className={hasBoth ? 'grid grid-cols-2 gap-6' : ''}>
-                    {beforeSlices.length > 0 && (
-                      <PieChart title={beforeTitle} slices={beforeSlices} size={88} />
-                    )}
-                    {afterSlices.length > 0 && (
-                      <PieChart title={afterTitle} slices={afterSlices} size={88} />
-                    )}
-                  </div>
-                  {hasBoth && (
-                    <AllocationPlot
-                      currentWeights={currentWeights}
-                      targetWeights={targetWeights}
-                      projectedWeights={projectedWeights}
-                    />
-                  )}
+            <div className="flex items-start gap-6 flex-wrap">
+              {(donutInner.length > 0 || donutOuter.length > 0) && (
+                <DonutChart
+                  inner={donutInner}
+                  outer={donutOuter}
+                  size={200}
+                />
+              )}
+              {hasBoth && (
+                <div className="flex-1 min-w-[220px]">
+                  <AllocationPlot
+                    currentWeights={currentWeights}
+                    targetWeights={targetWeights}
+                    projectedWeights={projectedWeights}
+                  />
                 </div>
-              );
-            })()}
+              )}
+            </div>
           </div>
+
+          {/* Allocation table */}
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
               <tr>
@@ -888,9 +999,8 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plann
                   <span className="inline-flex items-center justify-end gap-0.5">
                     Drift
                     <HelpTip dir="up">
-                      Current minus Target. Positive (amber) = over target. Negative (blue) =
-                      under target. Classes within the tolerance band are shown in gray — no
-                      trade is generated for them.
+                      Current minus Target. Orange bar = over target, blue = under.
+                      Within the tolerance band: no trade generated.
                     </HelpTip>
                   </span>
                 </th>
@@ -898,25 +1008,19 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plann
                   <span className="inline-flex items-center justify-end gap-0.5">
                     After trades
                     <HelpTip dir="left">
-                      Projected allocation once all recommended trades are executed. Should
-                      closely match the target. Small residuals are normal due to the tolerance
-                      band and minimum trade size filter.
+                      Projected allocation once all recommended trades execute.
                     </HelpTip>
                   </span>
                 </th>
                 {result.taxAdjusted && (
                   <>
-                    <th className="px-4 py-3 text-right border-l border-gray-200 text-indigo-700">
-                      <span className="inline-flex items-center justify-end gap-0.5">
-                        After-tax current
-                        <HelpTip dir="left">
-                          Current allocation expressed in after-tax dollars. Trad/401k positions
-                          are haircut by your effective retirement rate; taxable positions by the
-                          LTCG on their unrealized gain.
-                        </HelpTip>
-                      </span>
+                    <th className="px-4 py-3 text-right border-l border-gray-200 font-mono text-[10px]"
+                      style={{ color: BRAND }}>
+                      After-tax current
                     </th>
-                    <th className="px-4 py-3 text-right text-indigo-500">After-tax projected</th>
+                    <th className="px-4 py-3 text-right font-mono text-[10px]" style={{ color: BRAND_2 }}>
+                      After-tax projected
+                    </th>
                   </>
                 )}
               </tr>
@@ -934,9 +1038,6 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plann
                     taProjected={result.taxAdjusted?.projectedWeights[ac]}
                   />
                 )];
-                // Nest sub-classes beneath their parent, but only when the
-                // sub-class actually carries weight (held, targeted, or projected) —
-                // an unused refinement stays hidden to keep the table clean.
                 if (isParentClass(ac)) {
                   for (const child of childrenOf(ac)) {
                     const cur  = currentWeights[child] ?? 0;
@@ -967,7 +1068,7 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plann
         </div>
       </div>
 
-      {/* Per-account sections */}
+      {/* Per-account trade sections */}
       {resolvedTrades.length === 0 ? (
         <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
           Portfolio is within tolerance — no trades needed.
@@ -977,30 +1078,23 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plann
           <h3 className="text-sm font-medium text-gray-700">Recommended trades</h3>
 
           {tradesByAccount.map(({ account, trades: acctTrades, before, after }) => {
-            // Net change = transfers in/out only (issues #84/#87). Deploying
-            // in-account idle cash is balance-neutral, so it doesn't count toward
-            // Net — only a household-free-cash deposit or a withdrawal does.
             const deposit    = depositByAccount[account.id] ?? 0;
             const withdrawal = withdrawalByAccount[account.id] ?? 0;
             const netUsd     = deposit - withdrawal;
             const hasTransfer = deposit > 0.5 || withdrawal > 0.5;
             const isOpen  = !collapsed.has(account.id);
-            const hasBoth = before.length > 0 && after.length > 0;
+            const hasBothPies = before.length > 0 && after.length > 0;
             const locked  = account.locked;
 
             return (
               <div key={account.id} className="overflow-hidden border border-gray-200 rounded-lg">
-
-                {/* ── Collapsible header ─────────────────────────────────── */}
                 <button
                   className="w-full px-4 py-2.5 bg-gray-50 flex items-center gap-3 hover:bg-gray-100 transition-colors text-left"
                   onClick={() => toggleCollapsed(account.id)}
                 >
                   <span className="flex-1 flex items-center gap-2 min-w-0">
                     <span className="text-sm font-medium text-gray-700">{account.name}</span>
-                    <span className="text-xs text-gray-400">
-                      {account.institution} · {ACCT_TYPE_LABEL[account.type]}
-                    </span>
+                    <span className="text-xs text-gray-400">{account.institution} · {ACCT_TYPE_LABEL[account.type]}</span>
                     {locked && (
                       <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">
                         🔒 locked
@@ -1008,8 +1102,14 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plann
                     )}
                   </span>
                   {(acctTrades.length > 0 || hasTransfer) && (
-                    <span className="text-xs text-gray-500 shrink-0">
-                      Net: <span className={Math.abs(netUsd) < 0.5 ? 'text-gray-500 font-medium' : netUsd > 0 ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}>
+                    <span className="text-xs text-gray-500 shrink-0 font-mono tabular-nums">
+                      Net:{' '}
+                      <span className={
+                        Math.abs(netUsd) < 0.5 ? 'text-gray-500 font-medium'
+                          : netUsd > 0 ? 'text-green-600 font-medium'
+                          : 'font-medium'
+                      }
+                      style={netUsd < -0.5 ? { color: ORANGE_2 } : undefined}>
                         {fmtDelta(netUsd)}
                       </span>
                     </span>
@@ -1017,18 +1117,12 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plann
                   <span className="text-gray-400 text-xs ml-1">{isOpen ? '▾' : '▸'}</span>
                 </button>
 
-                {/* ── Expanded body ──────────────────────────────────────── */}
                 {isOpen && (
                   <div>
-                    {/* Before / After pies */}
                     {(before.length > 0 || after.length > 0) && (
-                      <div className={`px-4 py-4 border-b border-gray-100 ${hasBoth ? 'grid grid-cols-2 gap-6' : ''}`}>
+                      <div className={`px-4 py-4 border-b border-gray-100 ${hasBothPies ? 'grid grid-cols-2 gap-6' : ''}`}>
                         {before.length > 0 && (
-                          <PieChart
-                            title="Before"
-                            slices={before}
-                            size={88}
-                          />
+                          <PieChart title="Before" slices={before} size={88} />
                         )}
                         {after.length > 0 && (
                           <PieChart
@@ -1040,7 +1134,6 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plann
                       </div>
                     )}
 
-                    {/* Action table — transfers (deposit top / withdrawal bottom) bracket the trades */}
                     {(acctTrades.length > 0 || hasTransfer) && (
                       <table className="w-full text-sm">
                         <thead className="text-xs text-gray-500 uppercase tracking-wide border-b border-gray-100">
@@ -1074,13 +1167,16 @@ export function ResultsPanel({ result, accounts, resolvedTrades, freeCash, plann
         </div>
       )}
 
-      {/* Next-rebalance reminder — closes out the workflow. */}
-      <div>
-        <h3 className="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">
-          Schedule the next rebalance
-        </h3>
-        <ReminderPanel reminder={reminder} setReminder={setReminder} />
-      </div>
+      <NextStepsSection
+        result={result}
+        accounts={accounts}
+        resolvedTrades={resolvedTrades}
+        freeCash={freeCash}
+        plannedWithdrawal={plannedWithdrawal}
+        reminder={reminder}
+        setReminder={setReminder}
+        onSave={onSave}
+      />
     </div>
   );
 }

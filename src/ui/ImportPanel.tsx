@@ -59,7 +59,7 @@ const SINGLE_PARSERS: Partial<Record<FileFormat, (text: string, accountId: strin
 
 // Colours assigned round-robin to accounts in the order they appear.
 const ACCOUNT_COLORS = [
-  '#818cf8', // indigo-400
+  '#2e72b4', // brand-400
   '#38bdf8', // sky-400
   '#34d399', // emerald-400
   '#fbbf24', // amber-400
@@ -149,7 +149,7 @@ function EditableCell({
           else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
         }}
         placeholder={placeholder}
-        className={`w-full bg-white border border-indigo-300 rounded px-1 py-0.5 text-sm outline-none focus:ring-1 focus:ring-indigo-400 ${uppercase ? 'uppercase' : ''} ${alignCls}`}
+        className={`w-full bg-white border border-brand-300 rounded px-1 py-0.5 text-sm outline-none focus:ring-1 focus:ring-brand-400 ${uppercase ? 'uppercase' : ''} ${alignCls}`}
       />
     );
   }
@@ -158,7 +158,7 @@ function EditableCell({
     <div
       onClick={() => setEditing(true)}
       title="Click to edit"
-      className={`cursor-text hover:bg-indigo-50 rounded px-1 -mx-1 ${alignCls} ${className ?? ''}`}
+      className={`cursor-text hover:bg-brand-50 rounded px-1 -mx-1 ${alignCls} ${className ?? ''}`}
     >
       {rendered}
     </div>
@@ -446,8 +446,8 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
                 onClick={() => setAccountId(a.id)}
                 className={`px-3 py-1.5 text-sm rounded-md border transition-colors
                   ${accountId === a.id
-                    ? 'bg-indigo-600 text-white border-indigo-600'
-                    : 'bg-white text-gray-600 border-gray-300 hover:border-indigo-400'}`}
+                    ? 'bg-brand-600 text-white border-brand-600'
+                    : 'bg-white text-gray-600 border-gray-300 hover:border-brand-400'}`}
               >
                 {a.name}
               </button>
@@ -465,7 +465,7 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
                   name="import-method"
                   checked={method === m.id}
                   onChange={() => changeMethod(m.id)}
-                  className="accent-indigo-600"
+                  className="accent-brand-600"
                 />
                 {m.label}
               </label>
@@ -522,12 +522,12 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
 
       {/* Multi-account mapping step (Fidelity / Schwab all-accounts) */}
       {multiAccount && (
-        <div className="border border-indigo-200 rounded-lg p-4 space-y-4 bg-indigo-50">
+        <div className="border border-brand-200 rounded-lg p-4 space-y-4 bg-brand-50">
           <div>
-            <h3 className="text-sm font-semibold text-indigo-800">
+            <h3 className="text-sm font-semibold text-brand-800">
               Map imported accounts → your accounts
             </h3>
-            <p className="text-xs text-indigo-600 mt-0.5">
+            <p className="text-xs text-brand-600 mt-0.5">
               {multiAccount.discovered.length} accounts found in the file. Route each one to an account you've added, or skip it.
             </p>
           </div>
@@ -561,7 +561,7 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
             <button
               onClick={confirmMultiImport}
               disabled={!multiAccount.discovered.some(d => accountMapping[d.accountNumber])}
-              className="bg-indigo-600 text-white text-sm px-4 py-1.5 rounded-md hover:bg-indigo-700 disabled:opacity-40"
+              className="bg-brand-600 text-white text-sm px-4 py-1.5 rounded-md hover:bg-brand-700 disabled:opacity-40"
             >
               Confirm import
             </button>
@@ -607,7 +607,7 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
           <div className="flex gap-2">
             <button
               onClick={confirmImport}
-              className="bg-indigo-600 text-white text-sm px-4 py-1.5 rounded-md hover:bg-indigo-700"
+              className="bg-brand-600 text-white text-sm px-4 py-1.5 rounded-md hover:bg-brand-700"
             >
               Confirm import
             </button>
@@ -640,7 +640,7 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
           </div>
           <button
             onClick={loadEmpowerTotals}
-            className="bg-indigo-600 text-white text-sm px-4 py-1.5 rounded-md hover:bg-indigo-700"
+            className="bg-brand-600 text-white text-sm px-4 py-1.5 rounded-md hover:bg-brand-700"
           >
             Load totals
           </button>
@@ -685,7 +685,7 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
             <button
               onClick={addManualRow}
               disabled={!manualRow.ticker.trim() || !manualRow.marketValue}
-              className="bg-indigo-600 text-white text-sm px-3 py-1.5 rounded-md hover:bg-indigo-700 disabled:opacity-40"
+              className="bg-brand-600 text-white text-sm px-3 py-1.5 rounded-md hover:bg-brand-700 disabled:opacity-40"
             >
               Add
             </button>

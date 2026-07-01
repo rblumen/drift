@@ -1,3 +1,4 @@
+// src/ui/AllocationPlot.tsx — Brand-updated (Anchor Blue vector, same logic as original)
 import type { AssetClass } from '../engine/types';
 import { aggressiveness, diversification } from '../engine/metrics';
 import { fmtPct } from './fmt';
@@ -15,23 +16,21 @@ export function AllocationPlot({
   const pad = 36;
   const plot = size - pad * 2;
 
-  // Axes: x = diversification (0=concentrated → 1=diversified)
-  //       y = aggressiveness  (0=conservative → 1=aggressive)
   const toXY = (w: Record<AssetClass, number>) => ({
     x: pad + diversification(w) * plot,
     y: pad + (1 - aggressiveness(w)) * plot,
   });
 
-  const before    = toXY(currentWeights);
-  const after     = toXY(projectedWeights);
-  const targetXY  = toXY(targetWeights);
+  const before   = toXY(currentWeights);
+  const after    = toXY(projectedWeights);
+  const targetXY = toXY(targetWeights);
 
-  // Suppress the arrow when before/after are visually indistinguishable.
   const dx = after.x - before.x;
   const dy = after.y - before.y;
   const moved = Math.hypot(dx, dy) > 2;
 
-  // Arrowhead at the "after" endpoint.
+  // Brand-2 blue (#1a5fa0) replaces the old #2563eb indigo
+  const BRAND2 = '#1a5fa0';
   const arrowId = 'alloc-arrow';
 
   return (
@@ -52,7 +51,7 @@ export function AllocationPlot({
             markerWidth="6" markerHeight="6"
             orient="auto-start-reverse"
           >
-            <path d="M 0 0 L 10 5 L 0 10 z" fill="#2563eb" />
+            <path d="M 0 0 L 10 5 L 0 10 z" fill={BRAND2} />
           </marker>
           <marker
             id="axis-arrow"
@@ -65,7 +64,6 @@ export function AllocationPlot({
           </marker>
         </defs>
 
-        {/* Cross-shaped axes with arrowheads on all four ends */}
         <line
           x1={pad + plot / 2} y1={pad} x2={pad + plot / 2} y2={pad + plot}
           stroke="#9ca3af" strokeWidth={1}
@@ -77,8 +75,6 @@ export function AllocationPlot({
           markerStart="url(#axis-arrow)" markerEnd="url(#axis-arrow)"
         />
 
-        {/* Axis end labels — tucked inside the plot next to each arrow tip
-            so they never get clipped at the SVG edge. */}
         <text x={pad + plot / 2 + 6} y={pad + 8}
           fontSize="10" fill="#6b7280">aggressive</text>
         <text x={pad + plot / 2 + 6} y={pad + plot - 2}
@@ -88,7 +84,7 @@ export function AllocationPlot({
         <text x={pad + plot - 8} y={pad + plot / 2 - 4} textAnchor="end"
           fontSize="10" fill="#6b7280">diversified</text>
 
-        {/* Target reference (small star) */}
+        {/* Target reference */}
         <g>
           <circle cx={targetXY.x} cy={targetXY.y} r={9}
             fill="none" stroke="#10b981" strokeWidth={1.5} strokeDasharray="2 2" />
@@ -104,7 +100,7 @@ export function AllocationPlot({
         {moved && (
           <line
             x1={before.x} y1={before.y} x2={after.x} y2={after.y}
-            stroke="#2563eb" strokeWidth={1.75}
+            stroke={BRAND2} strokeWidth={1.75}
             markerEnd={`url(#${arrowId})`}
           />
         )}
@@ -119,7 +115,7 @@ export function AllocationPlot({
         </circle>
 
         {/* After point */}
-        <circle cx={after.x} cy={after.y} r={5} fill="#2563eb">
+        <circle cx={after.x} cy={after.y} r={5} fill={BRAND2}>
           <title>
             After — aggressiveness {fmtPct(aggressiveness(projectedWeights))},
             diversification {fmtPct(diversification(projectedWeights))}
@@ -131,14 +127,14 @@ export function AllocationPlot({
         <div className="space-y-1">
           <LegendRow color="#fff" stroke="#6b7280" label="Before"
             x={diversification(currentWeights)} y={aggressiveness(currentWeights)} />
-          <LegendRow color="#2563eb" label="After trades"
+          <LegendRow color={BRAND2} label="After trades"
             x={diversification(projectedWeights)} y={aggressiveness(projectedWeights)} />
           <LegendRow color="#10b981" label="Target" dashed
             x={diversification(targetWeights)} y={aggressiveness(targetWeights)} />
         </div>
         <p className="text-gray-400 leading-snug">
-          Aggressiveness = share in equities &amp; alternatives. <br/>Diversification = how evenly the
-          allocation is spread across asset classes (normalized inverse Herfindahl).
+          Aggressiveness = share in equities &amp; alternatives. <br/>Diversification = how evenly
+          the allocation is spread across asset classes (normalized inverse Herfindahl).
         </p>
       </div>
     </div>
@@ -162,7 +158,7 @@ function LegendRow({
         }}
       />
       <span className="text-gray-600 flex-1">{label}</span>
-      <span className="tabular-nums text-gray-500">
+      <span className="tabular-nums font-mono text-gray-500">
         agg {fmtPct(y)} · div {fmtPct(x)}
       </span>
     </div>

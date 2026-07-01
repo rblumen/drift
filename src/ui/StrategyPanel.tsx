@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import type { Strategy, Account, AssetClass, PlacementTarget } from '../engine/types';
 import { ALL_ASSET_CLASSES } from '../engine/types';
 import { DEFAULT_STRATEGY } from '../engine/strategy';
@@ -287,7 +287,7 @@ function TaxAdjustmentControl({
           aria-checked={enabled}
           onClick={() => commit({ enabled: !enabled })}
           className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
-            enabled ? 'bg-indigo-600' : 'bg-gray-300'
+            enabled ? 'bg-brand-600' : 'bg-gray-300'
           }`}
         >
           <span
@@ -299,7 +299,7 @@ function TaxAdjustmentControl({
       </div>
 
       {enabled && (
-        <div className="grid grid-cols-2 gap-4 max-w-2xl pl-4 border-l-2 border-indigo-100">
+        <div className="grid grid-cols-2 gap-4 max-w-2xl pl-4 border-l-2 border-brand-100">
           <div>
             <label className="block text-xs text-gray-500 mb-1">
               Effective rate at retirement (Trad / 401k)
@@ -347,7 +347,7 @@ function TaxAdjustmentControl({
       )}
 
       {enabled && taxAdjustedTargetWeights && (
-        <div className="max-w-2xl pl-4 border-l-2 border-indigo-100 pt-1">
+        <div className="max-w-2xl pl-4 border-l-2 border-brand-100 pt-1">
           <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">
             Target composition: pre-tax vs tax-adjusted
           </p>
@@ -786,8 +786,8 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
                                   : 'Link: drive the sub-classes from a single total'}
                                 className={`text-xs px-1.5 py-0.5 rounded border transition-colors ${
                                   isLinked
-                                    ? 'border-indigo-300 text-indigo-600 bg-indigo-50 hover:bg-indigo-100'
-                                    : 'border-gray-200 text-gray-400 hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50'
+                                    ? 'border-brand-300 text-brand-600 bg-brand-50 hover:bg-brand-100'
+                                    : 'border-gray-200 text-gray-400 hover:border-brand-300 hover:text-brand-600 hover:bg-brand-50'
                                 }`}
                               >
                                 {isLinked ? 'linked' : 'link'}
@@ -799,7 +799,7 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
                                     type="button"
                                     onClick={() => handleResetSplit(ac)}
                                     title={defaultLabel}
-                                    className="underline hover:text-indigo-600"
+                                    className="underline hover:text-brand-600"
                                   >
                                     reset
                                   </button>
@@ -810,7 +810,7 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
                                   type="button"
                                   onClick={() => handleCollapse(ac)}
                                   title="Collapse: fold the sub-classes back into a single target"
-                                  className="text-[10px] text-gray-400 underline hover:text-indigo-600"
+                                  className="text-[10px] text-gray-400 underline hover:text-brand-600"
                                 >
                                   merge
                                 </button>
@@ -821,7 +821,7 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
                               type="button"
                               onClick={() => handleExpand(ac)}
                               title={`Split into ${subs.map(s => AC_LABEL[s]).join(' / ')}`}
-                              className="text-xs px-1.5 py-0.5 rounded border border-gray-200 text-gray-400 hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                              className="text-xs px-1.5 py-0.5 rounded border border-gray-200 text-gray-400 hover:border-brand-300 hover:text-brand-600 hover:bg-brand-50 transition-colors"
                             >
                               split
                             </button>
@@ -997,7 +997,7 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
           <button
             type="button"
             onClick={resetPlacementToRecommended}
-            className="text-xs text-indigo-600 hover:text-indigo-800 hover:underline"
+            className="text-xs text-brand-600 hover:text-brand-800 hover:underline"
             title="Overwrite every placement rule with the recommended asset-location defaults (growth → Roth, taxable-coupon bonds → Traditional). Your current selections will be replaced."
           >
             Reset to recommended placement
@@ -1051,7 +1051,7 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
                         <select
                           value={noPreference ? NO_PREF : (buckets[0] ?? 'TAX_ADVANTAGED')}
                           onChange={e => updatePlacement(cls, 0, e.target.value as PlacementTarget | typeof NO_PREF)}
-                          className="border border-gray-200 rounded px-2 py-1 text-sm bg-white hover:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                          className="border border-gray-200 rounded px-2 py-1 text-sm bg-white hover:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
                         >
                           <option value={NO_PREF}>No preference</option>
                           {renderPlacementOptions(placementGroups, buckets[0], accounts)}
@@ -1066,7 +1066,7 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
                           <select
                             value={buckets[1] ?? ''}
                             onChange={e => updatePlacement(cls, 1, e.target.value as PlacementTarget | '')}
-                            className="border border-gray-200 rounded px-2 py-1 text-sm bg-white hover:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400 text-gray-500"
+                            className="border border-gray-200 rounded px-2 py-1 text-sm bg-white hover:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400 text-gray-500"
                           >
                             <option value="">— none —</option>
                             {renderPlacementOptions(placementGroups, buckets[1], accounts)}
@@ -1224,7 +1224,7 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
               preferTaxAdvantagedRebalance: strategy.preferTaxAdvantagedRebalance === false,
             })}
             className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
-              strategy.preferTaxAdvantagedRebalance !== false ? 'bg-indigo-600' : 'bg-gray-300'
+              strategy.preferTaxAdvantagedRebalance !== false ? 'bg-brand-600' : 'bg-gray-300'
             }`}
           >
             <span
