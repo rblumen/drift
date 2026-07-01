@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-07-01
+
 ### Added
 
 - **529 rebalance limit warning** ([#6](https://github.com/rblumen/drift/issues/6)) — when any recommended trades touch a 529 account, Results and the exported report now display a callout reminding you that the IRS allows only 2 investment-direction changes per 529 account per calendar year.
@@ -115,4 +117,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Synthetic fixtures only; real financial data is git-ignored.
 
 [Unreleased]: https://github.com/rblumen/drift/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/rblumen/drift/releases/tag/v0.1.0
+[0.1.0]: https://github.com/rblumen/drift/compare/af21039...v0.1.0
