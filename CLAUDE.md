@@ -58,3 +58,8 @@ A local, browser-only tool that rebalances investment holdings across multiple a
 - `npm run test:report` — write a static HTML report to `html/index.html` (default reporter still prints)
 - `npm run test:coverage` — write an engine coverage report to `coverage/index.html`
 - `npm run build` — production build
+
+## Preview server in worktrees
+- The dev-server launcher has been observed resolving `cwd` to the main repo checkout instead of the active worktree, silently serving stale/wrong-branch code while claiming success. A "flag doesn't render" bug that reproduces against a passing test suite is a symptom of this, not necessarily a code bug.
+- Before trusting a local preview result (pass or fail) while working in a worktree, confirm the served source matches the worktree: `fetch('/src/path/to/file.ts').then(r => r.text()).then(t => t.includes('the string you just added'))` in the browser console/`preview_eval`. If it's missing, the server is serving the wrong checkout — restart it, don't debug the "bug".
+- To manually exercise a scenario in the UI (e.g. a specific account type + drift combo), load a fixture from `src/data/fixtures/` via the app's **↑ Load** button rather than hand-injecting `localStorage['rebalancer-v1']` — the `AppState` schema (`src/ingest/schema.ts`) has non-obvious required fields (e.g. `strategy.minTradeUsd`) that are easy to omit when writing state by hand, causing a silent fallback to defaults.

@@ -1,0 +1,53 @@
+{
+  "_note": "Manual QA fixture for issue #6 (529 rebalance limit warning). Load via the ↑ Load button in the app header. Produces trades that touch the 529 account, which should surface the amber '529 rebalance limit' callout in Results and in the exported HTML report.",
+  "version": 1,
+  "accounts": [
+    {
+      "id": "schwab-529",
+      "name": "sample 529",
+      "institution": "Schwab",
+      "type": "FIVE_TWENTY_NINE"
+    }
+  ],
+  "positions": [
+    {
+      "accountId": "schwab-529",
+      "ticker": "XXX",
+      "description": "Alternatives fund",
+      "marketValue": 3000,
+      "price": 100
+    },
+    {
+      "accountId": "schwab-529",
+      "ticker": "CASH",
+      "description": "Cash",
+      "marketValue": 3000,
+      "price": 1
+    }
+  ],
+  "strategy": {
+    "targets": {
+      "US_TOTAL_MARKET": 0,
+      "US_LARGE_CAP": 0,
+      "US_MID_CAP": 0.2,
+      "US_SMALL_CAP": 0.8,
+      "DEVELOPED_INTL": 0,
+      "EMERGING_INTL": 0,
+      "FIXED_INCOME": 0,
+      "ALTERNATIVES": 0,
+      "CASH": 0
+    },
+    "placement": {},
+    "toleranceAbs": 0.02,
+    "toleranceRel": 0,
+    "minTradeUsd": 0
+  },
+  "tickerOverrides": {
+    "XXX": "ALTERNATIVES",
+    "CASH": "CASH"
+  },
+  "decompositions": {},
+  "freeCash": 0,
+  "plannedWithdrawal": 0,
+  "reminder": {}
+}

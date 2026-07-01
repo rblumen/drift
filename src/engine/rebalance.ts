@@ -1252,6 +1252,17 @@ export function rebalance(
     }
   }
 
+  // 529 rebalance limit warning (issue #6). The IRS allows only two investment-direction
+  // changes per 529 account per calendar year. Flag whenever any trade touches a 529.
+  const fiveTwentyNineIds = [...new Set(
+    trades
+      .filter(t => accounts.find(a => a.id === t.accountId)?.type === 'FIVE_TWENTY_NINE')
+      .map(t => t.accountId),
+  )];
+  if (fiveTwentyNineIds.length > 0) {
+    flags.push({ kind: 'FIVE_TWENTY_NINE_REBALANCE_LIMIT', accountIds: fiveTwentyNineIds });
+  }
+
   // Wash-sale cross-account warning (issue #5). Selling an asset class at a loss
   // in a taxable account while buying the *same* class in any other account in the
   // same run disallows the loss under the IRS wash-sale rule (across IRA/401k and
