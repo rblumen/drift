@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="598" height="200" viewBox="0 0 598 200" fill="none" aria-label="Drift">
+  <!-- Paddle mark -->
+  <g transform="translate(2,-20) scale(4)">
+    <g transform="rotate(-38 32 36)">
+      <path d="M27.5 18 C24 19 21 21.5 21 27 L21 53 Q21 59 28 59 L36 59 Q43 59 43 53 L43 27 C43 21.5 40 19 36.5 18 Z" fill="#e8600a"/>
+      <rect x="29" y="6" width="6" height="53" fill="#0d3e7a"/>
+      <line x1="32" y1="6" x2="32" y2="19" stroke="#0d3e7a" stroke-width="6" stroke-linecap="round"/>
+    </g>
+  </g>
+  <!-- Waterline stub -->
+  <line x1="2" y1="84" x2="222" y2="84" stroke="#8aaccc" stroke-width="1.6" stroke-linecap="round"/>
+  <!-- Logotype -->
+  <text
+    x="227" y="84"
+    font-family="'Schibsted Grotesk', system-ui, sans-serif"
+    font-weight="600"
+    font-size="116"
+    letter-spacing="-0.5"
+    fill="#2a3441"
+  >Drift</text>
+</svg>
