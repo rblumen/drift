@@ -175,9 +175,7 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
       <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
         <strong>529 rebalance limit:</strong>{' '}
         Trades are recommended for {names}. The IRS allows only{' '}
-        <strong>2 investment-direction changes per 529 account per calendar year.</strong>{' '}
-        Confirm you have not already rebalanced this account in {new Date().getFullYear()} before
-        executing.
+        <strong>2 investment-direction changes per 529 account per calendar year.</strong>
       </div>
     );
   }

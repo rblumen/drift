@@ -287,8 +287,7 @@ function buildHtml(result: RebalanceResult, accounts: Account[], resolvedTrades:
       return `<div class="flag flag-warn"><strong>Unmapped holding:</strong> Ticker <code>${esc(f.ticker)}</code> has no asset class — excluded from rebalance. Assign it in the Classify tab.</div>`;
     if (f.kind === 'FIVE_TWENTY_NINE_REBALANCE_LIMIT') {
       const names = f.accountIds.map(id => esc(acctName(id))).join(', ');
-      const year = new Date().getFullYear();
-      return `<div class="flag flag-warn"><strong>529 rebalance limit:</strong> Trades are recommended for ${names}. The IRS allows only <strong>2 investment-direction changes per 529 account per calendar year.</strong> Confirm you have not already rebalanced this account in ${year} before executing.</div>`;
+      return `<div class="flag flag-warn"><strong>529 rebalance limit:</strong> Trades are recommended for ${names}. The IRS allows only <strong>2 investment-direction changes per 529 account per calendar year.</strong></div>`;
     }
     if (f.kind === 'TAXABLE_SALE')
       return `<div class="flag flag-warn"><strong>Taxable sale:</strong> Selling ${fmtUsd(f.amountUsd)} of ${esc(AC_LABEL[f.assetClass])} in <em>${esc(acctName(f.accountId))}</em> may trigger a capital gain. Review before executing.</div>`;
