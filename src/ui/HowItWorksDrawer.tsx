@@ -44,7 +44,7 @@ const TIERS: {
   },
   {
     tier: 'Primary objectives',
-    pill: 'bg-indigo-100 text-indigo-700',
+    pill: 'bg-brand-100 text-brand-700',
     items: [
       { num: 4, heading: 'Hit the household-level target', body: 'Target weights apply to all accounts combined. The engine decides which account holds each dollar.' },
       { num: 5, heading: 'Suppress trivial drift', body: 'Classes within the effective tolerance band — the tighter of the absolute and relative bands (Bogleheads 5/25) — are left alone.' },
