@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Test coverage for the downloadable report and display formatting ([#130](https://github.com/rblumen/drift/issues/130)) — `src/ui/fmt.ts` (currency/percent/share formatting and label/color lookup tables) and the pure HTML-generation logic in `src/ui/exportReport.ts` now have unit tests covering trades, taxable-sale and placement flags, cash/withdrawal sections, locked accounts, and HTML escaping.
 
+### Changed
+
+- **Asset-class schema and defaults now derive from a single source of truth** ([#127](https://github.com/rblumen/drift/issues/127), [#119](https://github.com/rblumen/drift/issues/119)) — the strategy target-weight schema, its asset-class enum, and the default asset-location table were previously hand-maintained copies that had to be edited in lockstep with the engine's `ALL_ASSET_CLASSES` list. They are now generated from that one list, so adding an asset class is a small, two-file change instead of a six-structure edit, and the ingest migration's default placements can no longer drift from the default strategy. No behavior change — validation (including the target-weights-must-sum-to-1.0 rule) and defaults are identical.
+
 ### Fixed
 
 - **Production build no longer fails on Windows due to font `@import` resolution** ([#158](https://github.com/rblumen/drift/issues/158)) — `npm run build` errored on Windows with `ENOENT` trying to resolve the bare `@fontsource/...` package specifiers in `src/index.css` as literal filesystem paths, even though the dev server and Ubuntu CI both worked. PostCSS now runs `postcss-import` first, so bare package imports resolve through `node_modules` the same way on every OS.
