@@ -2341,6 +2341,41 @@ describe('Goal 4: tax-adjusted allocation â€” issue #7', () => {
     const fi = tradeFor(r.trades, 'schwab', 'FIXED_INCOME');
     expect(fi?.deltaUsd).toBeGreaterThan(0);
   });
+
+  // ─── issue #125 / audit m11: Strategy panel "pre-tax vs tax-adjusted" bars ───
+  //
+  // The Strategy panel compare bars (StrategyPanel AllocationCompareBars) plot the
+  // stated target (strategy.targets) against `taxAdjustedTargetWeights`, which
+  // App.tsx wires to result.projectedWeights — the NOMINAL projected view, on
+  // purpose. The audit flagged this as a suspected slip (should it be
+  // result.taxAdjusted.projectedWeights?). It should NOT: the after-tax projected
+  // view converges back onto the target by construction, so wiring it into the
+  // bars would collapse them into one identical row. This test pins the intended
+  // behaviour — the nominal view diverges from the target while the after-tax view
+  // tracks it — so a future "fix" that swaps in taxAdjusted.projectedWeights fails.
+  it('compare-bar inputs: nominal projected diverges from target, after-tax tracks it', () => {
+    // FIXED_INCOME (munis) is placed in the taxable account, which takes no
+    // Trad/401k haircut. Target 20% of the smaller TA base (840k) = 168k nominal,
+    // which is only 16.8% of the 1M nominal base — so the nominal share reads LOW
+    // versus the 20% target, while the after-tax share sits right on 20%.
+    const r = rebalance(BASE_ACCOUNTS, NO_POSITIONS, TA_STRAT);
+    expect(r.taxAdjusted).toBeDefined();
+
+    const target = TA_STRAT.targets.FIXED_INCOME; // 0.20
+
+    // After-tax projected (result.taxAdjusted.projectedWeights) tracks the target.
+    expect(r.taxAdjusted!.projectedWeights.FIXED_INCOME).toBeCloseTo(target, 2);
+
+    // Nominal projected (what the bars actually plot) diverges from the target...
+    expect(r.projectedWeights.FIXED_INCOME).toBeCloseTo(168_000 / 1_000_000, 2);
+    expect(Math.abs(r.projectedWeights.FIXED_INCOME - target)).toBeGreaterThan(0.02);
+
+    // ...which means the two bar inputs (target vs nominal projected) genuinely
+    // differ, whereas target vs after-tax projected would be near-identical. Guard
+    // against a regression that wires taxAdjusted.projectedWeights into the bars.
+    expect(Math.abs(r.projectedWeights.FIXED_INCOME - r.taxAdjusted!.projectedWeights.FIXED_INCOME))
+      .toBeGreaterThan(0.02);
+  });
 });
 
 // ─── Goal 10 / issue #42: rebalance target band tighter than the trigger ──────
