@@ -73,22 +73,30 @@ export default function App() {
 
   const loadFileRef = useRef<HTMLInputElement>(null);
 
-  const stateRef = useRef({ accounts, positions, strategy, tickerOverrides, decompositions, freeCash, plannedWithdrawal, reminder });
+  const stateRef = useRef({ accounts, positions, strategy, tickerOverrides, decompositions, freeCash, plannedWithdrawal, reminder, isDemoMode });
   useEffect(() => {
-    stateRef.current = { accounts, positions, strategy, tickerOverrides, decompositions, freeCash, plannedWithdrawal, reminder };
-  }, [accounts, positions, strategy, tickerOverrides, decompositions, freeCash, plannedWithdrawal, reminder]);
+    stateRef.current = { accounts, positions, strategy, tickerOverrides, decompositions, freeCash, plannedWithdrawal, reminder, isDemoMode };
+  }, [accounts, positions, strategy, tickerOverrides, decompositions, freeCash, plannedWithdrawal, reminder, isDemoMode]);
 
   const didMountRef = useRef(false);
 
   useEffect(() => {
     if (!didMountRef.current) { didMountRef.current = true; return; }
+    // Demo state must never reach the primary save slot — the banner promises
+    // "Your saved data is untouched" (#112). Persistence resumes when the user
+    // exits demo mode (banner ✕ restores the saved portfolio; ↑ Load / Reset
+    // replace it explicitly).
+    if (isDemoMode) return;
     saveState(buildState(accounts, positions, strategy, tickerOverrides, decompositions, freeCash, plannedWithdrawal, reminder));
     setLastSavedAt(new Date());
-  }, [accounts, positions, strategy, tickerOverrides, decompositions, freeCash, plannedWithdrawal, reminder]);
+  }, [accounts, positions, strategy, tickerOverrides, decompositions, freeCash, plannedWithdrawal, reminder, isDemoMode]);
 
   useEffect(() => {
     const id = setInterval(() => {
       const s = stateRef.current;
+      // Same guard as the primary autosave: demo state must not rotate the
+      // real portfolio out of the 3-slot backup ring (#112).
+      if (s.isDemoMode) return;
       saveBackup(buildState(s.accounts, s.positions, s.strategy, s.tickerOverrides, s.decompositions, s.freeCash, s.plannedWithdrawal, s.reminder));
     }, 5 * 60 * 1000);
     return () => clearInterval(id);
@@ -109,10 +117,8 @@ export default function App() {
   const fmtSavedTime = useCallback((d: Date) =>
     d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }), []);
 
-  function handleLoadSample() {
-    const parsed = appStateSchema.safeParse(SAMPLE_PORTFOLIO);
-    if (!parsed.success) return;
-    const s = parsed.data;
+  /** Replace every state slice from a validated AppState (load, demo, restore). */
+  function applyState(s: typeof saved) {
     setAccounts(s.accounts);
     setPositions(s.positions);
     setStrategy(s.strategy);
@@ -121,7 +127,22 @@ export default function App() {
     setFreeCash(s.freeCash ?? 0);
     setPlannedWithdrawal(s.plannedWithdrawal ?? 0);
     setReminder(s.reminder ?? {});
+  }
+
+  function handleLoadSample() {
+    const parsed = appStateSchema.safeParse(SAMPLE_PORTFOLIO);
+    if (!parsed.success) return;
+    applyState(parsed.data);
     setIsDemoMode(true);
+  }
+
+  /** Dismissing the demo banner: drop the demo state and put the user's real
+   *  (persisted) portfolio back in memory — autosave was suspended for the whole
+   *  demo session, so the save slot still holds it (#112). */
+  function handleExitDemo() {
+    const restored = loadState();
+    applyState(restored?.state ?? DEFAULT_APP_STATE);
+    setIsDemoMode(false);
   }
 
   function handleDeleteAccount(id: string) {
@@ -139,14 +160,10 @@ export default function App() {
     setLoadError(null);
     const result = await loadJson(file);
     if ('error' in result) { setLoadError(result.error); return; }
-    setAccounts(result.accounts);
-    setPositions(result.positions);
-    setStrategy(result.strategy);
-    setTickerOverrides(result.tickerOverrides);
-    setDecompositions(result.decompositions ?? {});
-    setFreeCash(result.freeCash ?? 0);
-    setPlannedWithdrawal(result.plannedWithdrawal ?? 0);
-    setReminder(result.reminder ?? {});
+    applyState(result);
+    // Loading a real portfolio is an explicit exit from demo mode — autosave
+    // resumes and persists the loaded file (#112).
+    setIsDemoMode(false);
   }
 
   function handleReset() {
@@ -163,6 +180,8 @@ export default function App() {
     setActiveTab('accounts');
     setLastSavedAt(null);
     setRestoredFromBackup(null);
+    // Reset is an explicit exit from demo mode too (#112).
+    setIsDemoMode(false);
   }
 
   if (showLanding) {
@@ -278,10 +297,11 @@ export default function App() {
             <div className="mb-2 bg-brand-50 border border-brand-200 rounded px-3 py-2 text-xs text-brand-800 flex items-center justify-between">
               <span>
                 Demo — showing a synthetic 5-account sample portfolio. Your saved data is untouched.
-                {' '}Use ↑ Load or Reset to switch to your own portfolio.
+                {' '}Dismiss (✕) to return to your saved portfolio, or use ↑ Load / Reset.
               </span>
               <button
-                onClick={() => setIsDemoMode(false)}
+                onClick={handleExitDemo}
+                aria-label="Exit demo and restore your saved portfolio"
                 className="ml-3 text-brand-400 hover:text-brand-700 flex-shrink-0"
               >
                 ✕
