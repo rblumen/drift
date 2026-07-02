@@ -94,9 +94,12 @@ export function parseEmpowerCsv(csvText: string, accountId: string): CsvParseRes
 
 // ─── Manual-entry path ───────────────────────────────────────────────────────
 
-// Synthetic tickers that map to each AssetClass in assetclass-map.json.
+// Synthetic tickers that map to an AssetClass in assetclass-map.json.
 // Used only by parseEmpowerTotals when real fund tickers are unavailable.
-export const EMPOWER_TICKER: Record<AssetClass, string> = {
+// Deliberately Partial: the Empower-totals entry path supports the six broad
+// dashboard classes only. parseEmpowerTotals skips classes without a synthetic
+// ticker; completing the map for the hierarchy sub-classes is tracked in #118.
+export const EMPOWER_TICKER: Partial<Record<AssetClass, string>> = {
   US_TOTAL_MARKET: 'EMPOWER_US',
   DEVELOPED_INTL:  'EMPOWER_INTL',
   EMERGING_INTL:   'EMPOWER_EM',
@@ -106,16 +109,17 @@ export const EMPOWER_TICKER: Record<AssetClass, string> = {
 };
 
 // Convert a map of { AssetClass → dollars } into normalised Position objects.
-// Classes with a zero or missing total are omitted.
+// Classes with a zero or missing total — or without a synthetic ticker (only
+// the six broad dashboard classes have one) — are omitted.
 export function parseEmpowerTotals(
   accountId: string,
   totals: Partial<Record<AssetClass, number>>,
 ): Position[] {
   return ALL_ASSET_CLASSES
-    .filter(ac => (totals[ac] ?? 0) > 0)
+    .filter(ac => (totals[ac] ?? 0) > 0 && EMPOWER_TICKER[ac] !== undefined)
     .map(ac => ({
       accountId,
-      ticker:      EMPOWER_TICKER[ac],
+      ticker:      EMPOWER_TICKER[ac]!,
       description: `Empower ${ac} (dashboard total)`,
       marketValue: totals[ac]!,
     }));

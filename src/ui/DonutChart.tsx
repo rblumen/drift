@@ -22,8 +22,6 @@ interface Props {
  */
 function buildRingSegments(
   slices: DonutSlice[],
-  cx: number,
-  cy: number,
   r: number,
   sw: number,
 ) {
@@ -47,8 +45,8 @@ export function DonutChart({ inner, outer, size = 180 }: Props) {
   const innerR  = Math.round(size * 0.222);  // inner ring radius  (~40px @ 180)
   const outerR  = Math.round(size * 0.361);  // outer ring radius  (~65px @ 180)
 
-  const innerSegs = buildRingSegments(inner, cx, cy, innerR, sw);
-  const outerSegs = buildRingSegments(outer, cx, cy, outerR, sw);
+  const innerSegs = buildRingSegments(inner, innerR, sw);
+  const outerSegs = buildRingSegments(outer, outerR, sw);
 
   const hasInner = innerSegs.some(s => s.weight > 0);
 

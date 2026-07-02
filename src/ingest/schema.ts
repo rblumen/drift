@@ -250,10 +250,16 @@ export const appStateSchema = z.object({
   reminder:       reminderSchema.optional().default({}),
 });
 
-export type AppState = z.infer<typeof appStateSchema>;
+// The persisted shape, with `strategy` expressed as the engine's Strategy type.
+// The Zod-inferred strategy is structurally looser (placement is a plain string
+// record), but the migration in strategySchema backfills every asset class from
+// DEFAULT_PLACEMENT and targetsSchema defaults every weight, so a parsed object
+// always satisfies the engine type at runtime. The cast in parseAppState (and
+// the safeParse call sites in store.ts) is where that guarantee is asserted.
+export type AppState = Omit<z.infer<typeof appStateSchema>, 'strategy'> & { strategy: Strategy };
 
 export function parseAppState(raw: unknown): AppState {
-  return appStateSchema.parse(raw);
+  return appStateSchema.parse(raw) as AppState;
 }
 
 // Safe variants — return { ok, data } | { ok, error } without throwing.

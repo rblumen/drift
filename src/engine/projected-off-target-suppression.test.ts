@@ -12,7 +12,7 @@
  * present. The fix compares against the reachable target (target × scale).
  */
 import { describe, it, expect } from 'vitest';
-import type { Account, Position, Strategy } from './types';
+import type { Account, AssetClass, Position, Strategy } from './types';
 import { ALL_ASSET_CLASSES } from './types';
 import { rebalance } from './rebalance';
 import { DEFAULT_STRATEGY } from './strategy';
@@ -128,11 +128,14 @@ describe('Goal 5: PROJECTED_OFF_TARGET suppresses dust / un-actionable drift (is
     // Exercise the same path the UI takes: fill any target keys the fixture omits
     // with 0, matching schema normalization (z ... .default(0)). Without this the
     // engine sees `undefined` targets and NaN comparisons mask the real behavior.
-    const sp = samplePortfolio as {
+    // The imported JSON's inferred literal type doesn't overlap the domain
+    // types (string vs union enums), so route the cast through unknown. The
+    // fixture is schema-valid — App.tsx parses this exact file on ?demo.
+    const sp = samplePortfolio as unknown as {
       accounts: Account[];
       positions: Position[];
       strategy: Strategy;
-      tickerOverrides?: Record<string, string>;
+      tickerOverrides?: Record<string, AssetClass>;
       decompositions?: Record<string, Record<string, number>>;
       freeCash?: number;
     };

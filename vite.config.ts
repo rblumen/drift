@@ -1,5 +1,7 @@
 import { execSync } from 'child_process'
-import { defineConfig } from 'vite'
+// vitest/config's defineConfig includes the `test` block in its options type;
+// vite's own does not and rejects this config under tsc.
+import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import pkg from './package.json'
 
