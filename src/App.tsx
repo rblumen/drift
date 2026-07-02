@@ -27,6 +27,7 @@ import {
 } from './store';
 import { appStateSchema, type Reminder } from './ingest/schema';
 import SAMPLE_PORTFOLIO from './data/sample-portfolio.json';
+import { Analytics } from '@vercel/analytics/react';
 
 type Tab = 'overview' | 'accounts' | 'import' | 'classify' | 'strategy' | 'results';
 
@@ -506,6 +507,7 @@ export default function App() {
       </footer>
 
       <HowItWorksDrawer open={howItWorksOpen} onClose={() => setHowItWorksOpen(false)} />
+      <Analytics />
     </div>
   );
 }
