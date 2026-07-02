@@ -52,6 +52,11 @@ const byText = (text: string) => (b: HTMLButtonElement) =>
   (b.textContent ?? '').includes(text);
 
 async function enterDemoFromLanding(): Promise<void> {
+  // With a saved portfolio already on this device, #147 skips the landing
+  // page on first render and goes straight to the app shell. The wordmark
+  // click affordance still returns to the landing page on demand, so use
+  // that to reach the "Try the demo" button.
+  await clickButton(b => b.title === 'Back to Drift home');
   await clickButton(byText('Try the demo'));
   // Demo banner confirms we're inside the app in demo mode.
   expect(document.body.textContent).toContain('Demo — showing a synthetic');

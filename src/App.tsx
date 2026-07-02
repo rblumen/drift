@@ -65,7 +65,10 @@ export default function App() {
   const [howItWorksOpen,    setHowItWorksOpen]    = useState(false);
   const [loadError,         setLoadError]         = useState<string | null>(null);
   const [isDemoMode,        setIsDemoMode]        = useState<boolean>(_isDemoInit);
-  const [showLanding,      setShowLanding]       = useState(true);
+  // Returning users (saved state already on this device) and the ?demo deep
+  // link both skip the marketing landing page and go straight to the app
+  // (#147). First-run users with nothing saved still see it.
+  const [showLanding,      setShowLanding]       = useState(!_isDemoInit && loadResult === null);
   const [restoredFromBackup, setRestoredFromBackup] = useState<number | null>(
     loadResult?.source === 'backup' ? (loadResult.backupTs ?? Date.now()) : null,
   );

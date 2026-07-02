@@ -1,7 +1,7 @@
 // src/ui/LandingPage.tsx — full marketing / home screen
 // Rendered by App when showLanding=true (before the tab shell).
-// onEnter  — user clicked "Enter app" — dismisses landing
-// onDemo   — user clicked "Try demo"  — loads sample + dismisses
+// onEnter  — user clicked "Enter the app" — dismisses landing
+// onDemo   — user clicked "Try the demo"  — loads sample + dismisses
 import { DriftWordmark } from './Logo';
 import './LandingPage.css';
 
@@ -68,7 +68,7 @@ export function LandingPage({ onEnter, onDemo }: LandingPageProps) {
             <a href="#how">How it works</a>
             <a href="#transparency">Transparency</a>
             <button className="lp-btn lp-btn-primary" onClick={onEnter}>
-              Enter app →
+              Enter the app →
             </button>
           </div>
         </div>
@@ -90,10 +90,10 @@ export function LandingPage({ onEnter, onDemo }: LandingPageProps) {
               exact buy/sell orders for the whole household.
             </p>
             <div className="lp-cta-row">
-              <button className="lp-btn lp-btn-primary" onClick={onEnter}>Enter app →</button>
+              <button className="lp-btn lp-btn-primary" onClick={onEnter}>Enter the app →</button>
               {onDemo && (
                 <button className="lp-btn lp-btn-ghost" onClick={onDemo}>
-                  Try the demo portfolio
+                  Try the demo
                 </button>
               )}
               <a className="lp-btn lp-btn-ghost" href="https://ko-fi.com/driftrebalance" target="_blank" rel="noopener noreferrer">
@@ -102,7 +102,7 @@ export function LandingPage({ onEnter, onDemo }: LandingPageProps) {
             </div>
             <div className="lp-micro">
               <span><span className="lp-dot"></span>Free · runs in your browser</span>
-              <span><span className="lp-dot" style={{ background: '#082855' }}></span>No account · nothing stored</span>
+              <span><span className="lp-dot" style={{ background: '#082855' }}></span>No account · nothing leaves your browser</span>
             </div>
           </div>
 
@@ -133,7 +133,7 @@ export function LandingPage({ onEnter, onDemo }: LandingPageProps) {
               </div>
               <div className="lp-donut-foot">
                 <span>Drift from target</span>
-                <span><strong>2.4%</strong> · 3 classes out of band</span>
+                <span><strong>2.4%</strong> · 4 classes out of band</span>
               </div>
             </div>
           </div>
@@ -148,8 +148,8 @@ export function LandingPage({ onEnter, onDemo }: LandingPageProps) {
             Your aggregator shows you the drift.<br />It never tells you the trades.
           </h2>
           <p className="lp-sub">
-            Your aggregator — great at the picture. None of them will look
-            across all your accounts and say <em>sell this here, buy that there.</em> That last
+            Aggregators are great at the picture. None of them will look
+            across your accounts and say <em>sell this here, buy that there.</em> That last
             mile is where Drift lives.
           </p>
           <div className="lp-feat">
@@ -197,14 +197,15 @@ export function LandingPage({ onEnter, onDemo }: LandingPageProps) {
       {/* ── How it works ───────────────────────────────────────────────────── */}
       <section className="lp-tinted" id="how">
         <div className="lp-wrap">
-          <p className="lp-eyebrow">Four steps · about ten minutes</p>
+          <p className="lp-eyebrow">Five steps · about ten minutes</p>
           <h2 className="lp-h2" style={{ marginTop: 14 }}>From broker export to order list.</h2>
           <div className="lp-steps-grid">
             {([
               ['01', 'Add accounts',    "Name each account and its tax type. That's what tells Drift where things should live."],
               ['02', 'Import positions','Drop a CSV from Schwab, Fidelity, or your broker — or type a few holdings by hand.'],
-              ['03', 'Set the target',  'Adjust the allocation and placement rules. Sensible defaults are already loaded.'],
-              ['04', 'Get the trades',  'Per-account buys and sells, recalculating live as you tweak anything.'],
+              ['03', 'Classify',        "Tag any tickers Drift doesn't recognize so every position counts toward the right asset class."],
+              ['04', 'Set the target',  'Adjust the allocation and placement rules. Sensible defaults are already loaded.'],
+              ['05', 'Get the trades',  'Per-account buys and sells, recalculating live as you tweak anything.'],
             ] as const).map(([n, title, body]) => (
               <div className="lp-how-step" key={n}>
                 <div className="lp-how-n">{n}</div>
@@ -258,7 +259,7 @@ export function LandingPage({ onEnter, onDemo }: LandingPageProps) {
             {['Schwab CSV', 'Fidelity CSV', 'Manual entry'].map(p => (
               <span className="lp-pill" key={p}>{p}</span>
             ))}
-            <span className="lp-pill" style={{ opacity: .5 }}>Direct connect · soon</span>
+            <span className="lp-pill" style={{ opacity: .5 }}>CSV-first, by design</span>
           </div>
         </div>
       </section>
