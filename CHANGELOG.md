@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Production build no longer fails on Windows due to font `@import` resolution** ([#158](https://github.com/rblumen/drift/issues/158)) — `npm run build` errored on Windows with `ENOENT` trying to resolve the bare `@fontsource/...` package specifiers in `src/index.css` as literal filesystem paths, even though the dev server and Ubuntu CI both worked. PostCSS now runs `postcss-import` first, so bare package imports resolve through `node_modules` the same way on every OS.
+
 - **Trust-strip border is now a subtle hairline instead of a dark line** ([#143](https://github.com/rblumen/drift/issues/143)) — the `--line-2` CSS variable used by the landing-page trust strip was never defined, so the border resolved to the inherited body text color (`#2a3441`) and rendered as a heavy ink line. Both `--line` and `--line-2` are now defined as `#e5e8ee` in `:root`.
 
 - **HelpBox and "How It Works" drawer pill now use brand blue instead of indigo** ([#144](https://github.com/rblumen/drift/issues/144)) — `HelpBox` (shown on every tab) and the "Primary objectives" tier pill in the How It Works drawer were still styled with Tailwind's `indigo-*` palette after the app-wide brand-blue rollout. Both now use the `brand-*` tokens defined in `tailwind.config.js`.
