@@ -1,5 +1,4 @@
 import type { Account, Position, AssetClass, FundDecomposition } from './types';
-import { ALL_ASSET_CLASSES } from './types';
 import type { ClassifyFn } from './classify';
 import { CLASS_HIERARCHY } from './hierarchy';
 import { zeroByClass } from './utils';

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parsePosition, parseStrategy, safeParseStrategy, safeParsePosition, parsePortfolio, parseAccount } from './schema';
+import { parsePosition, parseStrategy, safeParseStrategy, parsePortfolio, parseAccount } from './schema';
 import { parseCsv, parseMoney } from './csv';
 import { parseSchwabCsv, parseSchwabMultiCsv } from './adapters/schwab';
 import { parseFidelityCsv, parseFidelityMultiCsv } from './adapters/fidelity';

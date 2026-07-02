@@ -1,8 +1,9 @@
 ﻿import { describe, it, expect } from 'vitest';
-import type { Account, Position, AssetClass, Strategy } from './types';
+import type { Account, Position, AssetClass, PlacementTarget, Strategy } from './types';
 import { ALL_ASSET_CLASSES } from './types';
 import { DEFAULT_STRATEGY } from './strategy';
 import { rebalance } from './rebalance';
+import { zeroByClass } from './utils';
 
 // â”€â”€â”€ helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -20,6 +21,24 @@ function accountSum(trades: ReturnType<typeof rebalance>['trades'], accountId: s
 
 // Within $1 â€” rounding from proportional splits; anything tighter is noise.
 const near = (a: number, b: number, tol = 1) => Math.abs(a - b) <= tol;
+
+// Zero-fill spread for target fixtures: `targets: { ...ZERO_TARGETS, X: 0.6 }`
+// satisfies the complete Record<AssetClass, number> type while letting each
+// fixture state only the classes it cares about. Runtime-identical to the old
+// partial literals (the engine normalizes missing targets to 0 anyway).
+const ZERO_TARGETS = zeroByClass();
+
+// Placement fill that mirrors the engine's own fallback for a class missing
+// from strategy.placement (['TAX_ADVANTAGED', 'TAXABLE']), so a fixture can
+// state only the classes it cares about without changing engine behavior.
+function fillPlacement(
+  overrides: Partial<Record<AssetClass, PlacementTarget[]>>,
+): Record<AssetClass, PlacementTarget[]> {
+  const base = Object.fromEntries(
+    ALL_ASSET_CLASSES.map(ac => [ac, ['TAX_ADVANTAGED', 'TAXABLE'] as PlacementTarget[]]),
+  ) as Record<AssetClass, PlacementTarget[]>;
+  return { ...base, ...overrides };
+}
 
 // â”€â”€â”€ shared fixtures â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -225,7 +244,7 @@ describe('Goal 5: 5/25 rule â€” relative tolerance band', () => {
   //   FI eff tol = min(0.05, 0.25Ã—0.10) = 0.025 (relative wins â€” tighter)
   const LC90_FI10 = {
     ...DEFAULT_STRATEGY,
-    targets: {
+    targets: { ...ZERO_TARGETS,
       US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.90, US_MID_CAP: 0, US_SMALL_CAP: 0,
       DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0.10, ALTERNATIVES: 0, CRYPTO: 0, PRECIOUS_METALS: 0, CASH: 0,
     },
@@ -518,7 +537,7 @@ describe('Goal 1: locked positions', () => {
     ];
     const strategy = {
       ...ZERO_TOL_STRATEGY,
-      targets: {
+      targets: { ...ZERO_TARGETS,
         US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.5, US_MID_CAP: 0, US_SMALL_CAP: 0,
         DEVELOPED_INTL: 0.17, EMERGING_INTL: 0, FIXED_INCOME: 0.25, ALTERNATIVES: 0.08, CRYPTO: 0, PRECIOUS_METALS: 0, CASH: 0,
       },
@@ -645,7 +664,7 @@ describe('Goal 3: per-account net-zero â€” NO_ELIGIBLE_ACCOUNT with restric
   ];
   const HALF_LC_HALF_FI = {
     ...DEFAULT_STRATEGY,
-    targets: {
+    targets: { ...ZERO_TARGETS,
       US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.5, US_MID_CAP: 0, US_SMALL_CAP: 0,
       DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0.5, ALTERNATIVES: 0, CRYPTO: 0, PRECIOUS_METALS: 0, CASH: 0,
     },
@@ -750,7 +769,7 @@ describe('Goal 3: step 8.5 â€” minTradeUsd balance correction', () => {
   // ALT delta = âˆ’$1 250 (sell, filtered by $10 000).
   const HIGH_MIN_TRADE_STRATEGY = {
     ...DEFAULT_STRATEGY,
-    targets: {
+    targets: { ...ZERO_TARGETS,
       US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.50, US_MID_CAP: 0, US_SMALL_CAP: 0,
       DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0.45, ALTERNATIVES: 0.05, CRYPTO: 0, PRECIOUS_METALS: 0, CASH: 0,
     },
@@ -1110,7 +1129,7 @@ describe('Goal 7: step 7.7 â€” redirectTaxableSells', () => {
   // Strategy: 50% US_LARGE_CAP / 50% FIXED_INCOME, zero tolerance.
   const REDIRECT_STRATEGY = {
     ...DEFAULT_STRATEGY,
-    targets: {
+    targets: { ...ZERO_TARGETS,
       US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.5, US_MID_CAP: 0, US_SMALL_CAP: 0,
       DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0.5, ALTERNATIVES: 0, CRYPTO: 0, PRECIOUS_METALS: 0, CASH: 0,
     },
@@ -1162,7 +1181,7 @@ describe('Goal 7: step 7.7 â€” redirectTaxableSells', () => {
     // LC overweight by $20k: sell $20k. FI underweight by $20k: buy $20k.
     const strategy = {
       ...DEFAULT_STRATEGY,
-      targets: {
+      targets: { ...ZERO_TARGETS,
         US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.25, US_MID_CAP: 0, US_SMALL_CAP: 0,
         DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0.75, ALTERNATIVES: 0, CRYPTO: 0, PRECIOUS_METALS: 0, CASH: 0,
       },
@@ -1196,7 +1215,7 @@ describe('Goal 7: step 7.7 â€” redirectTaxableSells', () => {
     // Target: 20% FI ($200k), 80% LC ($800k). FI oversold.
     const strategy = {
       ...DEFAULT_STRATEGY,
-      targets: {
+      targets: { ...ZERO_TARGETS,
         US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.8, US_MID_CAP: 0, US_SMALL_CAP: 0,
         DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0.2, ALTERNATIVES: 0, CRYPTO: 0, PRECIOUS_METALS: 0, CASH: 0,
       },
@@ -1232,7 +1251,7 @@ describe('Goal 7: step 7.7 â€” redirectTaxableSells', () => {
     // Placement: FI â†’ TAXABLE only; LC â†’ TAX_ADVANTAGED first.
     const strategy = {
       ...DEFAULT_STRATEGY,
-      targets: {
+      targets: { ...ZERO_TARGETS,
         US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.4, US_MID_CAP: 0, US_SMALL_CAP: 0,
         DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0.6, ALTERNATIVES: 0, CRYPTO: 0, PRECIOUS_METALS: 0, CASH: 0,
       },
@@ -1276,7 +1295,7 @@ describe('Goal 7: step 7.7 â€” redirectTaxableSells', () => {
     ];
     const strategy = {
       ...DEFAULT_STRATEGY,
-      targets: {
+      targets: { ...ZERO_TARGETS,
         US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.6, US_MID_CAP: 0, US_SMALL_CAP: 0,
         DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0.4, ALTERNATIVES: 0, CRYPTO: 0, PRECIOUS_METALS: 0, CASH: 0,
       },
@@ -1346,9 +1365,9 @@ describe('Goal 11: account-count minimization â€” concentrate-then-spill (b
     // ALTS target = 2.5% Ã— $1M = $25k.  big IRA ($600k) absorbs it all.
     // Pin ALTS to the broad tax-advantaged bucket so this exercises capacity ordering
     // (Goal 11), not the issue-#89 asset-location default (which prefers the Roth).
-    const strategy = {
+    const strategy: Strategy = {
       ...ZERO_TOL_STRATEGY,
-      placement: { ...ZERO_TOL_STRATEGY.placement, ALTERNATIVES: ['TAX_ADVANTAGED'] as const },
+      placement: { ...ZERO_TOL_STRATEGY.placement, ALTERNATIVES: ['TAX_ADVANTAGED'] },
     };
     const r = rebalance(accounts, NO_POSITIONS, strategy);
     expect(tradeFor(r.trades, 'big',  'ALTERNATIVES')?.deltaUsd).toBeCloseTo(25_000, 0);
@@ -1416,7 +1435,7 @@ describe('Goal 10: trade-count minimization â€” drop marginal trades (backl
   ];
   const LC70_FI30_STRATEGY = {
     ...DEFAULT_STRATEGY,
-    targets: {
+    targets: { ...ZERO_TARGETS,
       US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.7, US_MID_CAP: 0, US_SMALL_CAP: 0,
       DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0.3, ALTERNATIVES: 0, CRYPTO: 0, PRECIOUS_METALS: 0, CASH: 0,
     },
@@ -1597,7 +1616,7 @@ describe('Goal 4: post-trade accuracy â€” stress scenarios', () => {
     ];
     const strategy = {
       ...ZERO_TOL_STRATEGY,
-      targets: {
+      targets: { ...ZERO_TARGETS,
         US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.55, US_MID_CAP: 0, US_SMALL_CAP: 0,
         DEVELOPED_INTL: 0.25, EMERGING_INTL: 0, FIXED_INCOME: 0.12, ALTERNATIVES: 0.08, CRYPTO: 0, PRECIOUS_METALS: 0, CASH: 0,
       },
@@ -1644,7 +1663,7 @@ describe('Goal 4: post-trade accuracy â€” stress scenarios', () => {
     ];
     const strategy = {
       ...ZERO_TOL_STRATEGY,
-      targets: {
+      targets: { ...ZERO_TARGETS,
         US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.55, US_MID_CAP: 0, US_SMALL_CAP: 0,
         DEVELOPED_INTL: 0.20, EMERGING_INTL: 0, FIXED_INCOME: 0.20, ALTERNATIVES: 0.05, CRYPTO: 0, PRECIOUS_METALS: 0, CASH: 0,
       },
@@ -1669,7 +1688,7 @@ describe('Goal 4: post-trade accuracy â€” stress scenarios', () => {
     ];
     const strategy = {
       ...ZERO_TOL_STRATEGY,
-      targets: {
+      targets: { ...ZERO_TARGETS,
         US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.50, US_MID_CAP: 0, US_SMALL_CAP: 0,
         DEVELOPED_INTL: 0.10, EMERGING_INTL: 0, FIXED_INCOME: 0.25, ALTERNATIVES: 0.15, CRYPTO: 0, PRECIOUS_METALS: 0, CASH: 0,
       },
@@ -1705,7 +1724,7 @@ describe('Goal 4: post-trade accuracy â€” stress scenarios', () => {
     ];
     const strategy = {
       ...ZERO_TOL_STRATEGY,
-      targets: {
+      targets: { ...ZERO_TARGETS,
         US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.5, US_MID_CAP: 0, US_SMALL_CAP: 0,
         DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0.5, ALTERNATIVES: 0, CRYPTO: 0, PRECIOUS_METALS: 0, CASH: 0,
       },
@@ -1764,7 +1783,7 @@ describe('Goal 4: post-trade accuracy â€” stress scenarios', () => {
     ];
     const strategy = {
       ...ZERO_TOL_STRATEGY,
-      targets: {
+      targets: { ...ZERO_TARGETS,
         US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.7, US_MID_CAP: 0, US_SMALL_CAP: 0,
         DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0.2, ALTERNATIVES: 0.1, CRYPTO: 0, PRECIOUS_METALS: 0, CASH: 0,
       },
@@ -1803,7 +1822,7 @@ describe('Goal 6: no-preference placement â€” empty bucket list', () => {
     ];
     const strategy = {
       ...DEFAULT_STRATEGY,
-      targets: {
+      targets: { ...ZERO_TARGETS,
         US_TOTAL_MARKET: 0, US_LARGE_CAP: 1.0, US_MID_CAP: 0, US_SMALL_CAP: 0,
         DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0, ALTERNATIVES: 0, CRYPTO: 0, PRECIOUS_METALS: 0, CASH: 0,
       },
@@ -1827,9 +1846,9 @@ describe('Goal 6: no-preference placement â€” empty bucket list', () => {
       { id: 'taxable', name: 'Schwab', institution: 'Schwab',   type: 'TAXABLE',         newCash: 500_000 },
       { id: 'ira',     name: 'IRA',    institution: 'Fidelity', type: 'TRADITIONAL_IRA', newCash: 500_000 },
     ];
-    const strategy = {
+    const strategy: Strategy = {
       ...DEFAULT_STRATEGY,
-      targets: {
+      targets: { ...ZERO_TARGETS,
         US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.5, US_MID_CAP: 0, US_SMALL_CAP: 0,
         DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0.5, ALTERNATIVES: 0, CRYPTO: 0, PRECIOUS_METALS: 0, CASH: 0,
       },
@@ -1855,7 +1874,7 @@ describe('Goal 6: no-preference placement â€” empty bucket list', () => {
     }];
     const strategy = {
       ...DEFAULT_STRATEGY,
-      targets: {
+      targets: { ...ZERO_TARGETS,
         US_TOTAL_MARKET: 0, US_LARGE_CAP: 1.0, US_MID_CAP: 0, US_SMALL_CAP: 0,
         DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0, ALTERNATIVES: 0, CRYPTO: 0, PRECIOUS_METALS: 0, CASH: 0,
       },
@@ -1947,7 +1966,7 @@ describe('Goal 6: tax-advantaged-first rebalancing', () => {
   ];
   const STRAT: Strategy = {
     ...DEFAULT_STRATEGY,
-    targets: {
+    targets: { ...ZERO_TARGETS,
       US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.5, US_MID_CAP: 0, US_SMALL_CAP: 0,
       DEVELOPED_INTL: 0, EMERGING_INTL: 0, FIXED_INCOME: 0.5, ALTERNATIVES: 0, CRYPTO: 0, PRECIOUS_METALS: 0, CASH: 0,
     },
@@ -1996,22 +2015,16 @@ describe('Goal 4: blended-fund sells â€” issue #40', () => {
 
   // No-frills strategy: only large-cap, INTL, and FI. No targets to over-spec.
   const SIMPLE_STRAT: Strategy = {
-    targets: {
+    targets: { ...ZERO_TARGETS,
       US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.60, US_MID_CAP: 0, US_SMALL_CAP: 0,
       DEVELOPED_INTL:  0.30, EMERGING_INTL: 0,
       FIXED_INCOME:    0.10, ALTERNATIVES: 0, CRYPTO: 0, PRECIOUS_METALS: 0, CASH: 0,
     },
-    placement: {
+    placement: fillPlacement({
       FIXED_INCOME:    ['TAXABLE'],
       ALTERNATIVES:    ['TAX_ADVANTAGED'],
-      EMERGING_INTL:   ['TAX_ADVANTAGED', 'TAXABLE'],
-      DEVELOPED_INTL:  ['TAX_ADVANTAGED', 'TAXABLE'],
-      US_TOTAL_MARKET: ['TAX_ADVANTAGED', 'TAXABLE'],
-      US_LARGE_CAP:    ['TAX_ADVANTAGED', 'TAXABLE'],
-      US_MID_CAP:      ['TAX_ADVANTAGED', 'TAXABLE'],
-      US_SMALL_CAP:    ['TAX_ADVANTAGED', 'TAXABLE'],
       CASH:            ['TAXABLE', 'TAX_ADVANTAGED'],
-    },
+    }),
     toleranceAbs: 0,
     minTradeUsd:  0,
   };
@@ -2096,7 +2109,7 @@ describe('Goal 4: blended-fund sells â€” issue #40', () => {
     ];
     const AGGRESSIVE: Strategy = {
       ...SIMPLE_STRAT,
-      targets: {
+      targets: { ...ZERO_TARGETS,
         US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.80, US_MID_CAP: 0, US_SMALL_CAP: 0,
         DEVELOPED_INTL:  0.15, EMERGING_INTL: 0,
         FIXED_INCOME:    0.05, ALTERNATIVES: 0, CRYPTO: 0, PRECIOUS_METALS: 0, CASH: 0,
@@ -2214,7 +2227,7 @@ describe('Goal 4: blended-fund sells â€” issue #40', () => {
     ];
     const AGGRESSIVE: Strategy = {
       ...SIMPLE_STRAT,
-      targets: {
+      targets: { ...ZERO_TARGETS,
         US_TOTAL_MARKET: 0, US_LARGE_CAP: 0.80, US_MID_CAP: 0, US_SMALL_CAP: 0,
         DEVELOPED_INTL:  0.15, EMERGING_INTL: 0,
         FIXED_INCOME:    0.05, ALTERNATIVES: 0, CRYPTO: 0, PRECIOUS_METALS: 0, CASH: 0,

@@ -23,7 +23,7 @@ import { HowItWorksDrawer } from './ui/HowItWorksDrawer';
 import { LandingPage } from './ui/LandingPage';
 import {
   buildState, clearState, DEFAULT_APP_STATE, saveJson, loadJson,
-  loadState, saveState, saveBackup,
+  loadState, saveState, saveBackup, type AppState,
 } from './store';
 import { appStateSchema, type Reminder } from './ingest/schema';
 import SAMPLE_PORTFOLIO from './data/sample-portfolio.json';
@@ -46,8 +46,10 @@ const _isDemoInit    = _demoParsed?.success === true;
 if (_isDemoInit) window.history.replaceState({}, '', window.location.pathname);
 
 const loadResult = _isDemoInit ? null : loadState();
-const saved = (_isDemoInit && _demoParsed?.success)
-  ? _demoParsed.data
+// The bundled sample portfolio is schema-valid, so the AppState cast holds
+// (see the AppState type note in ingest/schema.ts).
+const saved: AppState = (_isDemoInit && _demoParsed?.success)
+  ? (_demoParsed.data as AppState)
   : (loadResult?.state ?? DEFAULT_APP_STATE);
 
 export default function App() {
@@ -118,7 +120,7 @@ export default function App() {
     d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }), []);
 
   /** Replace every state slice from a validated AppState (load, demo, restore). */
-  function applyState(s: typeof saved) {
+  function applyState(s: AppState) {
     setAccounts(s.accounts);
     setPositions(s.positions);
     setStrategy(s.strategy);
@@ -132,7 +134,7 @@ export default function App() {
   function handleLoadSample() {
     const parsed = appStateSchema.safeParse(SAMPLE_PORTFOLIO);
     if (!parsed.success) return;
-    applyState(parsed.data);
+    applyState(parsed.data as AppState);
     setIsDemoMode(true);
   }
 

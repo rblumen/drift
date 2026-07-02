@@ -750,7 +750,6 @@ export function ResultsPanel({
   const showReminderBanner = reminderDays !== null && reminderDays <= 7;
 
   // Build concentric donut slices (outer = target, inner = current)
-  const ta = result.taxAdjusted !== undefined;
   const vizCurrentWeights  = result.taxAdjusted?.currentWeights  ?? currentWeights;
   const vizProjectedWeights = result.taxAdjusted?.projectedWeights ?? projectedWeights;
   const vizTotal = result.taxAdjusted?.householdValue ?? householdValue;

@@ -104,7 +104,7 @@ export function loadState(): LoadResult | null {
     if (raw) {
       const parsed = JSON.parse(raw) as unknown;
       const r = appStateSchema.safeParse(parsed);
-      if (r.success) return { state: r.data, source: 'primary' };
+      if (r.success) return { state: r.data as AppState, source: 'primary' };
       primaryParseError = r.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join('; ');
       console.warn('[rebalancer] Primary state failed schema validation — falling back to backups.\n', primaryParseError);
     }
@@ -118,7 +118,7 @@ export function loadState(): LoadResult | null {
   for (const entry of backups) {
     try {
       const r = appStateSchema.safeParse(entry.state);
-      if (r.success) return { state: r.data, source: 'backup', backupTs: entry.ts };
+      if (r.success) return { state: r.data as AppState, source: 'backup', backupTs: entry.ts };
       console.warn('[rebalancer] Backup entry (ts=%d) failed schema validation — skipping.', entry.ts,
         r.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join('; '));
     } catch {
@@ -179,7 +179,7 @@ export async function loadJson(
         const raw = JSON.parse(e.target?.result as string) as unknown;
         const result = appStateSchema.safeParse(raw);
         if (result.success) {
-          resolve(result.data);
+          resolve(result.data as AppState);
         } else {
           resolve({ error: `Invalid portfolio file: ${result.error.issues[0]?.message ?? 'unknown error'}` });
         }

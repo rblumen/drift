@@ -82,13 +82,11 @@ function DecompWeightBars({ decomp }: { decomp: FundDecomposition }) {
 }
 
 function DecompEditor({
-  ticker,
   initial,
   onApply,
   onCancel,
   isEstimated,
 }: {
-  ticker: string;
   initial: FundDecomposition;
   onApply: (d: FundDecomposition) => void;
   onCancel: () => void;
@@ -417,7 +415,6 @@ export function ClassifyPanel({
                   </div>
                   {isEditing && (
                     <DecompEditor
-                      ticker={row.ticker}
                       initial={tdfDetect?.composition ?? {}}
                       onApply={d => applyDecomp(row.ticker, d)}
                       onCancel={() => setEditState(null)}
@@ -474,7 +471,6 @@ export function ClassifyPanel({
                         )}
                         {isEditing && (
                           <DecompEditor
-                            ticker={row.ticker}
                             initial={decomp}
                             onApply={d => applyDecomp(row.ticker, d)}
                             onCancel={() => setEditState(null)}
@@ -592,7 +588,6 @@ export function ClassifyPanel({
                         <tr className="bg-brand-50/30">
                           <td colSpan={5} className="px-4 pb-3">
                             <DecompEditor
-                              ticker={row.ticker}
                               initial={row.effective ? { [row.effective]: 1.0 } : {}}
                               onApply={d => applyDecomp(row.ticker, d)}
                               onCancel={() => setEditState(null)}
