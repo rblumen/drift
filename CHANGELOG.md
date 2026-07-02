@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Fonts are now self-hosted instead of loaded from Google** ([#115](https://github.com/rblumen/drift/issues/115)) — `index.html` pulled Schibsted Grotesk and IBM Plex Mono from `fonts.googleapis.com`/`fonts.gstatic.com` on every page load, sending the user's IP and user agent to Google despite the landing page and README promising no network calls and no telemetry. Both font families now ship locally via `@fontsource`, and the Google Fonts `<link>`/`preconnect` tags are gone.
+
 - **Share links now point at the real app** ([#116](https://github.com/rblumen/drift/issues/116)) — the Results tab's share actions (X/Twitter, Reddit, Facebook, email, SMS, copy-link, and the native share sheet) linked to `https://drift.app`, which is not this project's deployment, so every share distributed a wrong, potentially squattable URL. All share links and the calendar reminder now read one canonical URL constant pointing at the actual deployment.
 
 - **The production build now actually type-checks** ([#113](https://github.com/rblumen/drift/issues/113)) — `npm run build` ran plain `tsc` against a solution-style tsconfig, which compiles nothing and always exits 0, so the project had never been type-checked. The build now runs `tsc -b`, and the 58 latent type errors it surfaced are fixed — including a type-unsound seam between the persisted-state schema and the engine's `Strategy` type, and an Empower-totals ticker map typed as covering all asset classes while defining six (a totals entry for a newer class would have produced a position with no ticker).
