@@ -1,6 +1,8 @@
 import { z } from 'zod';
-import type { Position, Account, Strategy } from '../engine/types';
+import type { AssetClass, Position, Account, Strategy } from '../engine/types';
+import { ALL_ASSET_CLASSES } from '../engine/types';
 import { CLASS_HIERARCHY } from '../engine/hierarchy';
+import { DEFAULT_PLACEMENT as ENGINE_DEFAULT_PLACEMENT } from '../engine/strategy';
 
 const ACCOUNT_TYPES = [
   'TAXABLE', 'TRADITIONAL_IRA', 'ROTH_IRA', 'FOUR_OH_ONE_K',
@@ -15,12 +17,18 @@ const PLACEMENT_TARGETS = [
   'TRADITIONAL_IRA', 'ROTH_IRA', 'FOUR_OH_ONE_K', 'FIVE_TWENTY_NINE', 'HSA', 'OTHER',
 ] as const;
 
-const ASSET_CLASSES = [
-  'US_TOTAL_MARKET', 'US_LARGE_CAP', 'US_MID_CAP', 'US_SMALL_CAP',
-  'DEVELOPED_INTL', 'DEVELOPED_EUROPE', 'DEVELOPED_PACIFIC', 'EMERGING_INTL',
-  'FIXED_INCOME', 'US_TREASURY', 'US_CORP_BOND', 'MUNI_BOND', 'TIPS', 'INTL_BOND',
-  'REAL_ESTATE', 'ALTERNATIVES', 'CRYPTO', 'PRECIOUS_METALS', 'CASH',
-] as const;
+// Derived from the engine's ALL_ASSET_CLASSES source of truth (issue #127) so the
+// z.enum member list never drifts from the AssetClass union. The cast supplies the
+// non-empty tuple shape z.enum requires; the array is `as const` at its definition.
+const ASSET_CLASSES = ALL_ASSET_CLASSES as unknown as [AssetClass, ...AssetClass[]];
+
+// Classes whose target weight is required in a strategy (no default). Every other
+// class defaults to 0 when omitted. This preserves the exact per-field constraints the
+// hand-written targetsSchema encoded before #127 (US_TOTAL_MARKET, DEVELOPED_INTL,
+// EMERGING_INTL, FIXED_INCOME, ALTERNATIVES, CASH were required; the rest .default(0)).
+const REQUIRED_TARGET_CLASSES = new Set<AssetClass>([
+  'US_TOTAL_MARKET', 'DEVELOPED_INTL', 'EMERGING_INTL', 'FIXED_INCOME', 'ALTERNATIVES', 'CASH',
+]);
 
 export const positionSchema = z.object({
   accountId: z.string().min(1),
@@ -52,73 +60,37 @@ export const accountSchema = z.object({
   rmdDueUsd: z.number().nonnegative().optional(),
 });
 
-const targetsSchema = z.object({
-  US_TOTAL_MARKET:  z.number().min(0).max(1),
-  US_LARGE_CAP:     z.number().min(0).max(1).optional().default(0),
-  US_MID_CAP:       z.number().min(0).max(1).optional().default(0),
-  US_SMALL_CAP:     z.number().min(0).max(1).optional().default(0),
-  DEVELOPED_INTL:   z.number().min(0).max(1),
-  DEVELOPED_EUROPE: z.number().min(0).max(1).optional().default(0),
-  DEVELOPED_PACIFIC: z.number().min(0).max(1).optional().default(0),
-  EMERGING_INTL:    z.number().min(0).max(1),
-  FIXED_INCOME:     z.number().min(0).max(1),
-  US_TREASURY:      z.number().min(0).max(1).optional().default(0),
-  US_CORP_BOND:     z.number().min(0).max(1).optional().default(0),
-  MUNI_BOND:        z.number().min(0).max(1).optional().default(0),
-  TIPS:             z.number().min(0).max(1).optional().default(0),
-  INTL_BOND:        z.number().min(0).max(1).optional().default(0),
-  REAL_ESTATE:      z.number().min(0).max(1).optional().default(0),
-  ALTERNATIVES:     z.number().min(0).max(1),
-  CRYPTO:           z.number().min(0).max(1).optional().default(0),
-  PRECIOUS_METALS:  z.number().min(0).max(1).optional().default(0),
-  CASH:             z.number().min(0).max(1),
-}).refine(
+// Per-class target-weight schema, derived from ALL_ASSET_CLASSES (issue #127). Each
+// class is a 0..1 weight; the six REQUIRED_TARGET_CLASSES must be present, every other
+// class defaults to 0 when omitted — exactly the constraints the hand-written object
+// encoded before #127. The generic sum-refine (±0.001) below replaces the fully
+// spelled-out sum expression while preserving its tolerance precisely.
+//
+// The `as` cast restores the precise per-key shape that Object.fromEntries erases: the
+// output type is Record<AssetClass, number> (defaults fill every optional key), so the
+// inferred strategy still flows soundly into the engine's Strategy.targets (issue #113).
+const targetShape = Object.fromEntries(
+  ALL_ASSET_CLASSES.map(ac => {
+    const base = z.number().min(0).max(1);
+    return [ac, REQUIRED_TARGET_CLASSES.has(ac) ? base : base.optional().default(0)];
+  }),
+) as unknown as Record<AssetClass, z.ZodType<number, z.ZodTypeDef, number | undefined>>;
+
+const targetsSchema = z.object(targetShape).refine(
   t => {
-    const sum = t.US_TOTAL_MARKET + (t.US_LARGE_CAP ?? 0) + (t.US_MID_CAP ?? 0) + (t.US_SMALL_CAP ?? 0)
-              + t.DEVELOPED_INTL + (t.DEVELOPED_EUROPE ?? 0) + (t.DEVELOPED_PACIFIC ?? 0) + t.EMERGING_INTL
-              + t.FIXED_INCOME + (t.US_TREASURY ?? 0) + (t.US_CORP_BOND ?? 0) + (t.MUNI_BOND ?? 0)
-              + (t.TIPS ?? 0) + (t.INTL_BOND ?? 0)
-              + (t.REAL_ESTATE ?? 0)
-              + t.ALTERNATIVES + (t.CRYPTO ?? 0) + (t.PRECIOUS_METALS ?? 0) + t.CASH;
+    const sum = ALL_ASSET_CLASSES.reduce((s, ac) => s + ((t as Record<AssetClass, number>)[ac] ?? 0), 0);
     return Math.abs(sum - 1.0) <= 0.001;
   },
   { message: 'Target weights must sum to 1.0 (±0.001)' },
 );
 
 // Default placement for any asset class missing from an old saved strategy (issue #89
-// asset-location defaults). High-growth sleeves prefer tax-free (Roth/HSA), spilling to
-// tax-deferred then taxable; ordinary-income bond sleeves prefer tax-deferred
-// (Traditional/401k); munis stay taxable. These are *starting points* — the migration
-// in migrateStrategyTargets only backfills classes a saved strategy never specified, so
-// adopting these never overwrites an existing/imported selection (see that function).
-const DEFAULT_PLACEMENT: Record<string, string[]> = {
-  // Core/total-market and cap equity — highest-growth, prefer Roth.
-  US_TOTAL_MARKET:  ['TAX_FREE', 'TAX_DEFERRED', 'TAXABLE'],
-  US_LARGE_CAP:     ['TAX_FREE', 'TAX_DEFERRED', 'TAXABLE'],
-  US_MID_CAP:       ['TAX_FREE', 'TAX_DEFERRED', 'TAXABLE'],
-  US_SMALL_CAP:     ['TAX_FREE', 'TAX_DEFERRED', 'TAXABLE'],
-  // Emerging markets — highest expected growth/vol → Roth.
-  EMERGING_INTL:    ['TAX_FREE', 'TAX_DEFERRED', 'TAXABLE'],
-  // Developed intl — foreign-tax-credit value; prefer tax-deferred but keep taxable as a
-  // tier so the credit isn't stranded on spillover.
-  DEVELOPED_INTL:   ['TAX_DEFERRED', 'TAXABLE'],
-  DEVELOPED_EUROPE: ['TAX_DEFERRED', 'TAXABLE'],
-  DEVELOPED_PACIFIC: ['TAX_DEFERRED', 'TAXABLE'],
-  // FIXED_INCOME parent → taxable (muni intent). Subdivided: munis stay taxable;
-  // ordinary-income coupon sleeves (treasury/corp/tips/intl) prefer tax-deferred.
-  FIXED_INCOME:     ['TAXABLE'],
-  US_TREASURY:      ['TAX_DEFERRED', 'TAXABLE'],
-  US_CORP_BOND:     ['TAX_DEFERRED'],
-  MUNI_BOND:        ['TAXABLE'],
-  TIPS:             ['TAX_DEFERRED'],
-  INTL_BOND:        ['TAX_DEFERRED'],
-  // REITs — non-qualified dividends + growth → Roth, then tax-deferred.
-  REAL_ESTATE:      ['TAX_FREE', 'TAX_DEFERRED'],
-  ALTERNATIVES:     ['TAX_FREE', 'TAX_DEFERRED'],
-  CRYPTO:           ['TAX_FREE', 'TAX_DEFERRED'],
-  PRECIOUS_METALS:  ['TAX_FREE', 'TAX_DEFERRED'],
-  CASH:             ['TAXABLE', 'TAX_ADVANTAGED'],
-};
+// asset-location defaults). Single-sourced from the engine's DEFAULT_PLACEMENT (issues
+// #119, #127) so the migration backfill and DEFAULT_STRATEGY.placement can never drift
+// apart. These are *starting points* — the migration in migrateStrategyTargets only
+// backfills classes a saved strategy never specified, so adopting these never overwrites
+// an existing/imported selection (see that function).
+const DEFAULT_PLACEMENT: Record<string, string[]> = ENGINE_DEFAULT_PLACEMENT;
 
 // Migration: upgrades old saves when new asset classes are added.
 //   1. Targets: for each parent class in CLASS_HIERARCHY, if the parent has a
