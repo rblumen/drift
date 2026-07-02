@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **REVISIT_PLACEMENT now fires on balanced portfolios too** ([#114](https://github.com/rblumen/drift/issues/114)) — the "taxable assets exceed your Fixed Income target — revisit placement rules" heads-up was silently skipped whenever every asset class was within its tolerance band, because the engine returned early before the check ran. The flag is deliberately drift-independent (it signals that your *placement* strategy has expired, not that your allocation has drifted), so a perfectly balanced household 100% in taxable now sees it as intended.
+
 ## [0.1.0] - 2026-07-01
 
 ### Added
