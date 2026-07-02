@@ -77,6 +77,22 @@ export default function App() {
   );
 
   const loadFileRef = useRef<HTMLInputElement>(null);
+  const tabRefs = useRef<Record<Tab, HTMLButtonElement | null>>({} as Record<Tab, HTMLButtonElement | null>);
+
+  /** WAI-ARIA tabs pattern: Left/Right (and Home/End) move focus between tabs
+   *  and activate them (roving tabindex — only the active tab is tabbable). */
+  function handleTabKeyDown(e: React.KeyboardEvent, index: number) {
+    let next = index;
+    if (e.key === 'ArrowRight')      next = (index + 1) % TABS.length;
+    else if (e.key === 'ArrowLeft')  next = (index - 1 + TABS.length) % TABS.length;
+    else if (e.key === 'Home')       next = 0;
+    else if (e.key === 'End')        next = TABS.length - 1;
+    else return;
+    e.preventDefault();
+    const nextTab = TABS[next].id;
+    setActiveTab(nextTab);
+    tabRefs.current[nextTab]?.focus();
+  }
 
   const stateRef = useRef({ accounts, positions, strategy, tickerOverrides, decompositions, freeCash, plannedWithdrawal, reminder, isDemoMode });
   useEffect(() => {
@@ -332,6 +348,7 @@ export default function App() {
               </span>
               <button
                 onClick={() => setRestoredFromBackup(null)}
+                aria-label="Dismiss"
                 className="ml-3 text-amber-600 hover:text-amber-800 flex-shrink-0"
               >
                 ✕
@@ -343,18 +360,25 @@ export default function App() {
           {loadError && (
             <div className="mb-2 bg-red-50 border border-red-200 rounded px-3 py-2 text-xs text-red-700 flex items-center justify-between">
               <span>{loadError}</span>
-              <button onClick={() => setLoadError(null)} className="ml-3 text-red-400 hover:text-red-600">✕</button>
+              <button onClick={() => setLoadError(null)} aria-label="Dismiss" className="ml-3 text-red-400 hover:text-red-600">✕</button>
             </div>
           )}
 
           {/* ── Tab nav — active tab uses Anchor Blue (brand-600) ──
               overflow-x-auto keeps the six tabs on one scrollable row on
               narrow screens instead of overflowing the viewport (#142). */}
-          <nav className="flex gap-0 -mb-px overflow-x-auto no-scrollbar">
-            {TABS.map(tab => (
+          <nav className="flex gap-0 -mb-px overflow-x-auto no-scrollbar" role="tablist" aria-label="Workflow sections">
+            {TABS.map((tab, i) => (
               <button
                 key={tab.id}
+                ref={el => { tabRefs.current[tab.id] = el; }}
+                role="tab"
+                id={`tab-${tab.id}`}
+                aria-selected={activeTab === tab.id}
+                aria-controls={`panel-${tab.id}`}
+                tabIndex={activeTab === tab.id ? 0 : -1}
                 onClick={() => setActiveTab(tab.id)}
+                onKeyDown={e => handleTabKeyDown(e, i)}
                 className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap shrink-0
                   ${activeTab === tab.id
                     ? 'border-brand-600 text-brand-600'
@@ -379,7 +403,12 @@ export default function App() {
       </header>
 
       {/* ── Panel ──────────────────────────────────────────────────────────── */}
-      <main className="max-w-5xl mx-auto px-4 py-6">
+      <main
+        className="max-w-5xl mx-auto px-4 py-6"
+        role="tabpanel"
+        id={`panel-${activeTab}`}
+        aria-labelledby={`tab-${activeTab}`}
+      >
         {activeTab === 'overview' && (
           <OverviewPanel
             accounts={accounts}

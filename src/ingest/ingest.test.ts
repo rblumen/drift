@@ -126,6 +126,52 @@ describe('parseStrategy (sum-to-1 validation)', () => {
   });
 });
 
+// Guards the issue #127 refactor: targetsSchema is now generated from
+// ALL_ASSET_CLASSES via Object.fromEntries instead of a hand-typed object. These
+// lock in the behavior the hand-written schema had, so the derivation can never
+// silently relax field-level constraints (required classes, defaults, sum-refine).
+describe('parseStrategy (derived targets schema — issue #127)', () => {
+  it('rejects a strategy missing a required target class', () => {
+    // US_TOTAL_MARKET has no default — omitting it must fail (it was required
+    // before #127 and must stay required after).
+    const { US_TOTAL_MARKET: _omit, ...rest } = DEFAULT_STRATEGY.targets;
+    const bad = { ...DEFAULT_STRATEGY, targets: rest };
+    const r = safeParseStrategy(bad);
+    expect(r.ok).toBe(false);
+  });
+
+  it('defaults an omitted optional target class to 0', () => {
+    // US_LARGE_CAP carries .default(0); dropping it must not fail, and the parsed
+    // value must reappear as 0. Rebuild targets so the remaining weights still sum
+    // to 1.0 (fold US_LARGE_CAP's 0.385 back into US_TOTAL_MARKET).
+    const { US_LARGE_CAP, ...rest } = DEFAULT_STRATEGY.targets;
+    const targets = { ...rest, US_TOTAL_MARKET: rest.US_TOTAL_MARKET + US_LARGE_CAP };
+    const parsed = parseStrategy({ ...DEFAULT_STRATEGY, targets });
+    expect(parsed.targets.US_LARGE_CAP).toBe(0);
+  });
+
+  it('still enforces the sum refine after derivation (0.9 rejected)', () => {
+    // Scale every weight to 0.9 total — a config the old schema rejected and the
+    // generic reduce-based refine must keep rejecting.
+    const targets = Object.fromEntries(
+      Object.entries(DEFAULT_STRATEGY.targets).map(([k, v]) => [k, v * 0.9]),
+    ) as typeof DEFAULT_STRATEGY.targets;
+    const r = safeParseStrategy({ ...DEFAULT_STRATEGY, targets });
+    expect(r.ok).toBe(false);
+  });
+
+  it('strips unknown asset classes rather than accepting them', () => {
+    // z.object strips unknown keys; a bogus class must not survive into the parsed
+    // strategy (and must not be counted toward the sum). Fold its weight nowhere —
+    // adding it on top would also break the sum, so keep the valid targets intact.
+    const parsed = parseStrategy({
+      ...DEFAULT_STRATEGY,
+      targets: { ...DEFAULT_STRATEGY.targets, NOT_A_CLASS: 0.0 } as unknown as typeof DEFAULT_STRATEGY.targets,
+    });
+    expect('NOT_A_CLASS' in parsed.targets).toBe(false);
+  });
+});
+
 describe('parsePortfolio', () => {
   it('parses the sample-portfolio.json shape', () => {
     const raw = {

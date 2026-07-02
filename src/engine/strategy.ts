@@ -9,7 +9,41 @@
 // funds (IBIT, GLD, etc.) will see the children surface automatically via the
 // visibility rule in StrategyPanel.
 
-import type { Strategy } from './types';
+import type { AssetClass, PlacementTarget, Strategy } from './types';
+
+// Single source of truth for asset-location defaults (issues #89, #119). The ingest
+// schema (src/ingest/schema.ts) re-exports this as DEFAULT_PLACEMENT so the migration
+// backfill and the default strategy can never drift apart. High-growth sleeves prefer
+// tax-free (Roth/HSA), spilling to tax-deferred then taxable; ordinary-income bond
+// sleeves prefer tax-deferred (Traditional/401k); munis stay taxable. These are
+// *starting points* — the migration in migrateStrategyTargets only backfills classes a
+// saved strategy never specified, so adopting these never overwrites an existing choice.
+export const DEFAULT_PLACEMENT: Record<AssetClass, PlacementTarget[]> = {
+  // FIXED_INCOME parent — held as NY tax-free munis (e.g. MUNY) in taxable.
+  FIXED_INCOME:     ['TAXABLE'],
+  // Bond sub-classes: munis stay taxable; ordinary-income coupons → tax-deferred.
+  MUNI_BOND:        ['TAXABLE'],
+  US_TREASURY:      ['TAX_DEFERRED', 'TAXABLE'],
+  US_CORP_BOND:     ['TAX_DEFERRED'],
+  TIPS:             ['TAX_DEFERRED'],
+  INTL_BOND:        ['TAX_DEFERRED'],
+  // Alternatives — high-growth/high-vol; prefer Roth, then tax-deferred.
+  ALTERNATIVES:     ['TAX_FREE', 'TAX_DEFERRED'],
+  CRYPTO:           ['TAX_FREE', 'TAX_DEFERRED'],
+  PRECIOUS_METALS:  ['TAX_FREE', 'TAX_DEFERRED'],
+  // REITs — non-qualified dividends + growth → Roth, then tax-deferred.
+  REAL_ESTATE:      ['TAX_FREE', 'TAX_DEFERRED'],
+  // Equities prefer tax-free; spill to tax-deferred then taxable as capacity is exhausted.
+  EMERGING_INTL:    ['TAX_FREE', 'TAX_DEFERRED', 'TAXABLE'],
+  DEVELOPED_INTL:   ['TAX_DEFERRED', 'TAXABLE'],
+  DEVELOPED_EUROPE: ['TAX_DEFERRED', 'TAXABLE'],
+  DEVELOPED_PACIFIC: ['TAX_DEFERRED', 'TAXABLE'],
+  US_TOTAL_MARKET:  ['TAX_FREE', 'TAX_DEFERRED', 'TAXABLE'],
+  US_LARGE_CAP:     ['TAX_FREE', 'TAX_DEFERRED', 'TAXABLE'],
+  US_MID_CAP:       ['TAX_FREE', 'TAX_DEFERRED', 'TAXABLE'],
+  US_SMALL_CAP:     ['TAX_FREE', 'TAX_DEFERRED', 'TAXABLE'],
+  CASH:             ['TAXABLE', 'TAX_ADVANTAGED'],
+};
 
 export const DEFAULT_STRATEGY: Strategy = {
   targets: {
@@ -43,32 +77,8 @@ export const DEFAULT_STRATEGY: Strategy = {
   // Asset-location defaults (issue #89): high-growth sleeves prefer tax-free (Roth/HSA),
   // ordinary-income bond sleeves prefer tax-deferred (Traditional/401k), munis stay
   // taxable. Targets that don't exist in a given household are skipped without penalty.
-  placement: {
-    // FIXED_INCOME parent — held as NY tax-free munis (e.g. MUNY) in taxable.
-    FIXED_INCOME:     ['TAXABLE'],
-    // Bond sub-classes: munis stay taxable; ordinary-income coupons → tax-deferred.
-    MUNI_BOND:        ['TAXABLE'],
-    US_TREASURY:      ['TAX_DEFERRED', 'TAXABLE'],
-    US_CORP_BOND:     ['TAX_DEFERRED'],
-    TIPS:             ['TAX_DEFERRED'],
-    INTL_BOND:        ['TAX_DEFERRED'],
-    // Alternatives — high-growth/high-vol; prefer Roth, then tax-deferred.
-    ALTERNATIVES:     ['TAX_FREE', 'TAX_DEFERRED'],
-    CRYPTO:           ['TAX_FREE', 'TAX_DEFERRED'],
-    PRECIOUS_METALS:  ['TAX_FREE', 'TAX_DEFERRED'],
-    // REITs — non-qualified dividends + growth → Roth, then tax-deferred.
-    REAL_ESTATE:      ['TAX_FREE', 'TAX_DEFERRED'],
-    // Equities prefer tax-free; spill to tax-deferred then taxable as capacity is exhausted.
-    EMERGING_INTL:    ['TAX_FREE', 'TAX_DEFERRED', 'TAXABLE'],
-    DEVELOPED_INTL:   ['TAX_DEFERRED', 'TAXABLE'],
-    DEVELOPED_EUROPE: ['TAX_DEFERRED', 'TAXABLE'],
-    DEVELOPED_PACIFIC: ['TAX_DEFERRED', 'TAXABLE'],
-    US_TOTAL_MARKET:  ['TAX_FREE', 'TAX_DEFERRED', 'TAXABLE'],
-    US_LARGE_CAP:     ['TAX_FREE', 'TAX_DEFERRED', 'TAXABLE'],
-    US_MID_CAP:       ['TAX_FREE', 'TAX_DEFERRED', 'TAXABLE'],
-    US_SMALL_CAP:     ['TAX_FREE', 'TAX_DEFERRED', 'TAXABLE'],
-    CASH:             ['TAXABLE', 'TAX_ADVANTAGED'],
-  },
+  // Sourced from DEFAULT_PLACEMENT above so this and the ingest migration stay in sync.
+  placement: DEFAULT_PLACEMENT,
   toleranceAbs: 0.05,
   toleranceRel: 0.25,
   // Aim to land within half the trigger band once a rebalance fires (issue #42),

@@ -105,11 +105,20 @@ export function HowItWorksDrawer({ open, onClose }: Props) {
         }`}
       />
 
-      {/* Panel */}
+      {/* Panel.
+          When closed the panel is only slid off-screen (translate-x-full), so
+          without `inert`/`aria-hidden` its Close button and links stay tabbable
+          and announced — a keyboard/SR user could land inside an invisible
+          dialog. Marking it inert + hidden when closed removes everything inside
+          from the tab order and the accessibility tree. `inert` is spread
+          conditionally because React 18 doesn't treat it as a managed boolean
+          (any value, including "false", activates it). */}
       <aside
         role="dialog"
         aria-modal="true"
         aria-label="How it works"
+        aria-hidden={open ? undefined : true}
+        {...(open ? {} : { inert: '' })}
         className={`fixed top-0 right-0 z-50 h-screen w-[min(560px,94vw)] bg-[#fbfcfd] border-l border-gray-200 shadow-[-30px_0_60px_-30px_rgba(17,22,29,0.45)] flex flex-col transition-transform duration-300 ease-out ${
           open ? 'translate-x-0' : 'translate-x-full'
         }`}

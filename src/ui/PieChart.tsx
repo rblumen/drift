@@ -39,6 +39,13 @@ export function PieChart({ slices, title, size = 112 }: Props) {
   const r  = size / 2 - 6;
   let cursor = 0;
 
+  // Screen-reader summary: the per-slice <title>s are only reachable on hover,
+  // so give the chart a single text alternative describing every slice.
+  const summary = slices
+    .map(sl => `${sl.label} ${((sl.value / total) * 100).toFixed(0)}%`)
+    .join(', ');
+  const ariaLabel = `${title ? `${title}. ` : ''}Allocation: ${summary}`;
+
   return (
     <div className="space-y-2">
       {title && (
@@ -46,7 +53,7 @@ export function PieChart({ slices, title, size = 112 }: Props) {
       )}
       <div className="flex items-center gap-5">
         {/* SVG pie */}
-        <svg width={size} height={size} className="shrink-0">
+        <svg width={size} height={size} className="shrink-0" role="img" aria-label={ariaLabel}>
           {slices.map((sl, i) => {
             const deg  = (sl.value / total) * 360;
             const path = slicePath(cx, cy, r, cursor, cursor + deg);

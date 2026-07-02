@@ -404,6 +404,7 @@ export function ClassifyPanel({
                           <select
                             value=""
                             onChange={e => { if (e.target.value) assign(row.ticker, e.target.value as AssetClass); }}
+                            aria-label={`Assign asset class to ${row.ticker}`}
                             className={`text-xs border rounded px-1.5 py-0.5 bg-white ${tdfDetect ? 'border-gray-200 text-gray-500' : 'border-amber-300 text-gray-700'}`}
                           >
                             <option value="">{tdfDetect ? 'or single class…' : '— select class —'}</option>
@@ -491,6 +492,7 @@ export function ClassifyPanel({
                               onClick={() => removeDecomp(row.ticker)}
                               className="text-xs text-gray-400 hover:text-red-500 border border-gray-200 rounded px-2 py-0.5 hover:bg-red-50"
                               title="Remove decomposition"
+                              aria-label={`Remove decomposition for ${row.ticker}`}
                             >
                               ✕
                             </button>
@@ -543,6 +545,7 @@ export function ClassifyPanel({
                             <select
                               value={row.effective ?? ''}
                               onChange={e => assign(row.ticker, e.target.value as AssetClass | '')}
+                              aria-label={`Asset class for ${row.ticker}`}
                               className="border border-gray-200 rounded px-2 py-1 text-sm bg-transparent"
                             >
                               <ClassOptions />
@@ -558,6 +561,7 @@ export function ClassifyPanel({
                                   onClick={() => assign(row.ticker, '')}
                                   className="hover:text-red-500"
                                   title="Revert to built-in"
+                                  aria-label={`Revert ${row.ticker} to the built-in classification`}
                                 >✕</button>
                               )}
                             </span>
