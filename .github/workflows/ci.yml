@@ -8,7 +8,7 @@ on:
 
 jobs:
   test:
-    name: Unit tests
+    name: Build & test
     runs-on: ubuntu-latest
 
     steps:
@@ -22,5 +22,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Type-check first for a fast, clearly-labelled failure before the
+      # slower test and build steps. Uses `tsc -b` because the solution-style
+      # tsconfig makes plain `tsc` a no-op (see issue #113).
+      - name: Type check
+        run: npx tsc -b
+
       - name: Run tests
         run: npm test
+
+      # Production build gates the merge on a working Vite build. `npm run
+      # build` also runs `tsc -b`, so a type regression fails here too.
+      - name: Build
+        run: npm run build
