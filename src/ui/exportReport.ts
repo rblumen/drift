@@ -246,7 +246,9 @@ function script(reportId: string): string {
 
 // ── Main builder ──────────────────────────────────────────────────────────────
 
-function buildHtml(result: RebalanceResult, accounts: Account[], resolvedTrades: ResolvedTrade[], freeCash: number, plannedWithdrawal: number, now: Date): string {
+// Exported (in addition to the DOM-triggering downloadReport below) so tests can
+// assert on the generated markup without a DOM/Blob/URL environment (issue #130).
+export function buildHtml(result: RebalanceResult, accounts: Account[], resolvedTrades: ResolvedTrade[], freeCash: number, plannedWithdrawal: number, now: Date): string {
   const {
     householdValue, currentWeights, targetWeights, projectedWeights,
     nativeValueByAccount, projectedNativeValueByAccount, withdrawalByAccount, depositByAccount, trades, flags,
