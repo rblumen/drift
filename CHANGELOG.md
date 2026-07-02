@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Test coverage for the downloadable report and display formatting ([#130](https://github.com/rblumen/drift/issues/130)) — `src/ui/fmt.ts` (currency/percent/share formatting and label/color lookup tables) and the pure HTML-generation logic in `src/ui/exportReport.ts` now have unit tests covering trades, taxable-sale and placement flags, cash/withdrawal sections, locked accounts, and HTML escaping.
+
 ### Fixed
 
 - **Trust-strip border is now a subtle hairline instead of a dark line** ([#143](https://github.com/rblumen/drift/issues/143)) — the `--line-2` CSS variable used by the landing-page trust strip was never defined, so the border resolved to the inherited body text color (`#2a3441`) and rendered as a heavy ink line. Both `--line` and `--line-2` are now defined as `#e5e8ee` in `:root`.
