@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Asset-class schema and defaults now derive from a single source of truth** ([#127](https://github.com/rblumen/drift/issues/127), [#119](https://github.com/rblumen/drift/issues/119)) — the strategy target-weight schema, its asset-class enum, and the default asset-location table were previously hand-maintained copies that had to be edited in lockstep with the engine's `ALL_ASSET_CLASSES` list. They are now generated from that one list, so adding an asset class is a small, two-file change instead of a six-structure edit, and the ingest migration's default placements can no longer drift from the default strategy. No behavior change — validation (including the target-weights-must-sum-to-1.0 rule) and defaults are identical.
+
 ### Fixed
 
 - **Trust-strip border is now a subtle hairline instead of a dark line** ([#143](https://github.com/rblumen/drift/issues/143)) — the `--line-2` CSS variable used by the landing-page trust strip was never defined, so the border resolved to the inherited body text color (`#2a3441`) and rendered as a heavy ink line. Both `--line` and `--line-2` are now defined as `#e5e8ee` in `:root`.
