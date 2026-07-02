@@ -415,6 +415,13 @@ export default function App() {
             setStrategy={setStrategy}
             accounts={accounts}
             currentWeights={result.currentWeights}
+            // Intentionally the NOMINAL projected view, not result.taxAdjusted.projectedWeights.
+            // The compare bars show the stated target (pre-tax) against the nominal allocation
+            // the engine must hold to hit that target in after-tax dollars — i.e. the gross-up.
+            // result.taxAdjusted.projectedWeights is the after-tax projected view, which by
+            // construction converges back onto strategy.targets, so wiring it here would collapse
+            // the two bars into one. Verified as-designed against issue #7; do not "fix" to
+            // taxAdjusted.projectedWeights (audit finding m11 / issue #125).
             taxAdjustedTargetWeights={result.taxAdjusted ? result.projectedWeights : undefined}
           />
         )}
