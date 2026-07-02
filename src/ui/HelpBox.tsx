@@ -16,19 +16,19 @@ export function HelpBox({ label = 'About this step', children, defaultOpen = fal
   const [open, setOpen] = useState(defaultOpen);
 
   return (
-    <div className="border border-indigo-100 rounded-lg bg-indigo-50/40 text-sm">
+    <div className="border border-brand-100 rounded-lg bg-brand-50/40 text-sm">
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center gap-2 px-4 py-2.5 text-left text-indigo-700 hover:bg-indigo-50 rounded-lg transition-colors"
+        className="w-full flex items-center gap-2 px-4 py-2.5 text-left text-brand-700 hover:bg-brand-50 rounded-lg transition-colors"
       >
-        <span className="text-indigo-400 text-base leading-none select-none">ℹ</span>
+        <span className="text-brand-400 text-base leading-none select-none">ℹ</span>
         <span className="font-medium text-xs tracking-wide flex-1">{label}</span>
-        <span className="text-indigo-300 text-xs select-none">{open ? '▾' : '▸'}</span>
+        <span className="text-brand-300 text-xs select-none">{open ? '▾' : '▸'}</span>
       </button>
 
       {open && (
-        <div className="px-4 pb-4 pt-1 space-y-3 text-gray-600 text-xs leading-relaxed border-t border-indigo-100">
+        <div className="px-4 pb-4 pt-1 space-y-3 text-gray-600 text-xs leading-relaxed border-t border-brand-100">
           {children}
         </div>
       )}
@@ -124,8 +124,8 @@ export function HelpTip({ children, dir = 'up' }: TipProps) {
           w-3.5 h-3.5 rounded-full text-[9px] font-bold leading-none
           select-none transition-colors
           ${open
-            ? 'bg-indigo-500 text-white'
-            : 'bg-gray-200 text-gray-500 hover:bg-indigo-400 hover:text-white'
+            ? 'bg-brand-500 text-white'
+            : 'bg-gray-200 text-gray-500 hover:bg-brand-400 hover:text-white'
           }
         `}
         aria-label="Help"

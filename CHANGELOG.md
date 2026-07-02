@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Trust-strip border is now a subtle hairline instead of a dark line** ([#143](https://github.com/rblumen/drift/issues/143)) — the `--line-2` CSS variable used by the landing-page trust strip was never defined, so the border resolved to the inherited body text color (`#2a3441`) and rendered as a heavy ink line. Both `--line` and `--line-2` are now defined as `#e5e8ee` in `:root`.
+
+- **HelpBox and "How It Works" drawer pill now use brand blue instead of indigo** ([#144](https://github.com/rblumen/drift/issues/144)) — `HelpBox` (shown on every tab) and the "Primary objectives" tier pill in the How It Works drawer were still styled with Tailwind's `indigo-*` palette after the app-wide brand-blue rollout. Both now use the `brand-*` tokens defined in `tailwind.config.js`.
+
 - **The app no longer breaks on mobile screens** ([#142](https://github.com/rblumen/drift/issues/142)) — on narrow (phone-width) viewports the tab bar overflowed and made the whole page scroll sideways, the "How it works" button was hidden with no way to reach it, and wide data tables were either clipped or pushed the page off-screen. The tab bar now scrolls horizontally on its own, "How it works" stays reachable as an icon button (its label just hides on small screens), every data table scrolls within its own container, and the Results/Import/Classify multi-column layouts stack into a single column. The header's household value and last-saved time (both also shown on the Overview tab) are hidden on mobile to keep the header on one row.
 
 - **Fonts are now self-hosted instead of loaded from Google** ([#115](https://github.com/rblumen/drift/issues/115)) — `index.html` pulled Schibsted Grotesk and IBM Plex Mono from `fonts.googleapis.com`/`fonts.gstatic.com` on every page load, sending the user's IP and user agent to Google despite the landing page and README promising no network calls and no telemetry. Both font families now ship locally via `@fontsource`, and the Google Fonts `<link>`/`preconnect` tags are gone.

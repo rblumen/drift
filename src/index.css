@@ -19,6 +19,8 @@
     --accent: #e8600a;
     --ink: #2a3441;
     --paper: #fbfcfd;
+    --line: #e5e8ee;
+    --line-2: #e5e8ee;
 
     /* Data-viz family anchors. The full per-asset-class map still lives in
        src/ui/fmt.ts — these are just the five top-level families, handy for
