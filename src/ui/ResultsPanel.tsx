@@ -637,12 +637,12 @@ function NextStepsSection({
             <button
               onClick={() => downloadReport(result, accounts, resolvedTrades, freeCash, plannedWithdrawal)}
               className="inline-flex items-center gap-1.5 bg-brand text-white text-[12.5px] font-semibold px-3.5 py-1.5 rounded-lg hover:bg-brand-ink transition-colors">
-              \u2193 Trade report
+              ↓ Trade report
             </button>
             {onSave && (
               <button onClick={onSave}
                 className="inline-flex items-center gap-1.5 border border-gray-200 text-gray-600 text-[12.5px] font-medium px-3.5 py-1.5 rounded-lg hover:border-gray-400 transition-colors">
-                \u2193 Portfolio file
+                ↓ Portfolio file
               </button>
             )}
           </div>
