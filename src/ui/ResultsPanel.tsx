@@ -24,6 +24,7 @@ import { downloadReport } from './exportReport';
 import { HelpBox, HelpDef, HelpSection, HelpTip } from './HelpBox';
 import type { Reminder } from '../ingest/schema';
 import { ReminderPanel, daysUntil } from './ReminderPanel';
+import { DRIFT_URL as SHARE_URL } from './site';
 
 // ── Brand palette helpers ─────────────────────────────────────────────────────
 // Using CSS custom props where possible so they respect any overrides in
@@ -373,7 +374,8 @@ function ContributionSummary({ summary }: { summary: RebalanceResult['contributi
 
 // ── Share popover (desktop) / native share (mobile) ─────────────────────────
 
-const SHARE_URL  = 'https://drift.app';
+// SHARE_URL is the canonical deployment URL, imported above from ./site so
+// share links and the calendar reminder can never diverge (issue #116).
 const SHARE_TEXT = 'Drift — free DIY portfolio rebalancer. Runs entirely in your browser, no account needed.';
 
 const IcoX = () => (

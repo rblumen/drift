@@ -10,7 +10,8 @@
  *  - DESCRIPTION includes the tool URL so the user can re-open Drift directly.
  */
 
-export const DRIFT_URL = 'https://drift-rebalance.vercel.app/';
+import { DRIFT_URL } from './site';
+export { DRIFT_URL };
 
 const APP_NAME = 'Drift Rebalancer';
 
