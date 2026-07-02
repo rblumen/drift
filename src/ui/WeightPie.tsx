@@ -53,7 +53,7 @@ export function WeightPie({ slices, size = 180 }: Props) {
 
   if (segments.length === 0) {
     return (
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label="Target allocation: no targets set">
         <circle cx={cx} cy={cy} r={r} fill="#e5e7eb" />
         <text x={cx} y={cy + 4} textAnchor="middle" fontSize={10} fill="#9ca3af">
           no targets set
@@ -62,8 +62,13 @@ export function WeightPie({ slices, size = 180 }: Props) {
     );
   }
 
+  // Screen-reader summary: per-slice <title>s only surface on hover.
+  const ariaLabel = `Target allocation: ${segments
+    .map(seg => `${seg.label} ${fmtPct(seg.weight)}`)
+    .join(', ')}`;
+
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label={ariaLabel}>
       {segments.map(seg => (
         <path
           key={seg.label}

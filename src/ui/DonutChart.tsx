@@ -50,11 +50,25 @@ export function DonutChart({ inner, outer, size = 180 }: Props) {
 
   const hasInner = innerSegs.some(s => s.weight > 0);
 
+  // Screen-reader summary: per-slice <title>s only surface on hover, so describe
+  // both rings (current vs. target) in one text alternative.
+  const targetSummary = outer
+    .filter(s => s.weight > 0.0005)
+    .map(s => `${s.label} ${fmtPct(s.weight)}`)
+    .join(', ');
+  const currentSummary = inner
+    .filter(s => s.weight > 0.0005)
+    .map(s => `${s.label} ${fmtPct(s.weight)}`)
+    .join(', ');
+  const ariaLabel = hasInner
+    ? `Current vs. target allocation. Target: ${targetSummary}. Current: ${currentSummary}.`
+    : `Target allocation: ${targetSummary}.`;
+
   return (
     <div className="flex items-start gap-6">
       {/* SVG */}
       <div className="relative shrink-0">
-        <svg width={size} height={size}>
+        <svg width={size} height={size} role="img" aria-label={ariaLabel}>
           {/* Gray tracks */}
           <circle cx={cx} cy={cy} r={innerR} fill="none" stroke="#e5e7eb" strokeWidth={sw} />
           <circle cx={cx} cy={cy} r={outerR} fill="none" stroke="#e5e7eb" strokeWidth={sw} />

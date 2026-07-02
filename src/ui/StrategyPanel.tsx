@@ -746,6 +746,7 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
                               max="100"
                               onChange={e => setWeights({ ...weights, [ac]: e.target.value })}
                               onBlur={commitWeights}
+                              aria-label={`${AC_LABEL[ac]} target weight (%)`}
                               className="w-16 border rounded px-2 py-1 text-right text-sm"
                             />
                             <span className="text-gray-400 text-xs">%</span>
@@ -839,6 +840,7 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
                               max="100"
                               onChange={e => handleCompositeChange(ac, e.target.value)}
                               onBlur={commitWeights}
+                              aria-label={`${AC_LABEL[ac]} combined target weight (%)`}
                               className="w-16 border rounded px-2 py-1 text-right text-sm"
                             />
                           ) : isExpanded ? (
@@ -848,6 +850,7 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
                               readOnly
                               disabled
                               title={`Sum of ${subs.map(s => AC_LABEL[s]).join(' + ')} targets`}
+                              aria-label={`${AC_LABEL[ac]} target weight, sum of sub-classes (%)`}
                               className="w-16 border border-gray-100 rounded px-2 py-1 text-right text-sm text-gray-400 bg-transparent cursor-not-allowed"
                             />
                           ) : (
@@ -859,6 +862,7 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
                               max="100"
                               onChange={e => setWeights({ ...weights, [ac]: e.target.value })}
                               onBlur={commitWeights}
+                              aria-label={`${AC_LABEL[ac]} target weight (%)`}
                               className="w-16 border rounded px-2 py-1 text-right text-sm"
                             />
                           )}
@@ -887,6 +891,7 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
                               value={weights[sub]}
                               readOnly
                               disabled
+                              aria-label={`${AC_LABEL[sub]} target weight (%)`}
                               className="w-16 border border-gray-100 rounded px-2 py-0.5 text-right text-xs text-gray-400 bg-transparent cursor-not-allowed"
                             />
                           ) : (
@@ -898,6 +903,7 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
                               max="100"
                               onChange={e => setWeights({ ...weights, [sub]: e.target.value })}
                               onBlur={commitWeights}
+                              aria-label={`${AC_LABEL[sub]} target weight (%)`}
                               className="w-16 border rounded px-2 py-0.5 text-right text-xs"
                             />
                           )}
@@ -1051,6 +1057,7 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
                         <select
                           value={noPreference ? NO_PREF : (buckets[0] ?? 'TAX_ADVANTAGED')}
                           onChange={e => updatePlacement(cls, 0, e.target.value as PlacementTarget | typeof NO_PREF)}
+                          aria-label={`${AC_LABEL[cls]} — 1st placement choice`}
                           className="border border-gray-200 rounded px-2 py-1 text-sm bg-white hover:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
                         >
                           <option value={NO_PREF}>No preference</option>
@@ -1066,6 +1073,7 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
                           <select
                             value={buckets[1] ?? ''}
                             onChange={e => updatePlacement(cls, 1, e.target.value as PlacementTarget | '')}
+                            aria-label={`${AC_LABEL[cls]} — 2nd placement choice`}
                             className="border border-gray-200 rounded px-2 py-1 text-sm bg-white hover:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400 text-gray-500"
                           >
                             <option value="">— none —</option>
@@ -1114,6 +1122,7 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
                 max="20"
                 onChange={e => setTolerance(e.target.value)}
                 onBlur={commitWeights}
+                aria-label="Absolute tolerance (percentage points)"
                 className="w-20 border rounded px-2 py-1.5 text-sm text-right"
               />
               <span className="text-gray-400 text-xs">pp</span>
@@ -1141,6 +1150,7 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
                 max="100"
                 onChange={e => setToleranceRel(e.target.value)}
                 onBlur={commitWeights}
+                aria-label="Relative tolerance (percent of target)"
                 className="w-20 border rounded px-2 py-1.5 text-sm text-right"
               />
               <span className="text-gray-400 text-xs">%</span>
@@ -1167,6 +1177,7 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
                 min="0"
                 onChange={e => setMinTrade(e.target.value)}
                 onBlur={commitWeights}
+                aria-label="Minimum trade size (dollars)"
                 className="w-24 border rounded px-2 py-1.5 text-sm text-right"
               />
             </div>
@@ -1195,6 +1206,7 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
                 max="100"
                 onChange={e => setTargetFraction(e.target.value)}
                 onBlur={commitWeights}
+                aria-label="Rebalance target band (percent of tolerance)"
                 className="w-20 border rounded px-2 py-1.5 text-sm text-right"
               />
               <span className="text-gray-400 text-xs">%</span>
