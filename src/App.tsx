@@ -217,8 +217,11 @@ export default function App() {
             </div>
 
             <div className="flex items-center gap-3">
+              {/* Household value + save time are also in the Overview status
+                  strip, so hide them here on mobile to keep the header on one
+                  row (#142). */}
               {result.householdValue > 0 && (
-                <span className="text-sm text-gray-500 font-mono tabular-nums">
+                <span className="hidden sm:inline text-sm text-gray-500 font-mono tabular-nums">
                   {fmtUsd(result.householdValue)}
                 </span>
               )}
@@ -226,7 +229,7 @@ export default function App() {
               {/* Autosave indicator */}
               {lastSavedAt && (accounts.length > 0 || positions.length > 0) && (
                 <span
-                  className="text-xs text-gray-400 tabular-nums"
+                  className="hidden sm:inline text-xs text-gray-400 tabular-nums"
                   title={`Last saved at ${lastSavedAt.toLocaleTimeString()}`}
                 >
                   ✓ Saved {fmtSavedTime(lastSavedAt)}
@@ -265,17 +268,20 @@ export default function App() {
                 />
               </div>
 
+              {/* Icon-only on mobile (label hidden < sm) so the drawer stays
+                  reachable on phones (#142). */}
               <button
                 onClick={() => setHowItWorksOpen(true)}
                 title="How Drift works"
-                className="hidden sm:flex items-center gap-1.5 text-xs text-gray-600 hover:text-gray-900 border border-gray-200 rounded px-2.5 py-1 hover:border-brand-200 hover:bg-brand-50 transition-colors"
+                aria-label="How it works"
+                className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-gray-900 border border-gray-200 rounded px-2 sm:px-2.5 py-1 hover:border-brand-200 hover:bg-brand-50 transition-colors flex-shrink-0"
               >
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
                   <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.4" />
                   <path d="M8 7v4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
                   <circle cx="8" cy="4.7" r="1" fill="currentColor" />
                 </svg>
-                How it works
+                <span className="hidden sm:inline">How it works</span>
               </button>
             </div>
           </div>
@@ -338,13 +344,15 @@ export default function App() {
             </div>
           )}
 
-          {/* ── Tab nav — active tab uses Anchor Blue (brand-600) ── */}
-          <nav className="flex gap-0 -mb-px">
+          {/* ── Tab nav — active tab uses Anchor Blue (brand-600) ──
+              overflow-x-auto keeps the six tabs on one scrollable row on
+              narrow screens instead of overflowing the viewport (#142). */}
+          <nav className="flex gap-0 -mb-px overflow-x-auto no-scrollbar">
             {TABS.map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap
+                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap shrink-0
                   ${activeTab === tab.id
                     ? 'border-brand-600 text-brand-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'

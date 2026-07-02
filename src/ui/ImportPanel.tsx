@@ -581,7 +581,7 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
             Preview — {preview.length} position{preview.length !== 1 ? 's' : ''} parsed
           </h3>
           <div className="overflow-hidden border border-gray-200 rounded-lg">
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto"><table className="w-full text-sm">
               <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
                 <tr>
                   <th className="px-3 py-2 text-left">Ticker</th>
@@ -602,7 +602,7 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           </div>
           <div className="flex gap-2">
             <button
@@ -699,7 +699,7 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
           <h3 className="text-sm font-medium text-gray-700 border-t pt-4">Loaded positions</h3>
 
           {/* Pie charts: by account and by account type */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="border border-gray-200 rounded-lg p-4">
               <PieChart
                 title="By account"
@@ -754,7 +754,7 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
 
                 {/* Position rows — hidden when collapsed */}
                 {isOpen && (
-                  <table className="w-full text-sm">
+                  <div className="overflow-x-auto"><table className="w-full text-sm">
                     <tbody className="divide-y divide-gray-100">
                       {rows.map(({ pos: p, posIdx }) => (
                         <tr key={posIdx} className={`hover:bg-gray-50 ${p.locked ? 'opacity-60' : ''}`}>
@@ -872,7 +872,7 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
                         </tr>
                       ))}
                     </tbody>
-                  </table>
+                  </table></div>
                 )}
               </div>
             );

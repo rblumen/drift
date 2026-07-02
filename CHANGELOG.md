@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The app no longer breaks on mobile screens** ([#142](https://github.com/rblumen/drift/issues/142)) — on narrow (phone-width) viewports the tab bar overflowed and made the whole page scroll sideways, the "How it works" button was hidden with no way to reach it, and wide data tables were either clipped or pushed the page off-screen. The tab bar now scrolls horizontally on its own, "How it works" stays reachable as an icon button (its label just hides on small screens), every data table scrolls within its own container, and the Results/Import/Classify multi-column layouts stack into a single column. The header's household value and last-saved time (both also shown on the Overview tab) are hidden on mobile to keep the header on one row.
+
 - **Fonts are now self-hosted instead of loaded from Google** ([#115](https://github.com/rblumen/drift/issues/115)) — `index.html` pulled Schibsted Grotesk and IBM Plex Mono from `fonts.googleapis.com`/`fonts.gstatic.com` on every page load, sending the user's IP and user agent to Google despite the landing page and README promising no network calls and no telemetry. Both font families now ship locally via `@fontsource`, and the Google Fonts `<link>`/`preconnect` tags are gone.
 
 - **Results "next steps" download buttons no longer show a literal escape code** ([#141](https://github.com/rblumen/drift/issues/141)) — the "Trade report" and "Portfolio file" buttons displayed the raw text `↓` instead of a down-arrow, since JSX text content doesn't interpret escape sequences. Both buttons now render the actual `↓` character, matching the header's Save/Load buttons.

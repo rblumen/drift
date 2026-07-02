@@ -40,3 +40,15 @@
   /* Tabular figures everywhere numbers matter look better with this on the
      mono face; opt-in via `font-mono` as you already do. */
 }
+
+@layer utilities {
+  /* Horizontal-scroll containers (e.g. the tab nav on mobile) that should
+     scroll without showing a scrollbar (#142). */
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}

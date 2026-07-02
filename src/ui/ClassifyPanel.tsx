@@ -348,7 +348,7 @@ export function ClassifyPanel({
 
       {/* ── Charts ─────────────────────────────────────────────────────────── */}
       {acSlices.length > 0 && (
-        <div className="grid grid-cols-[auto_1fr] gap-4 items-start">
+        <div className="grid grid-cols-1 sm:grid-cols-[auto_1fr] gap-4 items-start">
           {/* Asset-class pie */}
           <div className="border border-gray-200 rounded-lg p-4">
             <PieChart title="By asset class" slices={acSlices} />
@@ -439,7 +439,7 @@ export function ClassifyPanel({
         <div className="space-y-2">
           <h3 className="text-sm font-medium text-gray-600">Blended funds</h3>
           <div className="overflow-hidden border border-brand-200 rounded-lg">
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto"><table className="w-full text-sm">
               <thead className="bg-brand-50 text-xs text-brand-600 uppercase tracking-wide border-b border-brand-200">
                 <tr>
                   <th className="px-4 py-2 text-left">Ticker</th>
@@ -501,7 +501,7 @@ export function ClassifyPanel({
                   );
                 })}
               </tbody>
-            </table>
+            </table></div>
           </div>
           <p className="text-xs text-gray-400">
             Blended funds count toward allocation totals but are excluded from trade suggestions — their sub-components can't be traded individually.
@@ -516,7 +516,7 @@ export function ClassifyPanel({
             <h3 className="text-sm font-medium text-gray-600">Classified holdings</h3>
           )}
           <div className="overflow-hidden border border-gray-200 rounded-lg">
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto"><table className="w-full text-sm">
               <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
                 <tr>
                   <th className="px-4 py-2 text-left">Ticker</th>
@@ -600,7 +600,7 @@ export function ClassifyPanel({
                   );
                 })}
               </tbody>
-            </table>
+            </table></div>
           </div>
           <p className="text-xs text-gray-400">
             Changing the class dropdown overrides the built-in map; removing an override (✕) reverts it.
