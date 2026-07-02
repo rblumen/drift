@@ -867,6 +867,7 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
                               onClick={() => setPositions(positions.filter((_, idx) => idx !== posIdx))}
                               className="text-gray-300 hover:text-red-400 text-xs"
                               title="Remove"
+                              aria-label={`Remove ${p.ticker}`}
                             >✕</button>
                           </td>
                         </tr>

@@ -207,6 +207,7 @@ function WithdrawalControl({
             value={rmd}
             onChange={e => onRmdChange(e.target.value)}
             placeholder="RMD"
+            aria-label="Required minimum distribution (dollars)"
             className="w-24 border rounded px-1.5 py-0.5 text-xs"
           />
           <span className="text-gray-400">RMD due</span>
@@ -525,6 +526,7 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
               }
             }}
             placeholder="e.g. 5000"
+            aria-label="Planned deposits (dollars)"
             className="w-full border rounded px-2 py-1 text-sm"
           />
           {freeCash > 0 && (
@@ -560,6 +562,7 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
               }
             }}
             placeholder="e.g. 20000"
+            aria-label="Additional withdrawal (dollars)"
             className="w-full border rounded px-2 py-1 text-sm"
           />
           {totalWithdrawal > 0 && (
@@ -664,6 +667,7 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
                             <input
                               value={editForm.name}
                               onChange={e => setEditForm({ ...editForm, name: e.target.value })}
+                              aria-label="Account name"
                               className="w-full border rounded px-2 py-1 text-sm"
                               autoFocus
                             />
@@ -673,6 +677,7 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
                             <select
                               value={editForm.institution}
                               onChange={e => setEditForm({ ...editForm, institution: e.target.value })}
+                              aria-label="Institution"
                               className="w-full border rounded px-2 py-1 text-sm"
                             >
                               {INSTITUTIONS.map(i => <option key={i}>{i}</option>)}
@@ -683,6 +688,7 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
                             <select
                               value={editForm.type}
                               onChange={e => setEditForm(applyTypeDefaults(editForm, e.target.value as AccountType))}
+                              aria-label="Account type"
                               className="w-full border rounded px-2 py-1 text-sm"
                             >
                               {ACCOUNT_TYPES.map(t => (
@@ -703,6 +709,7 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
                               value={editForm.newCash}
                               onChange={e => setEditForm({ ...editForm, newCash: e.target.value })}
                               placeholder="Optional"
+                              aria-label="New cash in account (dollars)"
                               className="w-full border rounded px-2 py-1 text-sm"
                             />
                           </div>
@@ -805,6 +812,7 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
                 value={form.name}
                 onChange={e => setForm({ ...form, name: e.target.value })}
                 placeholder="e.g. Schwab Brokerage"
+                aria-label="Account name"
                 className="w-full border rounded px-2 py-1.5 text-sm"
                 autoFocus
                 onKeyDown={e => e.key === 'Enter' && handleAdd()}
@@ -815,6 +823,7 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
               <select
                 value={form.institution}
                 onChange={e => setForm({ ...form, institution: e.target.value })}
+                aria-label="Institution"
                 className="w-full border rounded px-2 py-1.5 text-sm"
               >
                 {INSTITUTIONS.map(i => <option key={i}>{i}</option>)}
@@ -825,6 +834,7 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
               <select
                 value={form.type}
                 onChange={e => setForm(applyTypeDefaults(form, e.target.value as AccountType))}
+                aria-label="Account type"
                 className="w-full border rounded px-2 py-1.5 text-sm"
               >
                 {ACCOUNT_TYPES.map(t => (
@@ -845,6 +855,7 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
                 value={form.newCash}
                 onChange={e => setForm({ ...form, newCash: e.target.value })}
                 placeholder="Optional"
+                aria-label="New cash in account (dollars)"
                 className="w-full border rounded px-2 py-1.5 text-sm"
               />
             </div>

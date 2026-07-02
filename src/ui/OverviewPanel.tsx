@@ -233,16 +233,18 @@ export function OverviewPanel({
           const hoverCls = step.state === 'locked' ? 'pointer-events-none' :
             'hover:border-brand-200 hover:shadow-[0_8px_24px_-16px_rgba(13,62,122,0.2)] cursor-pointer';
           return (
-            <div key={step.n}
-              className={`bg-white border ${borderCls} ${hoverCls} rounded-[13px] p-4 relative transition-all`}
+            <button key={step.n}
+              type="button"
+              disabled={step.state === 'locked'}
               onClick={() => step.state !== 'locked' && onNavigate(step.tab)}
+              className={`text-left w-full block bg-white border ${borderCls} ${hoverCls} rounded-[13px] p-4 relative transition-all disabled:cursor-default`}
             >
               <Badge state={step.state} n={step.n} payoff={step.payoff} />
               <div className="font-semibold text-[14.5px] text-gray-900 mb-1">{step.name}</div>
               <div className="text-xs text-gray-500 leading-snug mb-2.5">{step.desc}</div>
               <Chip state={step.state} stat={step.stat} />
               {i < steps.length - 1 && <Arrow />}
-            </div>
+            </button>
           );
         })}
       </div>

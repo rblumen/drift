@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Accessibility: charts, tabs, and the How-it-works drawer are now usable with a keyboard and screen reader** ([#123](https://github.com/rblumen/drift/issues/123), [#148](https://github.com/rblumen/drift/issues/148)) — allocation charts (pie, donut, stacked bars, target pie) now expose a screen-reader text alternative summarizing their data instead of being silent; the main tab navigation follows the standard tabs pattern and supports Left/Right/Home/End arrow-key movement between tabs; the Overview workflow step cards are now real buttons (keyboard-reachable and announced as interactive); the closed How-it-works drawer no longer traps keyboard focus in an off-screen dialog; banner and remove/dismiss "✕" buttons now have accessible labels; and inputs across the Strategy, Accounts, and Classify panels that relied on visual adjacency now carry accessible names.
+
 - **Trust-strip border is now a subtle hairline instead of a dark line** ([#143](https://github.com/rblumen/drift/issues/143)) — the `--line-2` CSS variable used by the landing-page trust strip was never defined, so the border resolved to the inherited body text color (`#2a3441`) and rendered as a heavy ink line. Both `--line` and `--line-2` are now defined as `#e5e8ee` in `:root`.
 
 - **HelpBox and "How It Works" drawer pill now use brand blue instead of indigo** ([#144](https://github.com/rblumen/drift/issues/144)) — `HelpBox` (shown on every tab) and the "Primary objectives" tier pill in the How It Works drawer were still styled with Tailwind's `indigo-*` palette after the app-wide brand-blue rollout. Both now use the `brand-*` tokens defined in `tailwind.config.js`.

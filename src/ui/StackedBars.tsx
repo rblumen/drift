@@ -33,8 +33,15 @@ export function StackedBars({ rows, legend, title }: Props) {
 
   const maxTotal = Math.max(...rows.map(r => r.total));
 
+  // Screen-reader summary: the per-segment title tooltips only surface on hover,
+  // so describe every row and its total in one text alternative.
+  const summary = rows
+    .map(r => `${r.label}: ${fmtUsd(r.total)}`)
+    .join('; ');
+  const ariaLabel = `${title ? `${title}. ` : ''}${summary}`;
+
   return (
-    <div className="space-y-1">
+    <div className="space-y-1" role="img" aria-label={ariaLabel}>
       {title && (
         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">{title}</p>
       )}
