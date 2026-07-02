@@ -623,7 +623,7 @@ function NextStepsSection({
   return (
     <div className="mt-10 space-y-4">
       <div className="font-mono text-[11px] text-gray-400 uppercase tracking-[.09em]">Next steps</div>
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {/* 01 Download */}
         <div className={card}>
           <div>
@@ -864,7 +864,7 @@ export function ResultsPanel({
               </span>
             )}
           </div>
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto"><table className="w-full text-sm">
             <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
               <tr>
                 <th className="px-4 py-2 text-left">Account</th>
@@ -917,7 +917,7 @@ export function ResultsPanel({
                 );
               })}
             </tbody>
-          </table>
+          </table></div>
         </div>
       )}
 
@@ -930,7 +930,7 @@ export function ResultsPanel({
               {fmtUsd(totalRaised)} raised of {fmtUsd(totalWithdrawal)} planned
             </span>
           </div>
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto"><table className="w-full text-sm">
             <thead className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wide">
               <tr>
                 <th className="px-4 py-2 text-left">Account</th>
@@ -967,7 +967,7 @@ export function ResultsPanel({
                 );
               })}
             </tbody>
-          </table>
+          </table></div>
         </div>
       )}
 
@@ -1002,7 +1002,7 @@ export function ResultsPanel({
           </div>
 
           {/* Allocation table */}
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto"><table className="w-full text-sm">
             <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
               <tr>
                 <th className="px-4 py-3 text-left">Asset class</th>
@@ -1077,7 +1077,7 @@ export function ResultsPanel({
                 return rows;
               })}
             </tbody>
-          </table>
+          </table></div>
         </div>
       </div>
 
@@ -1148,7 +1148,7 @@ export function ResultsPanel({
                     )}
 
                     {(acctTrades.length > 0 || hasTransfer) && (
-                      <table className="w-full text-sm">
+                      <div className="overflow-x-auto"><table className="w-full text-sm">
                         <thead className="text-xs text-gray-500 uppercase tracking-wide border-b border-gray-100">
                           <tr>
                             <th className="px-4 py-1.5 text-left">Asset class</th>
@@ -1164,7 +1164,7 @@ export function ResultsPanel({
                           ))}
                           {withdrawal > 0.5 && <TransferRow kind="withdrawal" amountUsd={withdrawal} />}
                         </tbody>
-                      </table>
+                      </table></div>
                     )}
 
                     {acctTrades.length === 0 && !hasTransfer && (

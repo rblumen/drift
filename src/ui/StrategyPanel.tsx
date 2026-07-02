@@ -717,7 +717,7 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
 
           {/* ── Allocation table — centred in its half of the card ── */}
           <div className="flex-1 flex justify-center">
-            <table className="text-sm">
+            <div className="overflow-x-auto"><table className="text-sm">
               <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
                 <tr>
                   <th className="px-4 py-2 text-left whitespace-nowrap">Asset class</th>
@@ -923,7 +923,7 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
                   </td>
                 </tr>
               </tfoot>
-            </table>
+            </table></div>
           </div>
 
           {/* ── Vertical divider ── */}
@@ -1004,7 +1004,7 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
           </button>
         </div>
         <div className="overflow-hidden border border-gray-200 rounded-lg">
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto"><table className="w-full text-sm">
             <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
               <tr>
                 <th className="px-4 py-2 text-left">Asset class</th>
@@ -1088,7 +1088,7 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
                 return rows;
               })}
             </tbody>
-          </table>
+          </table></div>
         </div>
       </CollapsibleSection>
 

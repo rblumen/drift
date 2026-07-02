@@ -611,7 +611,7 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
 
       {accounts.length > 0 && (
         <div className="overflow-hidden border border-gray-200 rounded-lg">
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto"><table className="w-full text-sm">
             <thead className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wide">
               <tr>
                 <th className="px-4 py-2 text-left">Name</th>
@@ -790,7 +790,7 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
                 )
               ))}
             </tbody>
-          </table>
+          </table></div>
         </div>
       )}
 

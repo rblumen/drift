@@ -187,7 +187,7 @@ export function HowItWorksDrawer({ open, onClose }: Props) {
           <div className="mt-9">
             <SectionLabel>Flags you may see</SectionLabel>
             <div className="border border-gray-200 rounded-xl overflow-hidden bg-white">
-              <table className="w-full border-collapse">
+              <div className="overflow-x-auto"><table className="w-full border-collapse">
                 <thead>
                   <tr>
                     <th className="bg-gray-50 font-mono text-[10.5px] tracking-[0.1em] uppercase text-gray-400 text-left px-4 py-3 font-medium">Flag</th>
@@ -202,7 +202,7 @@ export function HowItWorksDrawer({ open, onClose }: Props) {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             </div>
           </div>
         </div>
