@@ -7,7 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Meta description and social preview tags** ([#149](https://github.com/rblumen/drift/issues/149)) — `index.html` now has a proper `<meta name="description">` plus Open Graph and Twitter Card tags, so links shared to Slack, iMessage, X, etc. show an accurate title and description instead of nothing.
+
+### Changed
+
+- **Returning users skip the landing page** ([#147](https://github.com/rblumen/drift/issues/147)) — the marketing landing page now only appears on first run (no saved portfolio yet) or when the wordmark is clicked. If you already have a saved portfolio, or you open a `?demo` link, you go straight into the app instead of seeing the pitch every time.
+
 ### Fixed
+
+- **Landing page copy cleanup** ([#145](https://github.com/rblumen/drift/issues/145)) — fixed a grammar mismatch in "The gap" section, replaced the inaccurate "nothing stored" trust claim (the app does autosave to your browser's local storage) with "nothing leaves your browser", replaced the "Direct connect · soon" pill (which implied broker API integration the project doesn't and won't do) with "CSV-first, by design", reconciled the demo allocation legend and donut footer to both say 4 classes out of band, added the missing "Classify" step to the "How it works" section (now 5 steps, matching the in-app Overview stepper), and standardized CTA button labels to "Enter the app →" and "Try the demo" throughout the page.
 
 - **Production build no longer fails on Windows due to font `@import` resolution** ([#158](https://github.com/rblumen/drift/issues/158)) — `npm run build` errored on Windows with `ENOENT` trying to resolve the bare `@fontsource/...` package specifiers in `src/index.css` as literal filesystem paths, even though the dev server and Ubuntu CI both worked. PostCSS now runs `postcss-import` first, so bare package imports resolve through `node_modules` the same way on every OS.
 
