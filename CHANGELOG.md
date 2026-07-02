@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Fonts are now self-hosted instead of loaded from Google** ([#115](https://github.com/rblumen/drift/issues/115)) — `index.html` pulled Schibsted Grotesk and IBM Plex Mono from `fonts.googleapis.com`/`fonts.gstatic.com` on every page load, sending the user's IP and user agent to Google despite the landing page and README promising no network calls and no telemetry. Both font families now ship locally via `@fontsource`, and the Google Fonts `<link>`/`preconnect` tags are gone.
+
 - **Results "next steps" download buttons no longer show a literal escape code** ([#141](https://github.com/rblumen/drift/issues/141)) — the "Trade report" and "Portfolio file" buttons displayed the raw text `↓` instead of a down-arrow, since JSX text content doesn't interpret escape sequences. Both buttons now render the actual `↓` character, matching the header's Save/Load buttons.
 
 - **Share links now point at the real app** ([#116](https://github.com/rblumen/drift/issues/116)) — the Results tab's share actions (X/Twitter, Reddit, Facebook, email, SMS, copy-link, and the native share sheet) linked to `https://drift.app`, which is not this project's deployment, so every share distributed a wrong, potentially squattable URL. All share links and the calendar reminder now read one canonical URL constant pointing at the actual deployment.
