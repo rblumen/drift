@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Test coverage for the downloadable report and display formatting ([#130](https://github.com/rblumen/drift/issues/130)) — `src/ui/fmt.ts` (currency/percent/share formatting and label/color lookup tables) and the pure HTML-generation logic in `src/ui/exportReport.ts` now have unit tests covering trades, taxable-sale and placement flags, cash/withdrawal sections, locked accounts, and HTML escaping.
+
 ### Fixed
 
 - **Production build no longer fails on Windows due to font `@import` resolution** ([#158](https://github.com/rblumen/drift/issues/158)) — `npm run build` errored on Windows with `ENOENT` trying to resolve the bare `@fontsource/...` package specifiers in `src/index.css` as literal filesystem paths, even though the dev server and Ubuntu CI both worked. PostCSS now runs `postcss-import` first, so bare package imports resolve through `node_modules` the same way on every OS.
