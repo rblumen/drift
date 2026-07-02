@@ -1,0 +1,50 @@
+{
+  "name": "issue-114-revisit-placement-within-tolerance",
+  "description": "Issue #114: REVISIT_PLACEMENT fires on a fully within-tolerance portfolio — the heads-up is drift-independent, so a balanced household 100% in taxable must still see it",
+  "principle": "regression",
+  "accounts": [
+    { "id": "schwab", "name": "Schwab Brokerage", "institution": "Schwab", "type": "TAXABLE" }
+  ],
+  "holdings": [
+    { "accountId": "schwab", "ticker": "FZROX", "marketValue": 57500 },
+    { "accountId": "schwab", "ticker": "FZILX", "marketValue": 17000 },
+    { "accountId": "schwab", "ticker": "VWO", "marketValue": 3000 },
+    { "accountId": "schwab", "ticker": "MUNY", "marketValue": 20000 },
+    { "accountId": "schwab", "ticker": "GLD", "marketValue": 2500 }
+  ],
+  "strategy": {
+    "targets": {
+      "US_TOTAL_MARKET": 0.0,
+      "US_LARGE_CAP": 0.385,
+      "US_MID_CAP": 0.144,
+      "US_SMALL_CAP": 0.046,
+      "DEVELOPED_INTL": 0.17,
+      "DEVELOPED_EUROPE": 0.0,
+      "DEVELOPED_PACIFIC": 0.0,
+      "EMERGING_INTL": 0.03,
+      "FIXED_INCOME": 0.2,
+      "US_TREASURY": 0.0,
+      "US_CORP_BOND": 0.0,
+      "MUNI_BOND": 0.0,
+      "TIPS": 0.0,
+      "INTL_BOND": 0.0,
+      "REAL_ESTATE": 0.0,
+      "ALTERNATIVES": 0.025,
+      "CRYPTO": 0.0,
+      "PRECIOUS_METALS": 0.0,
+      "CASH": 0.0
+    },
+    "placement": {},
+    "toleranceAbs": 0.05,
+    "toleranceRel": 0.25,
+    "minTradeUsd": 250
+  },
+  "expected": {
+    "trades": [],
+    "projectedDriftWithinTolerance": true,
+    "flags": [
+      { "kind": "REVISIT_PLACEMENT", "taxableShare": 1.0, "fixedIncomeTarget": 0.2 },
+      { "kind": "WITHIN_TOLERANCE", "assetClass": "FIXED_INCOME" }
+    ]
+  }
+}

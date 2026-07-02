@@ -781,6 +781,25 @@ export function rebalance(
     };
   }
 
+  // Step 0.9 — REVISIT_PLACEMENT check (uses all accounts, including locked).
+  //
+  // A standing heads-up, deliberately independent of drift: once taxable assets
+  // outgrow the fixed-income sleeve, taxable can no longer be bonds-only and the
+  // placement rules need revisiting. Because it does not depend on tolerance or
+  // trades, it runs BEFORE the within-tolerance early return below — a perfectly
+  // balanced portfolio must still surface it (issue #114).
+  const taxableValue = accounts
+    .filter(a => accountBucket(a.type) === 'TAXABLE')
+    .reduce((sum, a) => sum + (accountValues[a.id] ?? 0), 0);
+  const taxableShare = taxableValue / householdValue;
+  // Total fixed-income target = parent weight + any sub-class weights (the FI sleeve
+  // may be held at the parent level or subdivided into treasury/corp/muni/tips/intl).
+  const fixedIncomeTarget = (strategy.targets.FIXED_INCOME ?? 0)
+    + childrenOf('FIXED_INCOME').reduce((s, c) => s + (strategy.targets[c] ?? 0), 0);
+  if (taxableShare > fixedIncomeTarget) {
+    flags.push({ kind: 'REVISIT_PLACEMENT', taxableShare, fixedIncomeTarget });
+  }
+
   // Step 1 — Current weights (locked positions/accounts still count in weights).
   const currentWeights = Object.fromEntries(
     ALL_ASSET_CLASSES.map(ac => [ac, currentValue[ac] / householdValue]),
@@ -1298,20 +1317,8 @@ export function rebalance(
     flags.push({ kind: 'TAXABLE_REBALANCE_AVOIDABLE', accountId: a.accountId, assetClass: a.assetClass, amountUsd: a.amountUsd });
   }
 
-  // Step 9 — REVISIT_PLACEMENT check (uses all accounts, including locked).
-  const taxableValue = accounts
-    .filter(a => accountBucket(a.type) === 'TAXABLE')
-    .reduce((sum, a) => sum + (accountValues[a.id] ?? 0), 0);
-  const taxableShare = taxableValue / householdValue;
-  // Total fixed-income target = parent weight + any sub-class weights (the FI sleeve
-  // may be held at the parent level or subdivided into treasury/corp/muni/tips/intl).
-  const fixedIncomeTarget = (strategy.targets.FIXED_INCOME ?? 0)
-    + childrenOf('FIXED_INCOME').reduce((s, c) => s + (strategy.targets[c] ?? 0), 0);
-  if (taxableShare > fixedIncomeTarget) {
-    flags.push({ kind: 'REVISIT_PLACEMENT', taxableShare, fixedIncomeTarget });
-  }
-
-  // Step 10 — Projected weights after trades.
+  // Step 10 — Projected weights after trades. (Step 9, the REVISIT_PLACEMENT
+  // check, moved to Step 0.9 so it runs before the early returns — issue #114.)
   //
   // In TA mode the engine's currentValue / householdValue are already in TA
   // dollars and taProjectedWeights was captured BEFORE trade conversion. The
