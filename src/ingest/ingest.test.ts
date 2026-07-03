@@ -37,6 +37,42 @@ describe('parseMoney', () => {
     expect(parseMoney('')).toBeNaN();
     expect(parseMoney(undefined)).toBeNaN();
   });
+  it('returns NaN for garbage input', () => {
+    expect(parseMoney('n/a')).toBeNaN();
+    expect(parseMoney('--')).toBeNaN();
+  });
+
+  // Accounting-style parenthesized negatives (issue #129) — some broker
+  // exports use "(1,234.56)" instead of a leading minus sign for
+  // negative/pending amounts.
+  it('treats a parenthesized amount as negative', () => {
+    expect(parseMoney('(1,234.56)')).toBeCloseTo(-1234.56);
+  });
+  it('treats a parenthesized amount with an inner dollar sign as negative', () => {
+    expect(parseMoney('($1,234.56)')).toBeCloseTo(-1234.56);
+  });
+  it('treats a parenthesized amount with an outer dollar sign as negative', () => {
+    expect(parseMoney('$(1,234.56)')).toBeCloseTo(-1234.56);
+  });
+  it('handles a parenthesized amount with no thousands separator', () => {
+    expect(parseMoney('($50.00)')).toBeCloseTo(-50);
+  });
+  it('tolerates surrounding whitespace around a parenthesized amount', () => {
+    expect(parseMoney('  ($50.00)  ')).toBeCloseTo(-50);
+  });
+  it('returns NaN for an unclosed leading paren', () => {
+    expect(parseMoney('(1,234.56')).toBeNaN();
+  });
+  it('ignores a stray trailing paren, matching pre-existing parseFloat behavior', () => {
+    // Not a parenthesized-negative form (no leading paren), so this falls
+    // through to parseFloat, which stops at the first non-numeric character
+    // and returns the leading numeric value — same as it did before #129.
+    expect(parseMoney('1,234.56)')).toBeCloseTo(1234.56);
+  });
+  it('returns NaN for empty parens', () => {
+    expect(parseMoney('()')).toBeNaN();
+    expect(parseMoney('($)')).toBeNaN();
+  });
 });
 
 // ─── schema validation ────────────────────────────────────────────────────────
@@ -386,6 +422,20 @@ describe('parseFidelityCsv', () => {
   it('skips the empty-symbol Pending Activity row', () => {
     const r = parseFidelityCsv(fidelityCsv, 'fidelity-ira');
     expect(r.positions.every(p => p.ticker !== '')).toBe(true);
+  });
+
+  // Regression for issue #129: the fixture's "Pending Activity - Debit" row
+  // carries a parenthesized Current Value ("($45.00)"). Before the fix,
+  // parseMoney returned NaN for it and the row was dropped via the NaN
+  // branch; now it's correctly parsed to -45 and dropped via the existing
+  // "marketValue <= 0" filter — same visible outcome, no error surfaced,
+  // confirming parenthesized negatives round-trip through the CSV adapter
+  // instead of silently failing to parse.
+  it('parses the parenthesized pending-debit row as negative and filters it out cleanly', () => {
+    const r = parseFidelityCsv(fidelityCsv, 'fidelity-ira');
+    expect(r.errors).toHaveLength(0);
+    expect(r.positions).toHaveLength(4);
+    expect(r.positions.some(p => p.description === 'Pending Activity - Debit')).toBe(false);
   });
 
   it('attaches the supplied accountId', () => {
