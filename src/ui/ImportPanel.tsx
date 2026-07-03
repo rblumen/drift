@@ -1,6 +1,5 @@
 import { useRef, useState, useEffect, type ReactNode } from 'react';
 import type { Account, AssetClass, Position } from '../engine/types';
-import { ALL_ASSET_CLASSES } from '../engine/types';
 import { parseSchwabMultiCsv } from '../ingest/adapters/schwab';
 import { parseFidelityMultiCsv } from '../ingest/adapters/fidelity';
 import { parseVanguardMultiCsv } from '../ingest/adapters/vanguard';
@@ -8,7 +7,7 @@ import { parseMerrillMultiCsv } from '../ingest/adapters/merrill';
 import { parseEtradeCsv } from '../ingest/adapters/etrade';
 import { detectFormat } from '../ingest/detect';
 import type { CsvParseResult, MultiAccountResult } from '../ingest/csv';
-import { parseEmpowerCsv, parseEmpowerTotals } from '../ingest/adapters/empower';
+import { parseEmpowerCsv, parseEmpowerTotals, SUPPORTED_EMPOWER_CLASSES } from '../ingest/adapters/empower';
 import { AC_LABEL, ACCT_TYPE_COLOR, ACCT_TYPE_LABEL, fmtUsd } from './fmt';
 import { PieChart } from './PieChart';
 import { HelpBox, HelpDef, HelpSection } from './HelpBox';
@@ -349,7 +348,7 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
   function loadEmpowerTotals() {
     if (!accountId) return;
     const numericTotals: Partial<Record<AssetClass, number>> = {};
-    for (const ac of ALL_ASSET_CLASSES) {
+    for (const ac of SUPPORTED_EMPOWER_CLASSES) {
       const v = parseFloat(empowerTotals[ac] ?? '');
       if (!isNaN(v) && v > 0) numericTotals[ac] = v;
     }
@@ -625,7 +624,7 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
         <div className="border border-gray-200 rounded-lg p-4 space-y-3">
           <p className="text-sm text-gray-500">Enter dollar totals per asset class from Empower's Investments → Holdings → Allocation view.</p>
           <div className="grid grid-cols-2 gap-3">
-            {ALL_ASSET_CLASSES.map(ac => (
+            {SUPPORTED_EMPOWER_CLASSES.map(ac => (
               <div key={ac}>
                 <label className="block text-xs text-gray-500 mb-1">{AC_LABEL[ac]}</label>
                 <input
