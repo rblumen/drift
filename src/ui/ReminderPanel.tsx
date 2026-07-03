@@ -195,7 +195,7 @@ export function ReminderPanel({ reminder, setReminder }: Props) {
             onClick={() => handlePreset(p.months)}
             className={`text-xs px-2 py-1 rounded border transition-colors
               ${reminder.intervalMonths === p.months && due
-                ? 'border-indigo-300 bg-indigo-50 text-indigo-700'
+                ? 'border-brand-300 bg-brand-50 text-brand-700'
                 : 'border-sky-200 bg-white text-gray-600 hover:border-sky-300 hover:bg-white'}`}
           >
             {p.label}
@@ -221,7 +221,7 @@ export function ReminderPanel({ reminder, setReminder }: Props) {
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={handleMarkRebalanced}
-            className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded hover:bg-indigo-700 transition-colors"
+            className="text-xs bg-brand-600 text-white px-3 py-1.5 rounded hover:bg-brand-700 transition-colors"
           >
             Mark rebalanced today
           </button>
