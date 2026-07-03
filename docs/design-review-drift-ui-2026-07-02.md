@@ -15,6 +15,12 @@ styles and layout metrics rather than pixel comparison.
 
 ---
 
+> **Note:** This report was annotated with issue-tracking status on 2026-07-03. The
+> original review text below is unchanged; `> **Status (2026-07-03):**` blockquotes were
+> added under each finding to record the filed issue and resolution state.
+
+---
+
 ## Executive summary
 
 The brand system — Anchor Blue + burnt orange, Schibsted Grotesk + IBM Plex Mono, the
@@ -41,6 +47,8 @@ down in several places. Findings are grouped by severity below.
 
 ### A1 — Literal `↓` escape sequences render in Results buttons
 
+> **Status (2026-07-03):** Filed as [#141](https://github.com/rblumen/drift/issues/141) — **closed** by [PR #153](https://github.com/rblumen/drift/pull/153).
+
 [`src/ui/ResultsPanel.tsx:638`](../src/ui/ResultsPanel.tsx#L638) and
 [`:643`](../src/ui/ResultsPanel.tsx#L643) write `↓ Trade report` / `↓
 Portfolio file` as plain JSX text, where escape sequences are not interpreted.
@@ -50,6 +58,8 @@ use `{'↓'}` as an expression.
 
 ### A2 — Share links point at an unowned domain
 
+> **Status (2026-07-03):** Filed as [#116](https://github.com/rblumen/drift/issues/116) — **closed** by [PR #139](https://github.com/rblumen/drift/pull/139). This finding was independently raised as m2 in the 2026-07-01 codebase audit; a single canonical URL constant now drives all share/reminder links.
+
 [`src/ui/ResultsPanel.tsx:376`](../src/ui/ResultsPanel.tsx#L376) hardcodes
 `SHARE_URL = 'https://drift.app'`. Every share channel and the copy-link button
 broadcasts this URL. If a user actually shares the app, their contacts are sent to
@@ -57,6 +67,8 @@ someone else's domain (or a dead link). Point this at the real hosted URL, or di
 sharing until hosting exists.
 
 ### A3 — Landing "trust strip" border renders as a heavy ink line
+
+> **Status (2026-07-03):** Filed as [#143](https://github.com/rblumen/drift/issues/143) — **closed** by [PR #157](https://github.com/rblumen/drift/pull/157).
 
 [`src/ui/LandingPage.css:157`](../src/ui/LandingPage.css#L157) uses
 `border-top: 1px solid var(--line-2)` with no fallback value, and `--line-2` is never
@@ -67,6 +79,8 @@ what should be a near-invisible hairline. Define `--line`/`--line-2` in `:root`,
 hardcode `#e5e8ee` as `ResultsPanel.tsx` already does elsewhere with its own fallbacks.
 
 ### A4 — Mobile layout breaks in multiple places
+
+> **Status (2026-07-03):** Filed as [#142](https://github.com/rblumen/drift/issues/142) — **closed** by [PR #156](https://github.com/rblumen/drift/pull/156).
 
 At a 375px viewport, confirmed live via DOM measurement:
 
@@ -88,6 +102,8 @@ At a 375px viewport, confirmed live via DOM measurement:
 
 ### B1 — Indigo remnants break the brand-blue rollout
 
+> **Status (2026-07-03):** Filed as [#144](https://github.com/rblumen/drift/issues/144) — **closed** by [PR #157](https://github.com/rblumen/drift/pull/157).
+
 `src/ui/HelpBox.tsx:19-31` — the HelpBox component, used on **every single tab**, is
 still styled `indigo-50/100/300/400/700` throughout. `App.tsx`'s own header comment
 documents that indigo was replaced by brand blue elsewhere, but the most frequently
@@ -97,6 +113,8 @@ pill in the How It Works drawer (`src/ui/HowItWorksDrawer.tsx:47`,
 branding fix available — one component, every screen.
 
 ### B2 — Data-viz palette doesn't match the brand identity
+
+> **Status (2026-07-03):** Tracked in [#150](https://github.com/rblumen/drift/issues/150) — **open**. Folded into the grouped design-system polish issue (with B3); awaiting a maintainer decision on palette/icon direction.
 
 The landing page charts use brand navy tones + burnt orange
 (`src/ui/LandingPage.tsx:16`); the in-app charts use bright, unrelated Tailwind
@@ -110,6 +128,8 @@ semantic-color level.
 
 ### B3 — Icon language mixes drawn SVG and emoji
 
+> **Status (2026-07-03):** Tracked in [#150](https://github.com/rblumen/drift/issues/150) — **open**. Folded into the grouped design-system polish issue (with B2); awaiting a maintainer decision on palette/icon direction.
+
 The landing page and Overview panel use crisp custom SVGs; the app shell mixes in text
 glyphs (`↓ Save`, `↑ Load`, `✕ Reset`, `▾`/`▸` chevrons) and raw emoji (`🔒`/`🔓` lock
 toggles, `⏰` reminder banner, `☕` Ko-fi links, `✎` edited-row indicator, `ℹ` help
@@ -122,6 +142,8 @@ inline 14–18px SVGs are already good) would tighten this considerably.
 ## C. Copy
 
 ### C1 — Landing page copy: grammar, accuracy, and internal consistency
+
+> **Status (2026-07-03):** Filed as [#145](https://github.com/rblumen/drift/issues/145) — **closed** by [PR #164](https://github.com/rblumen/drift/pull/164).
 
 - **Grammar artifact** (`src/ui/LandingPage.tsx:151-153`): *"Your aggregator — great
   at the picture. None of them will look across all your accounts…"* mixes singular
@@ -152,6 +174,8 @@ inline 14–18px SVGs are already good) would tighten this considerably.
 
 ### C2 — App-shell banner copy
 
+> **Status (2026-07-03):** Filed as [#146](https://github.com/rblumen/drift/issues/146) — **closed** by [PR #176](https://github.com/rblumen/drift/pull/176).
+
 - The demo-mode banner narrates its own UI in glyphs (`src/App.tsx:302`): *"Dismiss
   (✕) to return to your saved portfolio, or use ↑ Load / Reset."* This is clear to
   someone who already knows the icons and cryptic to a first-time user. A plain "Exit
@@ -167,6 +191,8 @@ inline 14–18px SVGs are already good) would tighten this considerably.
 
 ### D1 — Landing page shows on every visit, even for returning users
 
+> **Status (2026-07-03):** Filed as [#147](https://github.com/rblumen/drift/issues/147) — **closed** by [PR #164](https://github.com/rblumen/drift/pull/164).
+
 `showLanding` initializes to `true` unconditionally (`src/App.tsx:68`). A returning
 user with an existing saved portfolio has to click through the marketing page every
 session before reaching their data. Recommend skipping the landing page when saved
@@ -174,6 +200,8 @@ state already exists (first-run only), keeping the wordmark-click affordance as 
 way back to it.
 
 ### D2 — Keyboard/screen-reader accessibility gaps
+
+> **Status (2026-07-03):** Filed as [#148](https://github.com/rblumen/drift/issues/148) — **closed** by [PR #163](https://github.com/rblumen/drift/pull/163). Fixed together with the audit accessibility finding ([#123](https://github.com/rblumen/drift/issues/123)).
 
 - Overview step cards are `div`s with `onClick` handlers rather than `<button>`
   elements (`src/ui/OverviewPanel.tsx:236-238`), despite already having hover/cursor
@@ -188,12 +216,16 @@ way back to it.
 
 ### D3 — Native `confirm()` dialogs
 
+> **Status (2026-07-03):** Filed as [#151](https://github.com/rblumen/drift/issues/151) — **closed** by [PR #180](https://github.com/rblumen/drift/pull/180).
+
 Reset (`src/App.tsx:172`) and account removal (`src/ui/AccountsPanel.tsx:781`) use the
 browser's native `confirm()`. Functional, but visually jarring against an otherwise
 carefully styled product. Low priority for beta; worth a styled confirmation modal
 before a 1.0 polish pass.
 
 ### D4 — No social preview metadata
+
+> **Status (2026-07-03):** Filed as [#149](https://github.com/rblumen/drift/issues/149) — **closed** by [PR #164](https://github.com/rblumen/drift/pull/164).
 
 `index.html` has no `<meta name="description">` or Open Graph / Twitter card tags,
 yet the product has a whole share-and-feedback flow built around getting shared. A
@@ -205,6 +237,8 @@ would make a strong OG image.
 ## E. Smaller aesthetic notes
 
 ### E1 — App-shell banner layout
+
+> **Status (2026-07-03):** Filed as [#152](https://github.com/rblumen/drift/issues/152) — **closed** by [PR #183](https://github.com/rblumen/drift/pull/183).
 
 - The beta banner (`src/App.tsx:284`) uses `-mx-4 border-b` to read as full-width, but
   it stops at the container's max-width edge on wider viewports — looks cropped rather
