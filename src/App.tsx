@@ -41,6 +41,10 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'results',  label: 'Results' },
 ];
 
+// Plain localStorage flag (not part of the AppState schema/rebalancer-v1
+// slot) recording that the user dismissed the beta banner (#152).
+const BETA_BANNER_DISMISSED_KEY = 'rebalancer-beta-banner-dismissed';
+
 // Demo mode: ?demo in the URL → load sample portfolio instead of localStorage.
 const _demoRequested = new URLSearchParams(window.location.search).has('demo');
 const _demoParsed    = _demoRequested ? appStateSchema.safeParse(SAMPLE_PORTFOLIO) : null;
@@ -78,6 +82,16 @@ export default function App() {
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(
     loadResult !== null ? new Date() : null,
   );
+  // Beta banner dismissal is remembered persistently (plain localStorage flag,
+  // separate from the AppState schema/rebalancer-v1 slot) so it stays gone
+  // across sessions once dismissed (#152).
+  const [betaBannerDismissed, setBetaBannerDismissed] = useState<boolean>(
+    () => localStorage.getItem(BETA_BANNER_DISMISSED_KEY) === '1',
+  );
+  const dismissBetaBanner = useCallback(() => {
+    localStorage.setItem(BETA_BANNER_DISMISSED_KEY, '1');
+    setBetaBannerDismissed(true);
+  }, []);
 
   const loadFileRef = useRef<HTMLInputElement>(null);
   const tabRefs = useRef<Record<Tab, HTMLButtonElement | null>>({} as Record<Tab, HTMLButtonElement | null>);
@@ -312,19 +326,33 @@ export default function App() {
             </div>
           </div>
 
-          {/* Beta banner */}
-          <div className="mb-2 bg-amber-50 border-b border-amber-200 -mx-4 px-4 py-1.5 text-xs text-amber-800 flex items-center justify-center gap-1.5">
-            <span>Drift is in early beta.</span>
-            <a
-              href={`https://docs.google.com/forms/d/e/1FAIpQLSdG-V4Zq4X-fwal9ThhM4PQSFSwinrFo8fyWpZLCWu7mGXHlA/viewform?usp=pp_url&entry.715582229=${__COMMIT_SHA__}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-medium underline underline-offset-2 hover:text-amber-900"
-            >
-              Share your feedback
-            </a>
-            <span>— it helps a lot.</span>
-          </div>
+          {/* Beta banner — contained pill matching the demo-mode and
+              restored-from-backup banners (#152). Dismissible and remembered
+              via a plain localStorage flag, separate from the AppState
+              schema, so it stays gone across sessions once dismissed. */}
+          {!betaBannerDismissed && (
+            <div className="mb-2 bg-amber-50 border border-amber-200 rounded px-3 py-2 text-xs text-amber-800 flex items-center justify-between">
+              <span className="flex items-center gap-1.5 flex-wrap">
+                <span>Drift is in early beta.</span>
+                <a
+                  href={`https://docs.google.com/forms/d/e/1FAIpQLSdG-V4Zq4X-fwal9ThhM4PQSFSwinrFo8fyWpZLCWu7mGXHlA/viewform?usp=pp_url&entry.715582229=${__COMMIT_SHA__}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium underline underline-offset-2 hover:text-amber-900"
+                >
+                  Share your feedback
+                </a>
+                <span>— it helps a lot.</span>
+              </span>
+              <button
+                onClick={dismissBetaBanner}
+                aria-label="Dismiss beta banner"
+                className="ml-3 text-amber-600 hover:text-amber-800 flex-shrink-0"
+              >
+                ✕
+              </button>
+            </div>
+          )}
 
           {/* Demo mode banner */}
           {isDemoMode && (
