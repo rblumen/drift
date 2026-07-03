@@ -361,3 +361,85 @@ describe('exportReport buildHtml — empty household edge case', () => {
     expect(resolvedTrades).toHaveLength(0);
   });
 });
+
+// ─── Scenario I: locked accounts must not produce empty Cash/Withdrawal cards
+// (issue #165 — render condition and row builder disagreed about which accounts
+// to include, so a locked-only newCash/rmdDueUsd rendered a header with no rows) ──
+
+describe('exportReport buildHtml — locked-only cash/withdrawal sources (issue #165)', () => {
+  const FI_ONLY_STRATEGY = {
+    ...ZERO_TOL_STRATEGY,
+    targets: { ...ZERO_TARGETS, FIXED_INCOME: 1.0 },
+    placement: fillPlacement({ FIXED_INCOME: ['TAXABLE'] }),
+  };
+
+  it('does not render a Cash deployment card when only a locked account has newCash', () => {
+    const accounts: Account[] = [
+      { id: 'schwab', name: 'Schwab Brokerage', institution: 'Schwab', type: 'TAXABLE' },
+      { id: 'locked-ira', name: 'Legacy IRA', institution: 'Fidelity', type: 'TRADITIONAL_IRA', locked: true, newCash: 5_000 },
+    ];
+    const positions: Position[] = [
+      { accountId: 'schwab', ticker: 'MUNY', marketValue: 100_000 },
+      { accountId: 'locked-ira', ticker: 'FSKAX', marketValue: 50_000 },
+    ];
+    const { result, resolvedTrades } = runScenario(accounts, positions, FI_ONLY_STRATEGY);
+    const html = buildHtml(result, accounts, resolvedTrades, 0, 0, FIXED_NOW);
+    // Note: an HTML comment placeholder `<!-- Cash deployment -->` is always emitted
+    // as a template marker, so assert on the actual card header markup, not the raw title text.
+    expect(html).not.toContain('<span>Cash deployment</span>');
+  });
+
+  it('does not render a Spending / withdrawal plan card when only a locked account has rmdDueUsd', () => {
+    const accounts: Account[] = [
+      { id: 'schwab', name: 'Schwab Brokerage', institution: 'Schwab', type: 'TAXABLE' },
+      { id: 'locked-ira', name: 'Legacy IRA', institution: 'Fidelity', type: 'TRADITIONAL_IRA', locked: true, rmdDueUsd: 5_000 },
+    ];
+    const positions: Position[] = [
+      { accountId: 'schwab', ticker: 'MUNY', marketValue: 100_000 },
+      { accountId: 'locked-ira', ticker: 'FSKAX', marketValue: 50_000 },
+    ];
+    const { result, resolvedTrades } = runScenario(accounts, positions, FI_ONLY_STRATEGY);
+    const html = buildHtml(result, accounts, resolvedTrades, 0, 0, FIXED_NOW);
+    // Note: an HTML comment placeholder `<!-- Spending / withdrawal plan -->` is always
+    // emitted as a template marker, so assert on the actual card header markup.
+    expect(html).not.toContain('<span>Spending / withdrawal plan</span>');
+  });
+
+  it('renders Cash deployment with only the unlocked row when locked and unlocked accounts both have newCash', () => {
+    const accounts: Account[] = [
+      { id: 'schwab', name: 'Schwab Brokerage', institution: 'Schwab', type: 'TAXABLE', newCash: 10_000 },
+      { id: 'locked-ira', name: 'Legacy IRA', institution: 'Fidelity', type: 'TRADITIONAL_IRA', locked: true, newCash: 5_000 },
+    ];
+    const positions: Position[] = [
+      { accountId: 'schwab', ticker: 'MUNY', marketValue: 100_000 },
+      { accountId: 'locked-ira', ticker: 'FSKAX', marketValue: 50_000 },
+    ];
+    const { result, resolvedTrades } = runScenario(accounts, positions, FI_ONLY_STRATEGY);
+    const html = buildHtml(result, accounts, resolvedTrades, 0, 0, FIXED_NOW);
+    expect(html).toContain('<span>Cash deployment</span>');
+    // Locked accounts still appear elsewhere in the report (per-account section), so
+    // scope the "no locked row" check to just the Cash deployment card's own markup.
+    const cashSection = html.slice(html.indexOf('<span>Cash deployment</span>'), html.indexOf('<!-- Spending / withdrawal plan -->'));
+    expect(cashSection).toContain('Schwab Brokerage');
+    expect(cashSection).not.toContain('Legacy IRA');
+  });
+
+  it('renders Spending / withdrawal plan with only the unlocked row when locked and unlocked accounts both have rmdDueUsd', () => {
+    const accounts: Account[] = [
+      { id: 'schwab', name: 'Schwab Brokerage', institution: 'Schwab', type: 'TAXABLE', rmdDueUsd: 3_000 },
+      { id: 'locked-ira', name: 'Legacy IRA', institution: 'Fidelity', type: 'TRADITIONAL_IRA', locked: true, rmdDueUsd: 5_000 },
+    ];
+    const positions: Position[] = [
+      { accountId: 'schwab', ticker: 'MUNY', marketValue: 100_000 },
+      { accountId: 'locked-ira', ticker: 'FSKAX', marketValue: 50_000 },
+    ];
+    const { result, resolvedTrades } = runScenario(accounts, positions, FI_ONLY_STRATEGY);
+    const html = buildHtml(result, accounts, resolvedTrades, 0, 0, FIXED_NOW);
+    expect(html).toContain('<span>Spending / withdrawal plan</span>');
+    // Locked accounts still appear elsewhere in the report (per-account section), so
+    // scope the "no locked row" check to just the withdrawal card's own markup.
+    const wdSection = html.slice(html.indexOf('<span>Spending / withdrawal plan</span>'), html.indexOf('<!-- Allocation table -->'));
+    expect(wdSection).toContain('Schwab Brokerage');
+    expect(wdSection).not.toContain('Legacy IRA');
+  });
+});
