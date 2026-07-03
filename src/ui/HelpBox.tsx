@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { IconInfo, IconChevronDown, IconChevronRight } from './icons';
 
 interface Props {
   /** Label shown on the toggle button. Defaults to "About this step". */
@@ -22,9 +23,9 @@ export function HelpBox({ label = 'About this step', children, defaultOpen = fal
         onClick={() => setOpen(o => !o)}
         className="w-full flex items-center gap-2 px-4 py-2.5 text-left text-brand-700 hover:bg-brand-50 rounded-lg transition-colors"
       >
-        <span className="text-brand-400 text-base leading-none select-none">ℹ</span>
+        <span className="text-brand-400 inline-flex select-none"><IconInfo size={15} /></span>
         <span className="font-medium text-xs tracking-wide flex-1">{label}</span>
-        <span className="text-brand-300 text-xs select-none">{open ? '▾' : '▸'}</span>
+        <span className="text-brand-300 inline-flex select-none">{open ? <IconChevronDown size={13} /> : <IconChevronRight size={13} />}</span>
       </button>
 
       {open && (

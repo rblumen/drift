@@ -22,6 +22,7 @@ import { DriftWordmark } from './ui/Logo';
 import { HowItWorksDrawer } from './ui/HowItWorksDrawer';
 import { ConfirmDialog } from './ui/ConfirmDialog';
 import { LandingPage } from './ui/LandingPage';
+import { IconDownload, IconUpload, IconX, IconCheck } from './ui/icons';
 import {
   buildState, clearState, DEFAULT_APP_STATE, saveJson, loadJson,
   loadState, saveState, saveBackup, type AppState,
@@ -122,8 +123,8 @@ export default function App() {
     if (!didMountRef.current) { didMountRef.current = true; return; }
     // Demo state must never reach the primary save slot — the banner promises
     // "Your saved data is untouched" (#112). Persistence resumes when the user
-    // exits demo mode (banner ✕ restores the saved portfolio; ↑ Load / Reset
-    // replace it explicitly).
+    // exits demo mode (the banner dismiss restores the saved portfolio; Load /
+    // Reset replace it explicitly).
     if (isDemoMode) return;
     saveState(buildState(accounts, positions, strategy, tickerOverrides, decompositions, freeCash, plannedWithdrawal, reminder));
     setLastSavedAt(new Date());
@@ -269,10 +270,10 @@ export default function App() {
               {/* Autosave indicator */}
               {lastSavedAt && (accounts.length > 0 || positions.length > 0) && (
                 <span
-                  className="hidden sm:inline text-xs text-gray-400 tabular-nums"
+                  className="hidden sm:inline-flex items-center gap-1 text-xs text-gray-400 tabular-nums"
                   title={`Last saved at ${lastSavedAt.toLocaleTimeString()}`}
                 >
-                  ✓ Saved {fmtSavedTime(lastSavedAt)}
+                  <IconCheck size={13} /> Saved {fmtSavedTime(lastSavedAt)}
                 </span>
               )}
 
@@ -281,23 +282,23 @@ export default function App() {
                 <button
                   onClick={handleSave}
                   title="Save portfolio as JSON"
-                  className="text-xs text-gray-500 hover:text-gray-800 border border-gray-200 rounded px-2 py-1 hover:bg-gray-50 transition-colors"
+                  className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-800 border border-gray-200 rounded px-2 py-1 hover:bg-gray-50 transition-colors"
                 >
-                  ↓ Save
+                  <IconDownload size={13} /> Save
                 </button>
                 <button
                   onClick={() => loadFileRef.current?.click()}
                   title="Load portfolio from JSON"
-                  className="text-xs text-gray-500 hover:text-gray-800 border border-gray-200 rounded px-2 py-1 hover:bg-gray-50 transition-colors"
+                  className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-800 border border-gray-200 rounded px-2 py-1 hover:bg-gray-50 transition-colors"
                 >
-                  ↑ Load
+                  <IconUpload size={13} /> Load
                 </button>
                 <button
                   onClick={handleReset}
                   title="Clear all data"
-                  className="text-xs text-gray-400 hover:text-red-500 border border-gray-200 rounded px-2 py-1 hover:bg-red-50 transition-colors"
+                  className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-red-500 border border-gray-200 rounded px-2 py-1 hover:bg-red-50 transition-colors"
                 >
-                  ✕ Reset
+                  <IconX size={13} /> Reset
                 </button>
                 <input
                   ref={loadFileRef}
@@ -349,7 +350,7 @@ export default function App() {
                 aria-label="Dismiss beta banner"
                 className="ml-3 text-amber-600 hover:text-amber-800 flex-shrink-0"
               >
-                ✕
+                <IconX size={14} />
               </button>
             </div>
           )}
@@ -372,7 +373,7 @@ export default function App() {
                   aria-label="Exit demo and restore your saved portfolio"
                   className="text-brand-400 hover:text-brand-700"
                 >
-                  ✕
+                  <IconX size={14} />
                 </button>
               </div>
             </div>
@@ -393,7 +394,7 @@ export default function App() {
                 aria-label="Dismiss"
                 className="ml-3 text-amber-600 hover:text-amber-800 flex-shrink-0"
               >
-                ✕
+                <IconX size={14} />
               </button>
             </div>
           )}
@@ -402,7 +403,7 @@ export default function App() {
           {loadError && (
             <div className="mb-2 bg-red-50 border border-red-200 rounded px-3 py-2 text-xs text-red-700 flex items-center justify-between">
               <span>{loadError}</span>
-              <button onClick={() => setLoadError(null)} aria-label="Dismiss" className="ml-3 text-red-400 hover:text-red-600">✕</button>
+              <button onClick={() => setLoadError(null)} aria-label="Dismiss" className="ml-3 text-red-400 hover:text-red-600"><IconX size={14} /></button>
             </div>
           )}
 

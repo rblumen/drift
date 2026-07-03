@@ -3,6 +3,7 @@
 // onEnter  — user clicked "Enter the app" — dismisses landing
 // onDemo   — user clicked "Try the demo"  — loads sample + dismisses
 import { DriftWordmark } from './Logo';
+import { IconCoffee } from './icons';
 import './LandingPage.css';
 
 // ── Demo allocation data (static) ────────────────────────────────────────────
@@ -96,8 +97,8 @@ export function LandingPage({ onEnter, onDemo }: LandingPageProps) {
                   Try the demo
                 </button>
               )}
-              <a className="lp-btn lp-btn-ghost" href="https://ko-fi.com/driftrebalance" target="_blank" rel="noopener noreferrer">
-                ☕ Support on Ko-fi
+              <a className="lp-btn lp-btn-ghost" href="https://ko-fi.com/driftrebalance" target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <IconCoffee size={15} /> Support on Ko-fi
               </a>
             </div>
             <div className="lp-micro">
@@ -295,8 +296,8 @@ export function LandingPage({ onEnter, onDemo }: LandingPageProps) {
               {onDemo && (
                 <button className="lp-btn lp-btn-wire" onClick={onDemo}>Try the demo</button>
               )}
-              <a className="lp-btn lp-btn-wire" href="https://ko-fi.com/driftrebalance" target="_blank" rel="noopener noreferrer">
-                ☕ Support on Ko-fi
+              <a className="lp-btn lp-btn-wire" href="https://ko-fi.com/driftrebalance" target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <IconCoffee size={15} /> Support on Ko-fi
               </a>
             </div>
             <div className="lp-rings">

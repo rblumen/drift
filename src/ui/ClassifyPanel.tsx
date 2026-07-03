@@ -10,6 +10,7 @@ import { StackedBars } from './StackedBars';
 import type { StackedRow, LegendEntry } from './StackedBars';
 import { detectTargetDateFund } from '../data/targetDateFunds';
 import { HelpBox, HelpDef, HelpSection } from './HelpBox';
+import { IconX, IconCheck } from './icons';
 
 const PLACEMENT_BUCKETS: PlacementBucket[] = ['TAX_ADVANTAGED', 'TAXABLE', 'EDUCATION'];
 
@@ -146,8 +147,8 @@ function DecompEditor({
         ))}
       </div>
       <div className="flex items-center justify-between pt-1">
-        <span className={`text-xs font-medium ${sumOk ? 'text-green-600' : 'text-red-500'}`}>
-          Sum: {sum.toFixed(1)}% {sumOk ? '✓' : '(must be ~100%)'}
+        <span className={`inline-flex items-center gap-1 text-xs font-medium ${sumOk ? 'text-green-600' : 'text-red-500'}`}>
+          Sum: {sum.toFixed(1)}% {sumOk ? <IconCheck size={12} /> : '(must be ~100%)'}
         </span>
         <div className="flex gap-2">
           <button
@@ -490,11 +491,11 @@ export function ClassifyPanel({
                             </button>
                             <button
                               onClick={() => removeDecomp(row.ticker)}
-                              className="text-xs text-gray-400 hover:text-red-500 border border-gray-200 rounded px-2 py-0.5 hover:bg-red-50"
+                              className="inline-flex items-center text-gray-400 hover:text-red-500 border border-gray-200 rounded px-2 py-0.5 hover:bg-red-50"
                               title="Remove decomposition"
                               aria-label={`Remove decomposition for ${row.ticker}`}
                             >
-                              ✕
+                              <IconX size={13} />
                             </button>
                           </div>
                         )}
@@ -559,10 +560,10 @@ export function ClassifyPanel({
                               {!isEditing && (
                                 <button
                                   onClick={() => assign(row.ticker, '')}
-                                  className="hover:text-red-500"
+                                  className="inline-flex hover:text-red-500"
                                   title="Revert to built-in"
                                   aria-label={`Revert ${row.ticker} to the built-in classification`}
-                                >✕</button>
+                                ><IconX size={12} /></button>
                               )}
                             </span>
                           ) : (
@@ -607,7 +608,8 @@ export function ClassifyPanel({
             </table></div>
           </div>
           <p className="text-xs text-gray-400">
-            Changing the class dropdown overrides the built-in map; removing an override (✕) reverts it.
+            Changing the class dropdown overrides the built-in map; removing an override
+            {' '}(<IconX size={11} className="inline align-[-1px]" />){' '}reverts it.
             Use "Set as blended" to define a fund-of-funds or balanced fund with multiple asset-class components.
           </p>
         </div>
