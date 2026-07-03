@@ -38,7 +38,12 @@ function buildRingSegments(
     });
 }
 
-export function DonutChart({ inner, outer, size = 180 }: Props) {
+/**
+ * The concentric-ring SVG on its own (no legend). Extracted so the issue-#98
+ * allocation-view toggle can render just the donut next to its own shared drift
+ * table. `DonutChart` composes this plus its built-in legend.
+ */
+export function DonutRings({ inner, outer, size = 180 }: Props) {
   const cx = size / 2;
   const cy = size / 2;
   const sw      = Math.round(size * 0.10);   // ring stroke width  (~18px @ 180)
@@ -65,10 +70,7 @@ export function DonutChart({ inner, outer, size = 180 }: Props) {
     : `Target allocation: ${targetSummary}.`;
 
   return (
-    <div className="flex items-start gap-6">
-      {/* SVG */}
-      <div className="relative shrink-0">
-        <svg width={size} height={size} role="img" aria-label={ariaLabel}>
+    <svg width={size} height={size} role="img" aria-label={ariaLabel}>
           {/* Gray tracks */}
           <circle cx={cx} cy={cy} r={innerR} fill="none" stroke="#e5e7eb" strokeWidth={sw} />
           <circle cx={cx} cy={cy} r={outerR} fill="none" stroke="#e5e7eb" strokeWidth={sw} />
@@ -107,15 +109,42 @@ export function DonutChart({ inner, outer, size = 180 }: Props) {
             </circle>
           ))}
 
-          {/* Centre annotation */}
-          <text x={cx} y={cy - 5} textAnchor="middle" fontSize={9} fill="#9ca3af">
+          {/* Centre annotation: "current" in the hole; "target" moved outside the
+              outer ring at 12 o'clock with a short leader tick down to the ring
+              edge (issue #98). */}
+          <text x={cx} y={cy + 3} textAnchor="middle" fontSize={9} fill="#9ca3af">
             {hasInner ? 'current' : ''}
           </text>
-          <text x={cx} y={cy + 8} textAnchor="middle" fontSize={9} fill="#9ca3af">
-            {hasInner ? 'target ↑' : 'target'}
+          <text
+            x={cx}
+            y={cy - outerR - sw / 2 - 7}
+            textAnchor="middle"
+            fontSize={9}
+            fontFamily="'IBM Plex Mono', monospace"
+            fill="#6b7280"
+          >
+            target
           </text>
-        </svg>
+          <line
+            x1={cx}
+            y1={cy - outerR - sw / 2 - 5}
+            x2={cx}
+            y2={cy - outerR - sw / 2 - 1}
+            stroke="#9ca3af"
+            strokeWidth={1}
+          />
+    </svg>
+  );
+}
 
+export function DonutChart({ inner, outer, size = 180 }: Props) {
+  const hasInner = buildRingSegments(inner, 1, 1).some(s => s.weight > 0);
+
+  return (
+    <div className="flex items-start gap-6">
+      {/* SVG */}
+      <div className="relative shrink-0">
+        <DonutRings inner={inner} outer={outer} size={size} />
       </div>
 
       {/* Legend — grid layout guarantees column alignment between header and rows */}

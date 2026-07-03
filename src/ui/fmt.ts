@@ -146,3 +146,100 @@ export const FAMILY_COLOR: Record<string, string> = {
   ALTS:  '#e8600a', // alternatives family (brand accent, landing CLS[4])
   CASH:  '#8a8175', // cash — warm gray (matches AC_COLOR.CASH)
 };
+
+// ── Family rollup (issue #98) ─────────────────────────────────────────────────
+// The radar and donut allocation views collapse the 19-way AssetClass breakdown
+// into five brand families (+ cash when material). This is the pure mapping the
+// design handoff calls for: Record<AssetClass, number> → per-family weights.
+
+// The five stable families the radar/donut always show, in spoke order
+// (US → Intl → EM → Bonds → Alts). Cash is appended only when material.
+export const ALLOCATION_FAMILIES = ['US', 'INTL', 'EM', 'BONDS', 'ALTS', 'CASH'] as const;
+export type AllocationFamily = (typeof ALLOCATION_FAMILIES)[number];
+
+// Which family each asset class rolls up into. Parent classes and their children
+// map to the same family, so summing every class into its family double-counts
+// nothing: a valid weight map carries weight on the parent OR its leaves, never
+// both for the same dollars.
+export const FAMILY_OF: Record<string, AllocationFamily> = {
+  US_TOTAL_MARKET:  'US',
+  US_LARGE_CAP:     'US',
+  US_MID_CAP:       'US',
+  US_SMALL_CAP:     'US',
+  DEVELOPED_INTL:   'INTL',
+  DEVELOPED_EUROPE: 'INTL',
+  DEVELOPED_PACIFIC: 'INTL',
+  EMERGING_INTL:    'EM',
+  FIXED_INCOME:     'BONDS',
+  US_TREASURY:      'BONDS',
+  US_CORP_BOND:     'BONDS',
+  MUNI_BOND:        'BONDS',
+  TIPS:             'BONDS',
+  INTL_BOND:        'BONDS',
+  REAL_ESTATE:      'ALTS',
+  ALTERNATIVES:     'ALTS',
+  CRYPTO:           'ALTS',
+  PRECIOUS_METALS:  'ALTS',
+  CASH:             'CASH',
+};
+
+// Short family labels shown on radar spokes / donut legend.
+export const FAMILY_LABEL: Record<AllocationFamily, string> = {
+  US: 'US', INTL: 'Intl', EM: 'EM', BONDS: 'Bonds', ALTS: 'Alts', CASH: 'Cash',
+};
+
+// Short asset-class labels for the bar view's cramped x-axis (issue #98). Falls
+// back to AC_LABEL when a class isn't listed.
+export const AC_SHORT_LABEL: Record<string, string> = {
+  US_TOTAL_MARKET:  'US Mkt',
+  US_LARGE_CAP:     'US Lg',
+  US_MID_CAP:       'US Mid',
+  US_SMALL_CAP:     'US Sm',
+  DEVELOPED_INTL:   'Intl',
+  DEVELOPED_EUROPE: 'Europe',
+  DEVELOPED_PACIFIC: 'Pacific',
+  EMERGING_INTL:    'EM',
+  FIXED_INCOME:     'Bonds',
+  US_TREASURY:      'Treas',
+  US_CORP_BOND:     'Corp',
+  MUNI_BOND:        'Muni',
+  TIPS:             'TIPS',
+  INTL_BOND:        'Intl Bd',
+  REAL_ESTATE:      'REIT',
+  ALTERNATIVES:     'Alts',
+  CRYPTO:           'Crypto',
+  PRECIOUS_METALS:  'Metals',
+  CASH:             'Cash',
+};
+
+export type FamilyWeights = Record<AllocationFamily, number>;
+
+// Cash appears as a sixth spoke/bar only when its weight in either series is
+// material; below this it is folded away (design: > 0.5%).
+export const CASH_MATERIAL_THRESHOLD = 0.005;
+
+/**
+ * Roll a per-asset-class weight map up to the five brand families (US / Intl /
+ * EM / Bonds / Alts). Missing classes count as 0. Weight on a parent class and
+ * on its children both land in the same family, so no dollars are double-counted.
+ * Pure — safe to call from render.
+ */
+export function rollupFamilies(weights: Partial<Record<string, number>>): FamilyWeights {
+  const out: FamilyWeights = { US: 0, INTL: 0, EM: 0, BONDS: 0, ALTS: 0, CASH: 0 };
+  for (const [ac, w] of Object.entries(weights)) {
+    const fam = FAMILY_OF[ac];
+    if (fam && w) out[fam] += w;
+  }
+  return out;
+}
+
+/**
+ * The families to plot for a current/target (or before/after) pair, in spoke
+ * order. Always the five equity/bond/alt families; CASH is appended only when
+ * either series carries a material cash weight (> {@link CASH_MATERIAL_THRESHOLD}).
+ */
+export function activeFamilies(a: FamilyWeights, b: FamilyWeights): AllocationFamily[] {
+  const base: AllocationFamily[] = ['US', 'INTL', 'EM', 'BONDS', 'ALTS'];
+  if (a.CASH > CASH_MATERIAL_THRESHOLD || b.CASH > CASH_MATERIAL_THRESHOLD) base.push('CASH');
+  return base;
+}

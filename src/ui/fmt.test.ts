@@ -11,6 +11,10 @@ import {
   BUCKET_LABEL,
   BUCKET_COLOR,
   AC_COLOR,
+  rollupFamilies,
+  activeFamilies,
+  FAMILY_OF,
+  CASH_MATERIAL_THRESHOLD,
 } from './fmt';
 import { ALL_ASSET_CLASSES } from '../engine/types';
 
@@ -220,5 +224,81 @@ describe('BUCKET_LABEL / BUCKET_COLOR', () => {
     expect(BUCKET_LABEL.HSA).toBe('HSA');
     expect(BUCKET_LABEL.FIVE_TWENTY_NINE).toBe('529 Plan');
     expect(BUCKET_LABEL.OTHER).toBe('Other');
+  });
+});
+
+// ─── rollupFamilies (issue #98) ───────────────────────────────────────────────
+
+describe('rollupFamilies', () => {
+  it('returns all-zero families for an empty weight map', () => {
+    expect(rollupFamilies({})).toEqual({ US: 0, INTL: 0, EM: 0, BONDS: 0, ALTS: 0, CASH: 0 });
+  });
+
+  it('every asset class maps into exactly one of the six families', () => {
+    for (const ac of ALL_ASSET_CLASSES) {
+      expect(FAMILY_OF[ac], `${ac} should have a family`).toBeDefined();
+    }
+  });
+
+  it('sums each family from its member classes', () => {
+    const fam = rollupFamilies({
+      US_LARGE_CAP: 0.4,
+      US_MID_CAP: 0.1,
+      DEVELOPED_INTL: 0.12,
+      EMERGING_INTL: 0.05,
+      FIXED_INCOME: 0.15,
+      US_TREASURY: 0.05,
+      REAL_ESTATE: 0.04,
+      ALTERNATIVES: 0.04,
+    });
+    expect(fam.US).toBeCloseTo(0.5, 10);
+    expect(fam.INTL).toBeCloseTo(0.12, 10);
+    expect(fam.EM).toBeCloseTo(0.05, 10);
+    expect(fam.BONDS).toBeCloseTo(0.2, 10);
+    expect(fam.ALTS).toBeCloseTo(0.08, 10);
+    expect(fam.CASH).toBe(0);
+  });
+
+  it('folds a parent class and its children into the same family without double counting', () => {
+    // A weight map may carry weight on the parent OR its leaves; both land in US
+    // and are simply summed — the rollup never double-counts the same dollars.
+    const viaParent = rollupFamilies({ US_TOTAL_MARKET: 0.6 });
+    const viaChildren = rollupFamilies({ US_LARGE_CAP: 0.4, US_MID_CAP: 0.15, US_SMALL_CAP: 0.05 });
+    expect(viaParent.US).toBeCloseTo(0.6, 10);
+    expect(viaChildren.US).toBeCloseTo(0.6, 10);
+    // Combined (as a fund that reports both) still just sums — no leaf is derived
+    // from the parent, so there is nothing to subtract.
+    const mixed = rollupFamilies({ US_TOTAL_MARKET: 0.3, US_LARGE_CAP: 0.3 });
+    expect(mixed.US).toBeCloseTo(0.6, 10);
+  });
+
+  it('ignores unknown keys', () => {
+    expect(rollupFamilies({ NOT_A_CLASS: 0.5, US_LARGE_CAP: 0.5 }).US).toBeCloseTo(0.5, 10);
+  });
+});
+
+// ─── activeFamilies (issue #98) ───────────────────────────────────────────────
+
+describe('activeFamilies', () => {
+  const zero = { US: 0, INTL: 0, EM: 0, BONDS: 0, ALTS: 0, CASH: 0 } as const;
+
+  it('always shows the five equity/bond/alt families, in spoke order', () => {
+    expect(activeFamilies({ ...zero }, { ...zero })).toEqual(['US', 'INTL', 'EM', 'BONDS', 'ALTS']);
+  });
+
+  it('appends Cash when the current series has material cash', () => {
+    const cur = { ...zero, CASH: CASH_MATERIAL_THRESHOLD + 0.001 };
+    expect(activeFamilies(cur, { ...zero })).toContain('CASH');
+  });
+
+  it('appends Cash when the target series has material cash', () => {
+    const tgt = { ...zero, CASH: 0.03 };
+    expect(activeFamilies({ ...zero }, tgt)).toEqual(['US', 'INTL', 'EM', 'BONDS', 'ALTS', 'CASH']);
+  });
+
+  it('hides Cash when it is immaterial on both sides (at or below the threshold)', () => {
+    const a = { ...zero, CASH: CASH_MATERIAL_THRESHOLD };
+    const b = { ...zero, CASH: CASH_MATERIAL_THRESHOLD };
+    expect(activeFamilies(a, b)).not.toContain('CASH');
   });
 });
