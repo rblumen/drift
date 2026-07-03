@@ -143,7 +143,8 @@ When taxable assets outgrow the fixed-income sleeve, bonds can no longer fill it
 
 ## Guardrails (permanent)
 
-- All computation stays client-side — no backend, no network calls, no telemetry.
+- All computation stays client-side — no backend, no server-side processing of user data.
+- No user data leaves the browser (PII, holdings, account details, dollar amounts). Only anonymous, cookieless, aggregate pageview analytics are permitted, and they must never receive user/portfolio data.
 - Never commit real financial data. Only synthetic fixtures. `/private/` and `*.local.json` are git-ignored.
 - No credential automation and no undocumented/reverse-engineered APIs. CSV export and manual entry only.
 - Do not create remote repos or push on the user's behalf.

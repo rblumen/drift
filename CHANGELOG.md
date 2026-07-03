@@ -9,11 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Anonymous, privacy-preserving web analytics** ([#168](https://github.com/rblumen/drift/issues/168)) — the app now records basic, aggregate site traffic (pageview counts) via Vercel Web Analytics. It is cookieless, sets no cross-site identifiers, and collects no personal or financial data. Your portfolio holdings, account details, and dollar amounts never leave your browser — the analytics only ever sees the page path (always `/`), never your data. Supersedes the auto-generated integration in #167.
+
 - **Meta description and social preview tags** ([#149](https://github.com/rblumen/drift/issues/149)) — `index.html` now has a proper `<meta name="description">` plus Open Graph and Twitter Card tags, so links shared to Slack, iMessage, X, etc. show an accurate title and description instead of nothing.
 
 - Test coverage for the downloadable report and display formatting ([#130](https://github.com/rblumen/drift/issues/130)) — `src/ui/fmt.ts` (currency/percent/share formatting and label/color lookup tables) and the pure HTML-generation logic in `src/ui/exportReport.ts` now have unit tests covering trades, taxable-sale and placement flags, cash/withdrawal sections, locked accounts, and HTML escaping.
 
 ### Changed
+
+- **Privacy promise sharpened to match reality** ([#168](https://github.com/rblumen/drift/issues/168)) — with anonymous pageview analytics added, the absolute "No telemetry" / "nothing leaves your browser" claims are now stated precisely: the landing page, meta tags, and docs say **no cookies, no personal data, and your financial data never leaves your browser**. The guardrail is now data-classification based (user data never leaves the browser; anonymous aggregate traffic is permitted) rather than a blanket "no network calls".
 
 - **Returning users skip the landing page** ([#147](https://github.com/rblumen/drift/issues/147)) — the marketing landing page now only appears on first run (no saved portfolio yet) or when the wordmark is clicked. If you already have a saved portfolio, or you open a `?demo` link, you go straight into the app instead of seeing the pitch every time.
 

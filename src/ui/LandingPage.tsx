@@ -102,7 +102,7 @@ export function LandingPage({ onEnter, onDemo }: LandingPageProps) {
             </div>
             <div className="lp-micro">
               <span><span className="lp-dot"></span>Free · runs in your browser</span>
-              <span><span className="lp-dot" style={{ background: '#082855' }}></span>No account · nothing leaves your browser</span>
+              <span><span className="lp-dot" style={{ background: '#082855' }}></span>No account · no cookies · no personal data</span>
             </div>
           </div>
 
@@ -272,7 +272,7 @@ export function LandingPage({ onEnter, onDemo }: LandingPageProps) {
             <span className="lp-trust-sep"></span>
             <span className="lp-trust-item">No account required</span>
             <span className="lp-trust-sep"></span>
-            <span className="lp-trust-item">No telemetry</span>
+            <span className="lp-trust-item">No cookies · no personal data</span>
           </div>
         </div>
       </div>
@@ -282,7 +282,7 @@ export function LandingPage({ onEnter, onDemo }: LandingPageProps) {
         <div className="lp-wrap">
           <div className="lp-finale">
             <p className="lp-eyebrow" style={{ color: 'rgba(255,255,255,.5)' }}>
-              Free · no account · nothing leaves your browser
+              Free · no account · no cookies · no personal data
             </p>
             <h2 className="lp-h2" style={{ color: '#fff', marginTop: 14 }}>
               Stop eyeballing your allocation.
