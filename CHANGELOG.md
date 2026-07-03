@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Build/test toolchain upgraded to Vite 8 and Vitest 4** ([#132](https://github.com/rblumen/drift/issues/132)) — upgraded `vite` 5 → 8, `vitest` 2 → 4 (with `@vitest/ui` and `@vitest/coverage-v8`), and `@vitejs/plugin-react` 4 → 6. This is a build-tooling change only, with no runtime or behavior impact on the app. CI now runs on Node 22, matching Vite 8's minimum supported Node version. (Phase 1 of #132; React, Tailwind, Zod, and TypeScript upgrades remain as follow-up phases.)
+
 - **Privacy promise sharpened to match reality** ([#168](https://github.com/rblumen/drift/issues/168)) — with anonymous pageview analytics added, the absolute "No telemetry" / "nothing leaves your browser" claims are now stated precisely: the landing page, meta tags, and docs say **no cookies, no personal data, and your financial data never leaves your browser**. The guardrail is now data-classification based (user data never leaves the browser; anonymous aggregate traffic is permitted) rather than a blanket "no network calls".
 
 - **Returning users skip the landing page** ([#147](https://github.com/rblumen/drift/issues/147)) — the marketing landing page now only appears on first run (no saved portfolio yet) or when the wordmark is clicked. If you already have a saved portfolio, or you open a `?demo` link, you go straight into the app instead of seeing the pitch every time.
@@ -50,6 +52,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **REVISIT_PLACEMENT now fires on balanced portfolios too** ([#114](https://github.com/rblumen/drift/issues/114)) — the "taxable assets exceed your Fixed Income target — revisit placement rules" heads-up was silently skipped whenever every asset class was within its tolerance band, because the engine returned early before the check ran. The flag is deliberately drift-independent (it signals that your *placement* strategy has expired, not that your allocation has drifted), so a perfectly balanced household 100% in taxable now sees it as intended.
 
 - **Changelog: renamed duplicate 0.1.0 release to 0.2.0 and merged duplicated subsections** ([#120](https://github.com/rblumen/drift/issues/120)) — `CHANGELOG.md` had two `## [0.1.0]` headings and repeated `### Added`/`### Changed` subsections within the July release block, violating Keep a Changelog's unique-heading requirement. The July 2026-07-01 release is now `## [0.2.0]` (it shipped major features, warranting a minor bump under semver), with its duplicated subsections consolidated into one `Added`, one `Changed`, and one `Fixed` section each.
+
+### Security
+
+- **All `npm audit` vulnerabilities cleared** ([#122](https://github.com/rblumen/drift/issues/122)) — the previous build toolchain pulled in 9 known vulnerabilities (1 low, 3 moderate, 2 high, 3 critical) via the transitive `esbuild` (≤0.24.2) and `undici` dependencies of Vite 5 / Vitest 2. Upgrading the toolchain to Vite 8 / Vitest 4 removes those vulnerable transitive dependencies entirely, bringing `npm audit` to 0 vulnerabilities. These are development/build-time dependencies and never shipped in the client bundle, but the tree is now clean.
 
 ## [0.2.0] - 2026-07-01
 
