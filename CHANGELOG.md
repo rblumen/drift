@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Security response headers and a strict Content-Security-Policy** ([#133](https://github.com/rblumen/drift/issues/133)) — `vercel.json` now sends `Content-Security-Policy`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, and a `Permissions-Policy` denying camera/microphone/geolocation on every response. The CSP restricts scripts, styles, fonts, and connections to the app's own origin (`'self'`), blocks framing and plugin content, and allows no `<form>` submissions — closing off third-party script injection and clickjacking without needing any external hosts, since fonts are self-hosted (#154) and Vercel Web Analytics (#168) beacons same-origin.
+
 - **Anonymous, privacy-preserving web analytics** ([#168](https://github.com/rblumen/drift/issues/168)) — the app now records basic, aggregate site traffic (pageview counts) via Vercel Web Analytics. It is cookieless, sets no cross-site identifiers, and collects no personal or financial data. Your portfolio holdings, account details, and dollar amounts never leave your browser — the analytics only ever sees the page path (always `/`), never your data. Supersedes the auto-generated integration in #167.
 
 - **Meta description and social preview tags** ([#149](https://github.com/rblumen/drift/issues/149)) — `index.html` now has a proper `<meta name="description">` plus Open Graph and Twitter Card tags, so links shared to Slack, iMessage, X, etc. show an accurate title and description instead of nothing.
