@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useLayoutEffect, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { IconInfo, IconChevronDown, IconChevronRight } from './icons';
 
 interface Props {
@@ -72,16 +73,59 @@ interface TipProps {
   dir?: 'up' | 'down' | 'left';
 }
 
+// Popover width, kept in sync with the `w-64` class below (16rem @ 16px root = 256px).
+const POPOVER_WIDTH = 256;
+const GAP = 8; // gap between trigger and popover, in px (mirrors the old mb-2/mr-2 = 0.5rem)
+
+type Coords = { top: number; left: number };
+
+/**
+ * Compute fixed-position coordinates for the popover so it escapes any
+ * scroll/overflow ancestor. Based on the trigger's viewport-relative
+ * bounding rect (position: fixed is relative to the viewport, not an
+ * ancestor, as long as no ancestor sets a transform/filter/contain — true
+ * here since the popover is portaled to document.body).
+ */
+function computeCoords(trigger: HTMLElement, dir: 'up' | 'down' | 'left'): Coords {
+  const rect = trigger.getBoundingClientRect();
+  const centerX = rect.left + rect.width / 2;
+  const centerY = rect.top + rect.height / 2;
+
+  let top: number;
+  let left: number;
+
+  if (dir === 'left') {
+    top = centerY;
+    left = rect.left - GAP;
+  } else if (dir === 'down') {
+    top = rect.bottom + GAP;
+    left = centerX;
+  } else {
+    // 'up' (default)
+    top = rect.top - GAP;
+    left = centerX;
+  }
+
+  return { top, left };
+}
+
 /**
  * A small inline "?" button that opens a floating popover on click.
  * Click anywhere outside (or press Escape) to dismiss.
  *
  * Designed to sit next to a label or table-header cell:
  *   <label>New cash <HelpTip>…explanation…</HelpTip></label>
+ *
+ * The popover is rendered via a portal to `document.body` and positioned
+ * with `position: fixed` from the trigger's bounding rect, so it always
+ * escapes ancestor scroll containers (e.g. the `overflow-x-auto` table
+ * wrappers used for mobile — see issue #190).
  */
 export function HelpTip({ children, dir = 'up' }: TipProps) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLSpanElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [coords, setCoords] = useState<Coords | null>(null);
 
   // Close on outside click or Escape.
   useEffect(() => {
@@ -102,13 +146,31 @@ export function HelpTip({ children, dir = 'up' }: TipProps) {
     };
   }, [open]);
 
-  // Positioning classes per direction.
-  const popoverPos: Record<string, string> = {
-    up:   'bottom-full mb-2 left-1/2 -translate-x-1/2',
-    down: 'top-full mt-2 left-1/2 -translate-x-1/2',
-    left: 'right-full mr-2 top-1/2 -translate-y-1/2',
+  // Recompute position on open, and keep it in sync with scroll/resize
+  // (e.g. scrolling the table's overflow-x-auto wrapper horizontally).
+  useLayoutEffect(() => {
+    if (!open || !triggerRef.current) return;
+    const update = () => {
+      if (triggerRef.current) setCoords(computeCoords(triggerRef.current, dir));
+    };
+    update();
+    window.addEventListener('scroll', update, true);
+    window.addEventListener('resize', update);
+    return () => {
+      window.removeEventListener('scroll', update, true);
+      window.removeEventListener('resize', update);
+    };
+  }, [open, dir]);
+
+  // Popover transform per direction: positions the popover box relative to
+  // the anchor point returned by computeCoords (which sits at the trigger's
+  // edge/center, not the popover's own corner).
+  const popoverTransform: Record<string, string> = {
+    up:   'translate(-50%, -100%)',
+    down: 'translate(-50%, 0)',
+    left: 'translate(-100%, -50%)',
   };
-  // Arrow (caret) position per direction.
+  // Arrow (caret) position per direction, relative to the popover box.
   const arrowPos: Record<string, string> = {
     up:   'top-full left-1/2 -translate-x-1/2 border-t-gray-700 border-x-transparent border-b-transparent border-4',
     down: 'bottom-full left-1/2 -translate-x-1/2 border-b-gray-700 border-x-transparent border-t-transparent border-4',
@@ -118,6 +180,7 @@ export function HelpTip({ children, dir = 'up' }: TipProps) {
   return (
     <span ref={containerRef} className="relative inline-flex items-center">
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen(o => !o)}
         className={`
@@ -134,19 +197,22 @@ export function HelpTip({ children, dir = 'up' }: TipProps) {
         ?
       </button>
 
-      {open && (
+      {open && coords && createPortal(
         <span
-          className={`
-            absolute z-50 ${popoverPos[dir]}
-            w-64 bg-gray-800 text-white text-xs rounded-lg px-3 py-2.5
-            leading-relaxed shadow-lg pointer-events-none
-          `}
+          className="fixed z-50 w-64 bg-gray-800 text-white text-xs rounded-lg px-3 py-2.5 leading-relaxed shadow-lg pointer-events-none"
+          style={{
+            top: coords.top,
+            left: coords.left,
+            transform: popoverTransform[dir],
+            width: POPOVER_WIDTH,
+          }}
           role="tooltip"
         >
           {children}
           {/* Caret */}
           <span className={`absolute border ${arrowPos[dir]}`} />
-        </span>
+        </span>,
+        document.body,
       )}
     </span>
   );
