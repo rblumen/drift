@@ -3,7 +3,8 @@ import { parsePosition, parseStrategy, safeParseStrategy, parsePortfolio, parseA
 import { parseCsv, parseMoney } from './csv';
 import { parseSchwabCsv, parseSchwabMultiCsv } from './adapters/schwab';
 import { parseFidelityCsv, parseFidelityMultiCsv } from './adapters/fidelity';
-import { parseEmpowerCsv, parseEmpowerTotals, EMPOWER_TICKER } from './adapters/empower';
+import { parseEmpowerCsv, parseEmpowerTotals, EMPOWER_TICKER, SUPPORTED_EMPOWER_CLASSES } from './adapters/empower';
+import { ALL_ASSET_CLASSES, type AssetClass } from '../engine/types';
 import { parseVanguardCsv, parseVanguardMultiCsv } from './adapters/vanguard';
 import { parseEtradeCsv } from './adapters/etrade';
 import { parseMerrillCsv, parseMerrillMultiCsv } from './adapters/merrill';
@@ -36,6 +37,42 @@ describe('parseMoney', () => {
   it('returns NaN for empty/undefined', () => {
     expect(parseMoney('')).toBeNaN();
     expect(parseMoney(undefined)).toBeNaN();
+  });
+  it('returns NaN for garbage input', () => {
+    expect(parseMoney('n/a')).toBeNaN();
+    expect(parseMoney('--')).toBeNaN();
+  });
+
+  // Accounting-style parenthesized negatives (issue #129) — some broker
+  // exports use "(1,234.56)" instead of a leading minus sign for
+  // negative/pending amounts.
+  it('treats a parenthesized amount as negative', () => {
+    expect(parseMoney('(1,234.56)')).toBeCloseTo(-1234.56);
+  });
+  it('treats a parenthesized amount with an inner dollar sign as negative', () => {
+    expect(parseMoney('($1,234.56)')).toBeCloseTo(-1234.56);
+  });
+  it('treats a parenthesized amount with an outer dollar sign as negative', () => {
+    expect(parseMoney('$(1,234.56)')).toBeCloseTo(-1234.56);
+  });
+  it('handles a parenthesized amount with no thousands separator', () => {
+    expect(parseMoney('($50.00)')).toBeCloseTo(-50);
+  });
+  it('tolerates surrounding whitespace around a parenthesized amount', () => {
+    expect(parseMoney('  ($50.00)  ')).toBeCloseTo(-50);
+  });
+  it('returns NaN for an unclosed leading paren', () => {
+    expect(parseMoney('(1,234.56')).toBeNaN();
+  });
+  it('ignores a stray trailing paren, matching pre-existing parseFloat behavior', () => {
+    // Not a parenthesized-negative form (no leading paren), so this falls
+    // through to parseFloat, which stops at the first non-numeric character
+    // and returns the leading numeric value — same as it did before #129.
+    expect(parseMoney('1,234.56)')).toBeCloseTo(1234.56);
+  });
+  it('returns NaN for empty parens', () => {
+    expect(parseMoney('()')).toBeNaN();
+    expect(parseMoney('($)')).toBeNaN();
   });
 });
 
@@ -388,6 +425,20 @@ describe('parseFidelityCsv', () => {
     expect(r.positions.every(p => p.ticker !== '')).toBe(true);
   });
 
+  // Regression for issue #129: the fixture's "Pending Activity - Debit" row
+  // carries a parenthesized Current Value ("($45.00)"). Before the fix,
+  // parseMoney returned NaN for it and the row was dropped via the NaN
+  // branch; now it's correctly parsed to -45 and dropped via the existing
+  // "marketValue <= 0" filter — same visible outcome, no error surfaced,
+  // confirming parenthesized negatives round-trip through the CSV adapter
+  // instead of silently failing to parse.
+  it('parses the parenthesized pending-debit row as negative and filters it out cleanly', () => {
+    const r = parseFidelityCsv(fidelityCsv, 'fidelity-ira');
+    expect(r.errors).toHaveLength(0);
+    expect(r.positions).toHaveLength(4);
+    expect(r.positions.some(p => p.description === 'Pending Activity - Debit')).toBe(false);
+  });
+
   it('attaches the supplied accountId', () => {
     const r = parseFidelityCsv(fidelityCsv, 'fidelity-ira');
     expect(r.positions.every(p => p.accountId === 'fidelity-ira')).toBe(true);
@@ -563,6 +614,41 @@ describe('parseEmpowerTotals', () => {
     expect(classifyTicker('EMPOWER_FI')).toBe('FIXED_INCOME');
     expect(classifyTicker('EMPOWER_ALT')).toBe('ALTERNATIVES');
     expect(classifyTicker('EMPOWER_CASH')).toBe('CASH');
+  });
+
+  // Issue #118: EMPOWER_TICKER only covers 6 of the 19 asset classes (the
+  // broad dashboard classes; the hierarchy sub-classes added later have no
+  // synthetic ticker). SUPPORTED_EMPOWER_CLASSES is the derived source of
+  // truth the UI uses to build its input list — it must stay in lockstep
+  // with EMPOWER_TICKER's keys, and unmapped classes must never reach a
+  // position with an undefined ticker.
+  it('SUPPORTED_EMPOWER_CLASSES matches the keys of EMPOWER_TICKER exactly', () => {
+    expect(new Set(SUPPORTED_EMPOWER_CLASSES)).toEqual(new Set(Object.keys(EMPOWER_TICKER)));
+  });
+
+  it('skips every asset class outside the supported six, emitting no undefined ticker', () => {
+    const totals = Object.fromEntries(
+      ALL_ASSET_CLASSES.map(ac => [ac, 10_000]),
+    ) as Partial<Record<AssetClass, number>>;
+
+    const positions = parseEmpowerTotals('empower-401k', totals);
+
+    // Exactly the supported classes come through, one position each.
+    expect(positions).toHaveLength(SUPPORTED_EMPOWER_CLASSES.length);
+    expect(positions.every(p => p.ticker !== undefined)).toBe(true);
+
+    const emittedTickers = positions.map(p => p.ticker).sort();
+    const expectedTickers = SUPPORTED_EMPOWER_CLASSES.map(ac => EMPOWER_TICKER[ac]).sort();
+    expect(emittedTickers).toEqual(expectedTickers);
+  });
+
+  it('omits an unsupported class (e.g. a hierarchy sub-class) even with a positive total', () => {
+    const positions = parseEmpowerTotals('empower-401k', {
+      US_LARGE_CAP: 75_000, // unsupported: not in EMPOWER_TICKER
+      US_TOTAL_MARKET: 25_000,
+    });
+    expect(positions).toHaveLength(1);
+    expect(positions[0].ticker).toBe(EMPOWER_TICKER.US_TOTAL_MARKET);
   });
 });
 

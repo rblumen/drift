@@ -4,8 +4,8 @@ dist
 .env.*
 /private/
 *.local.json
-*.html
-html/
+/rebalance-report-*.html
+/html/
 coverage/
 *.xlsx
 *.tsbuildinfo
