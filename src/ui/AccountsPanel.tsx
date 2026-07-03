@@ -4,6 +4,7 @@ import { defaultWithdrawalPriority, withdrawalPriorityOf } from '../engine/rebal
 import { ACCT_TYPE_LABEL, AC_LABEL, fmtUsd } from './fmt';
 import { HelpBox, HelpDef, HelpSection, HelpTip } from './HelpBox';
 import { ConfirmDialog } from './ConfirmDialog';
+import { IconLock, IconLockOpen } from './icons';
 
 // ── Deposit eligibility (issue #30, revised in #14 review) ───────────────────
 // Deposits are a binary Open/Closed on the inline control; the optional
@@ -775,9 +776,10 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
                           a.id === acct.id ? { ...a, locked: !a.locked } : a
                         ))}
                         title={acct.locked ? 'Unlock account (allow trades)' : 'Lock account (exclude from trades)'}
-                        className={`text-sm transition-colors ${acct.locked ? 'text-amber-500 hover:text-gray-400' : 'text-gray-300 hover:text-amber-500'}`}
+                        aria-label={acct.locked ? 'Unlock account (allow trades)' : 'Lock account (exclude from trades)'}
+                        className={`inline-flex transition-colors ${acct.locked ? 'text-amber-500 hover:text-gray-400' : 'text-gray-300 hover:text-amber-500'}`}
                       >
-                        {acct.locked ? '🔒' : '🔓'}
+                        {acct.locked ? <IconLock size={15} /> : <IconLockOpen size={15} />}
                       </button>
                     </td>
                     <td className="px-4 py-2 text-right space-x-3 whitespace-nowrap">

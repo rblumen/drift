@@ -8,6 +8,7 @@ import { AC_COLOR, AC_LABEL, BUCKET_LABEL, fmtPct } from './fmt';
 import { WeightPie } from './WeightPie';
 import type { WeightSlice } from './WeightPie';
 import { HelpBox, HelpDef, HelpSection, HelpTip } from './HelpBox';
+import { IconChevronDown, IconChevronRight, IconCheck } from './icons';
 
 // One selectable placement option: a value plus its display label and nesting depth.
 // depth 1 rows are specific-account leaves shown indented under their tax tier (#89 Phase 2).
@@ -152,7 +153,7 @@ function CollapsibleSection({
         aria-expanded={open}
         className="flex w-full items-start gap-2 text-left"
       >
-        <span className="text-gray-400 text-xs leading-5 select-none">{open ? '▾' : '▸'}</span>
+        <span className="text-gray-400 leading-5 mt-0.5 inline-flex select-none">{open ? <IconChevronDown size={13} /> : <IconChevronRight size={13} />}</span>
         <span>
           <span className="block text-sm font-medium text-gray-700">{title}</span>
           {subtitle && <span className="block text-xs text-gray-400 mt-0.5">{subtitle}</span>}
@@ -921,7 +922,7 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
                   <td className="px-4 py-2 text-xs font-medium text-gray-500">
                     Total
                     {sumOk && (
-                      <span className="ml-2 font-normal text-green-500">✓ sums to 100%</span>
+                      <span className="ml-2 inline-flex items-center gap-1 font-normal text-green-500"><IconCheck size={12} /> sums to 100%</span>
                     )}
                   </td>
                   <td className={`px-4 py-2 text-right text-sm font-semibold ${sumOk ? 'text-green-600' : 'text-red-600'}`}>

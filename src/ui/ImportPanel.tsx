@@ -11,6 +11,7 @@ import { parseEmpowerCsv, parseEmpowerTotals, SUPPORTED_EMPOWER_CLASSES } from '
 import { AC_LABEL, ACCT_TYPE_COLOR, ACCT_TYPE_LABEL, fmtUsd } from './fmt';
 import { PieChart } from './PieChart';
 import { HelpBox, HelpDef, HelpSection } from './HelpBox';
+import { IconLock, IconLockOpen, IconX, IconPencil, IconChevronDown, IconChevronRight } from './icons';
 
 // A broker CSV format. These are auto-detected from the file's contents
 // (detectFormat) and can also be picked manually from the Format dropdown.
@@ -429,7 +430,7 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
 
         <HelpSection title="Tips">
           <HelpDef term="Price (optional)">Supplying a share price is not required. If present, the Results tab shows share counts alongside dollar amounts.</HelpDef>
-          <HelpDef term="Locked positions">Click the 🔓 icon on any position row to freeze it. Locked positions count in totals and weights but are excluded from trades — useful for employer stock units or other positions you can't freely sell.</HelpDef>
+          <HelpDef term="Locked positions">Click the lock icon on any position row to freeze it. Locked positions count in totals and weights but are excluded from trades — useful for employer stock units or other positions you can't freely sell.</HelpDef>
           <HelpDef term="Unmapped tickers">If an imported ticker isn't in the built-in classification map, it will appear in the Classify tab with an amber badge. Resolve it there before running the final rebalance.</HelpDef>
         </HelpSection>
       </HelpBox>
@@ -737,7 +738,7 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
                   </span>
 
                   {/* Chevron */}
-                  <span className="text-gray-400 text-xs ml-1">{isOpen ? '▾' : '▸'}</span>
+                  <span className="text-gray-400 ml-1 inline-flex">{isOpen ? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}</span>
 
                   {/* Clear button — stop propagation so it doesn't toggle collapse */}
                   <span
@@ -758,8 +759,8 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
                       {rows.map(({ pos: p, posIdx }) => (
                         <tr key={posIdx} className={`hover:bg-gray-50 ${p.locked ? 'opacity-60' : ''}`}>
                           {/* Edited indicator */}
-                          <td className="pl-3 pr-0 py-2 w-4 text-amber-500 text-xs">
-                            {p.edited && <span title="Manually edited">✎</span>}
+                          <td className="pl-3 pr-0 py-2 w-4 text-amber-500">
+                            {p.edited && <span className="inline-flex" title="Manually edited" aria-label="Manually edited"><IconPencil size={13} /></span>}
                           </td>
                           {/* Ticker */}
                           <td className="px-2 py-2 font-mono font-medium w-28">
@@ -855,19 +856,20 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
                             <button
                               onClick={() => updatePositionByIdx(posIdx, { locked: !p.locked }, false)}
                               title={p.locked ? 'Unlock position (allow trades)' : 'Lock position (exclude from trades)'}
-                              className={`text-sm transition-colors ${p.locked ? 'text-amber-500 hover:text-gray-400' : 'text-gray-300 hover:text-amber-500'}`}
+                              aria-label={p.locked ? 'Unlock position (allow trades)' : 'Lock position (exclude from trades)'}
+                              className={`inline-flex transition-colors ${p.locked ? 'text-amber-500 hover:text-gray-400' : 'text-gray-300 hover:text-amber-500'}`}
                             >
-                              {p.locked ? '🔒' : '🔓'}
+                              {p.locked ? <IconLock size={15} /> : <IconLockOpen size={15} />}
                             </button>
                           </td>
                           {/* Remove */}
                           <td className="px-3 py-2 text-right w-8">
                             <button
                               onClick={() => setPositions(positions.filter((_, idx) => idx !== posIdx))}
-                              className="text-gray-300 hover:text-red-400 text-xs"
+                              className="inline-flex text-gray-300 hover:text-red-400"
                               title="Remove"
                               aria-label={`Remove ${p.ticker}`}
-                            >✕</button>
+                            ><IconX size={13} /></button>
                           </td>
                         </tr>
                       ))}

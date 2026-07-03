@@ -7,6 +7,7 @@ import {
   office365CalendarUrl,
   yahooCalendarUrl,
 } from './ics';
+import { IconClock, IconCalendar, IconChevronDown } from './icons';
 
 interface Props {
   reminder: Reminder;
@@ -135,7 +136,7 @@ export function ReminderPanel({ reminder, setReminder }: Props) {
     <div className="border border-sky-200 rounded-lg px-4 py-3 bg-sky-50">
       <div className="flex items-center justify-between mb-2">
         <p className="text-sm font-semibold text-sky-900 flex items-center gap-1.5">
-          <span aria-hidden="true">⏰</span>
+          <IconClock size={15} />
           Next rebalance reminder
         </p>
         {due && (
@@ -233,10 +234,10 @@ export function ReminderPanel({ reminder, setReminder }: Props) {
               aria-haspopup="menu"
               aria-expanded={calMenuOpen}
               onClick={() => setCalMenuOpen(o => !o)}
-              className="text-xs border border-sky-200 bg-white text-gray-700 px-3 py-1.5 rounded hover:border-sky-300 transition-colors flex items-center gap-1"
+              className="text-xs border border-sky-200 bg-white text-gray-700 px-3 py-1.5 rounded hover:border-sky-300 transition-colors flex items-center gap-1.5"
             >
-              📅 Add to calendar
-              <span className="text-gray-400" aria-hidden="true">▾</span>
+              <IconCalendar size={14} /> Add to calendar
+              <span className="text-gray-400 inline-flex"><IconChevronDown size={13} /></span>
             </button>
             {calMenuOpen && (
               <div

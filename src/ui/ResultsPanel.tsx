@@ -29,6 +29,7 @@ import { HelpBox, HelpDef, HelpSection, HelpTip } from './HelpBox';
 import type { Reminder } from '../ingest/schema';
 import { ReminderPanel, daysUntil } from './ReminderPanel';
 import { DRIFT_URL as SHARE_URL } from './site';
+import { IconDownload, IconClock, IconLock, IconChevronDown, IconChevronRight } from './icons';
 
 // ── Brand palette helpers ─────────────────────────────────────────────────────
 // Using CSS custom props where possible so they respect any overrides in
@@ -656,12 +657,12 @@ function NextStepsSection({
             <button
               onClick={() => downloadReport(result, accounts, resolvedTrades, freeCash, plannedWithdrawal)}
               className="inline-flex items-center gap-1.5 bg-brand text-white text-[12.5px] font-semibold px-3.5 py-1.5 rounded-lg hover:bg-brand-ink transition-colors">
-              ↓ Trade report
+              <IconDownload size={14} /> Trade report
             </button>
             {onSave && (
               <button onClick={onSave}
                 className="inline-flex items-center gap-1.5 border border-gray-200 text-gray-600 text-[12.5px] font-medium px-3.5 py-1.5 rounded-lg hover:border-gray-400 transition-colors">
-                ↓ Portfolio file
+                <IconDownload size={14} /> Portfolio file
               </button>
             )}
           </div>
@@ -828,7 +829,7 @@ export function ResultsPanel({
               : 'bg-amber-50 border-amber-200 text-amber-800'}`}
           data-testid="reminder-banner"
         >
-          <span className="text-lg leading-none mt-0.5">⏰</span>
+          <span className="inline-flex leading-none mt-0.5"><IconClock size={18} /></span>
           <div className="flex-1">
             <p className="font-medium">
               {reminderDays! < 0
@@ -1151,8 +1152,8 @@ export function ResultsPanel({
                     <span className="text-sm font-medium text-gray-700">{account.name}</span>
                     <span className="text-xs text-gray-400">{account.institution} · {ACCT_TYPE_LABEL[account.type]}</span>
                     {locked && (
-                      <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">
-                        🔒 locked
+                      <span className="inline-flex items-center gap-1 text-xs text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">
+                        <IconLock size={12} /> locked
                       </span>
                     )}
                   </span>
@@ -1169,7 +1170,7 @@ export function ResultsPanel({
                       </span>
                     </span>
                   )}
-                  <span className="text-gray-400 text-xs ml-1">{isOpen ? '▾' : '▸'}</span>
+                  <span className="text-gray-400 ml-1 inline-flex">{isOpen ? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}</span>
                 </button>
 
                 {isOpen && (

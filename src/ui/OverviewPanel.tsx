@@ -4,6 +4,7 @@
 // This panel is purely status + navigation for a session already in progress.
 import type { Account, Position } from '../engine/types';
 import { fmtUsd } from './fmt';
+import { IconCheck } from './icons';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type AppTab = 'overview' | 'accounts' | 'import' | 'classify' | 'strategy' | 'results';
@@ -181,11 +182,11 @@ export function OverviewPanel({
         {/* Unclassified */}
         <div className="bg-white px-4 py-3.5 flex flex-col gap-0.5">
           <span className="font-mono text-[10px] tracking-[.12em] uppercase text-gray-400">Unclassified</span>
-          <span className={`font-semibold text-xl tracking-tight ${
+          <span className={`inline-flex items-center font-semibold text-xl tracking-tight leading-7 ${
             !hasPositions ? 'text-gray-300' :
             unmappedCount > 0 ? 'text-amber-600' : 'text-green-600'
           }`}>
-            {!hasPositions ? '—' : unmappedCount > 0 ? unmappedCount : '✓'}
+            {!hasPositions ? '—' : unmappedCount > 0 ? unmappedCount : <IconCheck size={20} aria-label="All tagged" />}
           </span>
           <span className="font-mono text-[11px] text-gray-400">
             {!hasPositions ? 'No positions' : unmappedCount > 0 ? 'Need tagging' : 'All tagged'}
