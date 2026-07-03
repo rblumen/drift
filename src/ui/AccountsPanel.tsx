@@ -3,6 +3,7 @@ import type { Account, AccountType, AssetClass } from '../engine/types';
 import { defaultWithdrawalPriority, withdrawalPriorityOf } from '../engine/rebalance';
 import { ACCT_TYPE_LABEL, AC_LABEL, fmtUsd } from './fmt';
 import { HelpBox, HelpDef, HelpSection, HelpTip } from './HelpBox';
+import { ConfirmDialog } from './ConfirmDialog';
 
 // ── Deposit eligibility (issue #30, revised in #14 review) ───────────────────
 // Deposits are a binary Open/Closed on the inline control; the optional
@@ -325,6 +326,7 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
   const [form, setForm]       = useState(blankForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm]   = useState<FormState>(blankForm);
+  const [removeTarget, setRemoveTarget] = useState<Account | null>(null);
 
   // Total RMD rolled up from accounts; the planned-withdrawal box shows
   // total = Σ RMD + additional (the manual entry).
@@ -784,12 +786,7 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
                         className="text-brand-500 hover:underline text-xs"
                       >Edit</button>
                       <button
-                        onClick={() => {
-                          if (confirm(`Remove "${acct.name}" and all its positions?`)) {
-                            setAccounts(accounts.filter(a => a.id !== acct.id));
-                            onDeleteAccount(acct.id);
-                          }
-                        }}
+                        onClick={() => setRemoveTarget(acct)}
                         className="text-red-400 hover:underline text-xs"
                       >Remove</button>
                     </td>
@@ -875,6 +872,21 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={removeTarget != null}
+        title="Remove account?"
+        message={removeTarget ? `Remove "${removeTarget.name}" and all its positions? This cannot be undone.` : ''}
+        confirmLabel="Remove"
+        destructive
+        onConfirm={() => {
+          if (!removeTarget) return;
+          setAccounts(accounts.filter(a => a.id !== removeTarget.id));
+          onDeleteAccount(removeTarget.id);
+          setRemoveTarget(null);
+        }}
+        onCancel={() => setRemoveTarget(null)}
+      />
     </div>
   );
 }

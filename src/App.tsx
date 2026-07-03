@@ -20,6 +20,7 @@ import { ResultsPanel } from './ui/ResultsPanel';
 import { fmtUsd } from './ui/fmt';
 import { DriftWordmark } from './ui/Logo';
 import { HowItWorksDrawer } from './ui/HowItWorksDrawer';
+import { ConfirmDialog } from './ui/ConfirmDialog';
 import { LandingPage } from './ui/LandingPage';
 import {
   buildState, clearState, DEFAULT_APP_STATE, saveJson, loadJson,
@@ -64,6 +65,7 @@ export default function App() {
   const [reminder,          setReminder]          = useState<Reminder>(saved.reminder ?? {});
   const [activeTab,         setActiveTab]         = useState<Tab>('overview');
   const [howItWorksOpen,    setHowItWorksOpen]    = useState(false);
+  const [resetConfirmOpen,  setResetConfirmOpen]  = useState(false);
   const [loadError,         setLoadError]         = useState<string | null>(null);
   const [isDemoMode,        setIsDemoMode]        = useState<boolean>(_isDemoInit);
   // Returning users (saved state already on this device) and the ?demo deep
@@ -189,7 +191,11 @@ export default function App() {
   }
 
   function handleReset() {
-    if (!confirm('Clear all accounts, positions, and strategy? This cannot be undone.')) return;
+    setResetConfirmOpen(true);
+  }
+
+  function confirmReset() {
+    setResetConfirmOpen(false);
     clearState();
     setAccounts([]);
     setPositions([]);
@@ -325,15 +331,22 @@ export default function App() {
             <div className="mb-2 bg-brand-50 border border-brand-200 rounded px-3 py-2 text-xs text-brand-800 flex items-center justify-between">
               <span>
                 Demo — showing a synthetic 5-account sample portfolio. Your saved data is untouched.
-                {' '}Dismiss (✕) to return to your saved portfolio, or use ↑ Load / Reset.
               </span>
-              <button
-                onClick={handleExitDemo}
-                aria-label="Exit demo and restore your saved portfolio"
-                className="ml-3 text-brand-400 hover:text-brand-700 flex-shrink-0"
-              >
-                ✕
-              </button>
+              <div className="ml-3 flex items-center gap-2 flex-shrink-0">
+                <button
+                  onClick={handleExitDemo}
+                  className="font-medium underline underline-offset-2 text-brand-700 hover:text-brand-900"
+                >
+                  Exit demo
+                </button>
+                <button
+                  onClick={handleExitDemo}
+                  aria-label="Exit demo and restore your saved portfolio"
+                  className="text-brand-400 hover:text-brand-700"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
           )}
 
@@ -507,6 +520,16 @@ export default function App() {
       </footer>
 
       <HowItWorksDrawer open={howItWorksOpen} onClose={() => setHowItWorksOpen(false)} />
+
+      <ConfirmDialog
+        open={resetConfirmOpen}
+        title="Clear all data?"
+        message="This clears all accounts, positions, and strategy settings. This cannot be undone."
+        confirmLabel="Reset"
+        destructive
+        onConfirm={confirmReset}
+        onCancel={() => setResetConfirmOpen(false)}
+      />
 
       {/*
         Anonymous, cookieless traffic analytics (aggregate pageviews only).
