@@ -202,7 +202,8 @@ After `npm run build`, the `dist/` folder is a fully static site. Drag it to [Ne
 
 ## Privacy and guardrails
 
-- **All client-side.** No network calls, no telemetry, no backend.
+- **All client-side.** No backend, no server-side processing of your data.
+- **Your data never leaves your browser.** Holdings, account details, and dollar amounts stay in `localStorage` and are never transmitted anywhere. The only network traffic is anonymous, cookieless pageview counting (no personal or financial data, no cross-site tracking).
 - **No real data in the repo.** `/private/` and `*.local.json` are git-ignored. Only synthetic fixtures in `src/data/` are committed.
 - **No credential automation.** CSV export and manual entry only; no scraping, no undocumented APIs.
 - **Not investment advice.** This tool produces mechanical recommendations from your own inputs and strategy.

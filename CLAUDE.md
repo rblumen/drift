@@ -23,7 +23,9 @@ A local, browser-only tool that rebalances investment holdings across multiple a
 
 ## Hard guardrails (never violate)
 - Never commit real financial data. Only synthetic fixtures. `/private/` and `*.local.json` are git-ignored.
-- All client-side. No backend, no network calls, no telemetry in v1.
+- All computation is client-side. No backend, no server-side processing of user data.
+- **No user data ever leaves the browser.** Portfolio holdings, account names/numbers, dollar amounts, asset classes, reminders, and any PII stay in `localStorage` and are never transmitted, logged, or sent anywhere. This is the core privacy promise — treat it as inviolable.
+- Anonymous, aggregate traffic analytics (pageview counts, referrer, country, device class) via a cookieless, no-PII tool are permitted. Such a tool must never receive portfolio/account/PII data — not via URL, custom event, or props. Only page-level traffic.
 - No credential automation, no scraping, no undocumented/reverse-engineered APIs. CSV export + manual entry only.
 - Do not create remotes or push on the user's behalf — the user owns hosting.
 

@@ -40,7 +40,7 @@ Current version: **0.1.0** (see `CHANGELOG.md`).
 | Schema validation | zod |
 | Tests | Vitest |
 
-No backend. No network calls. No telemetry. Everything runs in the browser.
+No backend. Your data never leaves the browser. The only network traffic is anonymous, cookieless pageview analytics (no PII, no financial data). Everything else runs in the browser.
 
 ---
 
@@ -166,7 +166,8 @@ Windows: double-click `launch.bat` — installs deps on first run, opens browser
 
 ## Hard guardrails (never violate)
 
-- No network calls, no backend, no telemetry in v1.
+- No user data leaves the browser (PII, holdings, account details, dollar amounts). Anonymous, cookieless, aggregate pageview analytics are the only permitted network traffic.
+- No backend, no server-side processing of user data.
 - Never commit real financial data.
 - No credential automation or reverse-engineered APIs.
 - Do not push or create remotes on the user's behalf.

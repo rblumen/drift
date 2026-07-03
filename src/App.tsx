@@ -27,6 +27,7 @@ import {
 } from './store';
 import { appStateSchema, type Reminder } from './ingest/schema';
 import SAMPLE_PORTFOLIO from './data/sample-portfolio.json';
+import { Analytics } from '@vercel/analytics/react';
 
 type Tab = 'overview' | 'accounts' | 'import' | 'classify' | 'strategy' | 'results';
 
@@ -506,6 +507,16 @@ export default function App() {
       </footer>
 
       <HowItWorksDrawer open={howItWorksOpen} onClose={() => setHowItWorksOpen(false)} />
+
+      {/*
+        Anonymous, cookieless traffic analytics (aggregate pageviews only).
+        INVARIANT: no portfolio/account/PII data may ever reach analytics. Tabs are
+        React state (never routed), and the only URL param — ?demo — is stripped on
+        load (see top of file), so the tracked path is always "/". Never add custom
+        events carrying holdings, dollar amounts, or account details. See CLAUDE.md
+        privacy guardrail and issue #168.
+      */}
+      <Analytics />
     </div>
   );
 }
