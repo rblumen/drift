@@ -20,6 +20,7 @@ import { ResultsPanel } from './ui/ResultsPanel';
 import { fmtUsd } from './ui/fmt';
 import { DriftWordmark } from './ui/Logo';
 import { HowItWorksDrawer } from './ui/HowItWorksDrawer';
+import { ConfirmDialog } from './ui/ConfirmDialog';
 import { LandingPage } from './ui/LandingPage';
 import {
   buildState, clearState, DEFAULT_APP_STATE, saveJson, loadJson,
@@ -68,6 +69,7 @@ export default function App() {
   const [reminder,          setReminder]          = useState<Reminder>(saved.reminder ?? {});
   const [activeTab,         setActiveTab]         = useState<Tab>('overview');
   const [howItWorksOpen,    setHowItWorksOpen]    = useState(false);
+  const [resetConfirmOpen,  setResetConfirmOpen]  = useState(false);
   const [loadError,         setLoadError]         = useState<string | null>(null);
   const [isDemoMode,        setIsDemoMode]        = useState<boolean>(_isDemoInit);
   // Returning users (saved state already on this device) and the ?demo deep
@@ -203,7 +205,11 @@ export default function App() {
   }
 
   function handleReset() {
-    if (!confirm('Clear all accounts, positions, and strategy? This cannot be undone.')) return;
+    setResetConfirmOpen(true);
+  }
+
+  function confirmReset() {
+    setResetConfirmOpen(false);
     clearState();
     setAccounts([]);
     setPositions([]);
@@ -542,6 +548,16 @@ export default function App() {
       </footer>
 
       <HowItWorksDrawer open={howItWorksOpen} onClose={() => setHowItWorksOpen(false)} />
+
+      <ConfirmDialog
+        open={resetConfirmOpen}
+        title="Clear all data?"
+        message="This clears all accounts, positions, and strategy settings. This cannot be undone."
+        confirmLabel="Reset"
+        destructive
+        onConfirm={confirmReset}
+        onCancel={() => setResetConfirmOpen(false)}
+      />
 
       {/*
         Anonymous, cookieless traffic analytics (aggregate pageviews only).
