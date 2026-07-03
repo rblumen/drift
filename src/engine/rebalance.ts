@@ -132,6 +132,61 @@ function convertTradeToNominal(trade: Trade, ctx: TaxAdjustContext): Trade {
 }
 
 /**
+ * Per-account balance correction (extracted, #126).
+ *
+ * Shared by Step 8.5 (post-minTradeUsd-filter correction) and the tax-adjustment
+ * nominal re-balance pass — the two call sites ran byte-identical copies of this
+ * loop, differing only in how each account's expected net is sourced.
+ *
+ * For each account: compute net = Σ deltaUsd across all kept trades. A non-zero
+ * net means small trades were filtered asymmetrically (Step 8.5), or TA→nominal
+ * conversion made per-account sums diverge from the user's real newCash (tax pass).
+ * The expected net is the account's real newCash (zero when no contributions are
+ * being deployed) — supplied by the caller via `expectedNetOf`.
+ *
+ * Fix: find the largest kept trade on the imbalanced side and shrink it by the
+ * residual imbalance. If the adjustment would push it below minTradeUsd, drop it
+ * entirely and apply the residual to the next-largest, repeating as needed.
+ *
+ * Mutates `trades` in place (both call sites splice/replace this array directly).
+ */
+function correctAccountNets(
+  trades: Trade[],
+  accounts: Account[],
+  expectedNetOf: (acct: Account) => number,
+  minTradeUsd: number,
+): void {
+  for (const acct of accounts) {
+    const expectedNet = expectedNetOf(acct);
+    const acctTrades = trades.filter(t => t.accountId === acct.id);
+    const net = acctTrades.reduce((s, t) => s + t.deltaUsd, 0);
+    const residual = net - expectedNet;
+    if (Math.abs(residual) < EPSILON) continue;
+
+    // residual > 0 means we sold too much (or bought too little) → shrink the largest buy
+    // residual < 0 means we bought too much (or sold too little) → shrink the largest sell
+    const targetSign = residual > 0 ? 1 : -1;
+    const candidates = acctTrades
+      .filter(t => Math.sign(t.deltaUsd) === targetSign)
+      .sort((a, b) => Math.abs(b.deltaUsd) - Math.abs(a.deltaUsd));
+
+    let remaining = Math.abs(residual);
+    for (const cand of candidates) {
+      if (remaining < EPSILON) break;
+      const idx = trades.indexOf(cand);
+      const adjust = Math.min(remaining, Math.abs(cand.deltaUsd));
+      const newDelta = cand.deltaUsd - targetSign * adjust;
+      remaining -= adjust;
+      if (Math.abs(newDelta) < minTradeUsd) {
+        trades.splice(idx, 1);
+      } else {
+        trades[idx] = { ...cand, deltaUsd: newDelta };
+      }
+    }
+  }
+}
+
+/**
  * Contribution-first funding breakdown (backlog #2 / issue #3).
  *
  * Decomposes the recommended trades into the share funded by new contributions
@@ -1054,44 +1109,11 @@ export function rebalance(
   }
 
   // Step 8.5 — Post-filter per-account balance correction.
-  //
-  // For each account: compute net = Σ deltaUsd across all kept trades.
-  // A non-zero net means small trades were filtered asymmetrically.
-  // The expected net is newCash (zero when no contributions are being deployed).
-  //
-  // Fix: find the largest kept trade on the imbalanced side and shrink it by the
-  // residual imbalance. If the adjustment would push it below minTradeUsd, drop it
-  // entirely and apply the residual to the next-largest, repeating as needed.
-
+  // minTradeUsd filtering can drop small trades on one side of the ledger without
+  // dropping the matching trade on the other, re-introducing a net imbalance. Re-align
+  // each account's net to its real newCash. See correctAccountNets (#126) for the algorithm.
   const trades = [...rawTrades];
-  for (const acct of nonLockedAccounts) {
-    const expectedNet = acct.newCash ?? 0;
-    const acctTrades = trades.filter(t => t.accountId === acct.id);
-    const net = acctTrades.reduce((s, t) => s + t.deltaUsd, 0);
-    const residual = net - expectedNet;
-    if (Math.abs(residual) < EPSILON) continue;
-
-    // residual > 0 means we sold too much (or bought too little) → shrink the largest buy
-    // residual < 0 means we bought too much (or sold too little) → shrink the largest sell
-    const targetSign = residual > 0 ? 1 : -1;
-    const candidates = acctTrades
-      .filter(t => Math.sign(t.deltaUsd) === targetSign)
-      .sort((a, b) => Math.abs(b.deltaUsd) - Math.abs(a.deltaUsd));
-
-    let remaining = Math.abs(residual);
-    for (const cand of candidates) {
-      if (remaining < EPSILON) break;
-      const idx = trades.indexOf(cand);
-      const adjust = Math.min(remaining, Math.abs(cand.deltaUsd));
-      const newDelta = cand.deltaUsd - targetSign * adjust;
-      remaining -= adjust;
-      if (Math.abs(newDelta) < strategy.minTradeUsd) {
-        trades.splice(idx, 1);
-      } else {
-        trades[idx] = { ...cand, deltaUsd: newDelta };
-      }
-    }
-  }
+  correctAccountNets(trades, nonLockedAccounts, acct => acct.newCash ?? 0, strategy.minTradeUsd);
 
   // Step 8.6 — Trade-count minimization (backlog #16).
   //
@@ -1236,31 +1258,15 @@ export function rebalance(
       if (f > EPSILON) avoidableSells[i] = { ...a, amountUsd: a.amountUsd / f };
     }
 
-    // Nominal balance correction (mirror of Step 8.5).
-    for (const acct of nonLockedAccounts) {
-      const expectedNet = originalNewCash[acct.id] ?? 0;
-      const acctTrades = trades.filter(t => t.accountId === acct.id);
-      const net = acctTrades.reduce((s, t) => s + t.deltaUsd, 0);
-      const residual = net - expectedNet;
-      if (Math.abs(residual) < EPSILON) continue;
-      const targetSign = residual > 0 ? 1 : -1;
-      const candidates = acctTrades
-        .filter(t => Math.sign(t.deltaUsd) === targetSign)
-        .sort((a, b) => Math.abs(b.deltaUsd) - Math.abs(a.deltaUsd));
-      let remaining = Math.abs(residual);
-      for (const cand of candidates) {
-        if (remaining < EPSILON) break;
-        const idx = trades.indexOf(cand);
-        const adjust = Math.min(remaining, Math.abs(cand.deltaUsd));
-        const newDelta = cand.deltaUsd - targetSign * adjust;
-        remaining -= adjust;
-        if (Math.abs(newDelta) < strategy.minTradeUsd) {
-          trades.splice(idx, 1);
-        } else {
-          trades[idx] = { ...cand, deltaUsd: newDelta };
-        }
-      }
-    }
+    // Nominal balance correction (mirror of Step 8.5) — same algorithm, but the
+    // expected net is the account's *original* newCash (pre-TA-scaling), since trades
+    // are now back in nominal dollars. See correctAccountNets (#126).
+    correctAccountNets(
+      trades,
+      nonLockedAccounts,
+      acct => originalNewCash[acct.id] ?? 0,
+      strategy.minTradeUsd,
+    );
   }
 
   // Generate TAXABLE_SALE flags from the corrected trade list.
