@@ -221,8 +221,11 @@ function WashSaleBanner({ flags, accounts }: { flags: Flag[]; accounts: Account[
 }
 
 // ── Allocation table row ──────────────────────────────────────────────────────
+// Exported (in addition to being used internally below) so it can be
+// render-tested in isolation without constructing a full RebalanceResult —
+// see ResultsPanel.AllocationRow.test.tsx (issue #190).
 
-function AllocationRow({
+export function AllocationRow({
   ac, current, target, projected, taCurrent, taProjected, depth = 0,
 }: {
   ac: AssetClass; current: number; target: number; projected: number;
@@ -247,15 +250,15 @@ function AllocationRow({
       <td className="px-4 py-3 text-right font-mono tabular-nums text-[13px]">{fmtPct(current)}</td>
       <td className="px-4 py-3 text-right font-mono tabular-nums text-[13px] text-gray-500">{fmtPct(target)}</td>
       <td className="px-4 py-3">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center justify-end gap-2">
           <span
-            className="font-mono tabular-nums text-[12.5px]"
+            className="font-mono tabular-nums text-[12.5px] text-right"
             style={{ color: driftTextColor ?? '#9ca3af' }}
           >
             {drift >= 0 ? '+' : ''}{fmtPct(drift)}
           </span>
           {showBar && (
-            <div className="flex-1 h-[3px] bg-gray-100 rounded overflow-hidden min-w-[32px] max-w-[72px]">
+            <div className="w-[72px] shrink-0 h-[3px] bg-gray-100 rounded overflow-hidden">
               <div className="h-full rounded" style={{ width: barWidth, background: barColor }} />
             </div>
           )}
