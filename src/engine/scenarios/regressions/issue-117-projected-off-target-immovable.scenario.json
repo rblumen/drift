@@ -1,0 +1,63 @@
+{
+  "name": "issue-117-projected-off-target-immovable",
+  "description": "Issue #117: PROJECTED_OFF_TARGET must measure each class against the immovable-adjusted, scaled resting point Step 5 sizes toward — immovable + (target - immovable) * scale — not target * scale. A frozen (within-tolerance) fixed-income sleeve plus a locked IRA pushes scale to 0.4. US_LARGE_CAP is underweight with a locked position BELOW target (immovable 15k < target 40k): it settles at its reachable 0.25 and must NOT flag. DEVELOPED_INTL is overweight with a locked position ABOVE target (immovable 25k > target 10k): it is genuinely stuck and MUST still flag. Pre-fix, target * scale spuriously flagged US_LARGE_CAP too. Uses VOO (a leaf US_LARGE_CAP), not VTI/US_TOTAL_MARKET, because US_TOTAL_MARKET auto-splits into cap children on schema load (#127).",
+  "principle": "regression",
+  "accounts": [
+    { "id": "brokerage", "name": "Taxable Brokerage", "institution": "Schwab", "type": "TAXABLE" },
+    { "id": "ira", "name": "Rollover IRA", "institution": "Fidelity", "type": "TRADITIONAL_IRA", "locked": true }
+  ],
+  "holdings": [
+    { "accountId": "ira", "ticker": "VOO", "marketValue": 15000 },
+    { "accountId": "ira", "ticker": "FZILX", "marketValue": 25000 },
+    { "accountId": "brokerage", "ticker": "BND", "marketValue": 50000 },
+    { "accountId": "brokerage", "ticker": "VOO", "marketValue": 5000 },
+    { "accountId": "brokerage", "ticker": "FZILX", "marketValue": 5000 }
+  ],
+  "strategy": {
+    "targets": {
+      "US_TOTAL_MARKET": 0.0,
+      "US_LARGE_CAP": 0.40,
+      "US_MID_CAP": 0.0,
+      "US_SMALL_CAP": 0.0,
+      "DEVELOPED_INTL": 0.10,
+      "DEVELOPED_EUROPE": 0.0,
+      "DEVELOPED_PACIFIC": 0.0,
+      "EMERGING_INTL": 0.0,
+      "FIXED_INCOME": 0.50,
+      "US_TREASURY": 0.0,
+      "US_CORP_BOND": 0.0,
+      "MUNI_BOND": 0.0,
+      "TIPS": 0.0,
+      "INTL_BOND": 0.0,
+      "REAL_ESTATE": 0.0,
+      "ALTERNATIVES": 0.0,
+      "CRYPTO": 0.0,
+      "PRECIOUS_METALS": 0.0,
+      "CASH": 0.0
+    },
+    "placement": {},
+    "toleranceAbs": 0.05,
+    "toleranceRel": 0.25,
+    "minTradeUsd": 250
+  },
+  "expected": {
+    "currentWeights": {
+      "US_LARGE_CAP": 0.20,
+      "DEVELOPED_INTL": 0.30,
+      "FIXED_INCOME": 0.50
+    },
+    "projectedWeights": {
+      "US_LARGE_CAP": 0.25,
+      "DEVELOPED_INTL": 0.25,
+      "FIXED_INCOME": 0.50
+    },
+    "flags": [
+      { "kind": "WITHIN_TOLERANCE", "assetClass": "FIXED_INCOME" },
+      { "kind": "PROJECTED_OFF_TARGET", "assetClass": "DEVELOPED_INTL", "projectedWeight": 0.25, "targetWeight": 0.10 }
+    ],
+    "absentFlags": [
+      { "kind": "PROJECTED_OFF_TARGET", "assetClass": "US_LARGE_CAP" }
+    ],
+    "tradeCountByAccount": { "ira": 0 }
+  }
+}
