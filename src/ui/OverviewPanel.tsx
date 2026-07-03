@@ -270,7 +270,6 @@ export function OverviewPanel({
       {/* ── Privacy footnote ────────────────────────────────────────────────── */}
       <p className="font-mono text-[11.5px] text-gray-400 mt-10 pt-4 border-t border-gray-100 leading-relaxed">
         Private by default — all computation runs in your browser, nothing is sent anywhere.
-        &nbsp;·&nbsp; Not investment advice.
       </p>
 
     </div>
