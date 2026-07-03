@@ -1351,15 +1351,25 @@ export function rebalance(
   //   • Locked positions exceed the class target — cannot reduce below the lock
   //   • minTradeUsd suppressed the needed trade — threshold is too large
   //
-  // The reachable target is the nominal target × `scale`, not the nominal target
-  // itself. When within-tolerance classes are frozen (Principle 5), the engine
-  // distributes the remaining free capacity across out-of-tolerance classes in
-  // proportion to their targets (Step 5), so each fully-placeable class settles
-  // at target × scale. Comparing against the nominal target would spuriously flag
-  // a class whose only "drift" is this expected freeze artifact — e.g. the sole
-  // OOT class can't be rebalanced because the offsetting classes it would trade
-  // against are all within tolerance and untouchable. That is not a hard
-  // constraint, so it must not raise the "target not reachable" banner (issue #57).
+  // The reachable target is the scaled resting point that Step 5 actually sizes
+  // toward — NOT the nominal target. When within-tolerance classes are frozen
+  // (Principle 5), the engine distributes the remaining free capacity across
+  // out-of-tolerance classes in proportion to their targets (Step 5), so a
+  // fully-placeable class settles at target × scale, not the nominal target.
+  // Comparing against the nominal target would spuriously flag a class whose only
+  // "drift" is this expected freeze artifact — e.g. the sole OOT class can't be
+  // rebalanced because the offsetting classes it would trade against are all within
+  // tolerance and untouchable. That is not a hard constraint, so it must not raise
+  // the "target not reachable" banner (issue #57).
+  //
+  // #117 refines that baseline for classes carrying immovable (locked) value: when a
+  // class is locked *below* its target, the stranded lock plus the frozen-class scale
+  // shortfall lands it at immovable + (target − immovable) × scale, which differs from
+  // the plain target × scale by immovable × (1 − scale). Using target × scale there
+  // spuriously raised or masked the flag in portfolios that mix locked positions with
+  // frozen classes. A class locked *above* target keeps the target × scale baseline so
+  // its un-reducible overage still flags. See the per-regime derivation at the
+  // reachableValue computation below.
   //
   // A deviation only flags when it is BOTH out of band AND large enough to act on:
   //   1. |projected − reachableTarget| exceeds the per-class 5/25 effective band, and
@@ -1388,7 +1398,31 @@ export function rebalance(
   const checkProjected = (taEnabled && taProjectedWeights) ? taProjectedWeights : nominalProjectedWeights;
   for (const ac of ALL_ASSET_CLASSES) {
     if (withinTolerance.has(ac)) continue;
-    const reachableTarget = strategy.targets[ac] * scale;
+    // #117: reachable dollar resting point. Two regimes, split on whether the
+    // immovable (locked) value in this class sits below or above its target:
+    //
+    //   • Underweight lock (immovable ≤ target): the locked value is stranded BELOW
+    //     target and the engine can only top up the movable remainder. Step 5 sizes
+    //     that remainder as (target − immovable) × scale, so the class rests at
+    //     immovable + (target − immovable) × scale. This is the #117 correction: the
+    //     pre-#117 baseline of target × scale ignored the immovable, differing from
+    //     the true resting point by immovable × (1 − scale) and spuriously flagging a
+    //     class whose only "drift" is a low lock plus the frozen-class scale shortfall.
+    //
+    //   • Overweight lock (immovable > target): the locked value already EXCEEDS
+    //     target and cannot be reduced. Here the reachable target stays the scaled
+    //     nominal target (target × scale) — we deliberately give NO credit for the
+    //     stuck overage, so the "can't reduce below the lock" miss still flags (this
+    //     is the documented locked-above-target constraint, and preserves issue #57's
+    //     locked-cash-above-a-0%-target flag, which a naive immovable credit — up to
+    //     the full lock when scale = 0 — would have silenced).
+    //
+    // Divide by householdValue to a weight — both are in the same (possibly TA-scaled)
+    // space as checkProjected.
+    const reachableValue = immovableByClass[ac] <= targetValue[ac]
+      ? immovableByClass[ac] + (targetValue[ac] - immovableByClass[ac]) * scale
+      : targetValue[ac] * scale;
+    const reachableTarget = householdValue > 0 ? reachableValue / householdValue : 0;
     const deviation = Math.abs(checkProjected[ac] - reachableTarget);
     const outOfBand = deviation > effectiveTolerance(ac, strategy);
     const actionable = deviation * householdValue >= strategy.minTradeUsd;
