@@ -1,6 +1,6 @@
 # CONTEXT.md — Drift Portfolio Rebalancer
 
-**Last Updated:** 2026-05-29
+**Last Updated:** 2026-07-02
 
 ---
 
@@ -14,14 +14,14 @@ Currently a personal tool tuned to one household. Designed to be sharable — bu
 
 ---
 
-## Status (as of 2026-05-29)
+## Status (as of 2026-07-02)
 
-All milestones (M0–M4) are complete. The project is at MVP with 164 passing tests. Active development is tracked in [GitHub Issues](https://github.com/rblumen/drift/issues) — P0 items are the next targets:
+All milestones (M0–M4) are complete. The project is well past MVP, with 495 passing tests across 20 test files. There are no open P0 items — active development is tracked in [GitHub Issues](https://github.com/rblumen/drift/issues) and is currently focused on post-audit cleanup and design polish:
 
-- **5/25 relative tolerance bands** (#2)
-- **Contribution-first output in Results** (#3)
-- **Wash-sale cross-account warning** (#5)
-- **529 biannual change limit warning** (#6)
+- **UI/design-system polish** — icon set consistency, data-viz palette, semantic status colors (#150), banner layout/copy cleanup (#146, #152), styled confirmation dialogs to replace native `confirm()` (#151)
+- **Engine hardening and readability** — decompose the 1,400+ line `rebalance.ts` (#128), dedupe the per-account balance-correction pass (#126), fix `PROJECTED_OFF_TARGET` vs. Step 5 inconsistency (#117)
+- **Ingest coverage** — `EMPOWER_TICKER` only maps 6 of 19 asset classes (#118); `parseMoney` doesn't support parenthesized negatives (#129)
+- **Housekeeping** — dependency currency (Vite/Vitest/Zod/React/Tailwind/TS majors, #132), `npm audit` findings in the dev-dependency chain (#122), CSP security headers via `vercel.json` (#133), this docs-sync pass (#121)
 
 Bugs are tracked as GitHub Issues (label: `bug`).
 
@@ -48,44 +48,65 @@ No backend. Your data never leaves the browser. The only network traffic is anon
 
 ```
 src/
-├── engine/              # Pure TypeScript — no React imports. Pure functions, fully unit-tested.
-│   ├── types.ts         # All domain types (Account, Position, Strategy, Trade, Flag, AssetClass…)
-│   ├── strategy.ts      # DEFAULT_STRATEGY (household-specific defaults)
-│   ├── classify.ts      # ticker → AssetClass lookup
-│   ├── rollup.ts        # positions → current allocation; redistributes US_TOTAL_MARKET holdings
-│   ├── placement.ts     # greedyPlace() — most-constrained-first placement fill
-│   ├── resolve.ts       # matches engine trades to specific fund tickers
-│   ├── rebalance.ts     # orchestrator → RebalanceResult
-│   ├── utils.ts         # shared engine utilities
+├── engine/                  # Pure TypeScript — no React imports. Pure functions, fully unit-tested.
+│   ├── types.ts             # All domain types (Account, Position, Strategy, Trade, Flag, AssetClass…)
+│   ├── strategy.ts          # DEFAULT_STRATEGY + DEFAULT_PLACEMENT (household-specific defaults)
+│   ├── classify.ts          # ticker → AssetClass lookup
+│   ├── hierarchy.ts         # CLASS_HIERARCHY — parent/child asset-class tree + split weights
+│   ├── rollup.ts            # positions → current allocation; redistributes parent-class holdings via hierarchy.ts
+│   ├── placement.ts         # greedyPlace() — most-constrained-first placement fill
+│   ├── placementHierarchy.ts # PlacementTarget tree helpers (bucket/TAX_DEFERRED/TAX_FREE/account-type/specific-account)
+│   ├── cashfill.ts          # sequential concentrate-then-spill fill for deposits/withdrawals
+│   ├── taxAdjust.ts         # tax-adjusted (after-tax) balance haircuts, issue #7
+│   ├── taxableSale.ts       # single source of truth for what counts as a taxable capital-gains sale
+│   ├── nativeAllocation.ts  # holdings-lens (native, unredistributed) allocation views, issue #78
+│   ├── metrics.ts           # diversification() / aggressiveness() summary metrics
+│   ├── resolve.ts           # matches engine trades to specific fund tickers
+│   ├── rebalance.ts         # orchestrator → RebalanceResult
+│   ├── utils.ts             # shared engine utilities
+│   ├── scenarios/           # black-box scenario harness — JSON fixtures anchored to PRINCIPLES.md
+│   │   ├── README.md        # fixture format + how to add a scenario
+│   │   ├── schema.ts        # zod schema each *.scenario.json is validated against
+│   │   ├── scenarios.test.ts # globs every fixture, runs the engine, asserts expected trades/flags
+│   │   ├── 01-locked-accounts/ … 10-placement-specificity/  # one folder per PRINCIPLES.md priority
+│   │   └── regressions/     # one fixture per fixed engine bug, named issue-N-*.scenario.json
 │   ├── rebalance.test.ts
 │   └── resolve.test.ts
 ├── ingest/
-│   ├── schema.ts        # zod AppState schema + migration; validates all external data
-│   ├── csv.ts           # generic CSV parser with column mapping
+│   ├── schema.ts             # zod AppState schema + migration; validates all external data
+│   ├── csv.ts                # generic CSV parser with column mapping
+│   ├── detect.ts              # content-based format detection — picks the right adapter from a CSV's header
 │   ├── ingest.test.ts
-│   └── adapters/        # schwab.ts, fidelity.ts, empower.ts, plaid.ts (stub)
-├── ui/                  # React components; depends on engine, never the reverse
+│   └── adapters/              # schwab.ts, fidelity.ts, empower.ts, vanguard.ts, etrade.ts, merrill.ts, plaid.ts (stub)
+├── ui/                        # React components; depends on engine, never the reverse
+│   ├── LandingPage.tsx         # marketing / home screen shown before the tab shell
 │   ├── AccountsPanel.tsx
 │   ├── ClassifyPanel.tsx
 │   ├── ImportPanel.tsx
 │   ├── StrategyPanel.tsx
 │   ├── ResultsPanel.tsx
 │   ├── OverviewPanel.tsx
-│   ├── DonutChart.tsx   # concentric donut (before/after by account type)
-│   ├── PieChart.tsx     # shared pie chart primitive
-│   ├── WeightPie.tsx    # asset-class allocation pie
-│   ├── StackedBars.tsx  # asset class × account type stacked bars
-│   ├── HelpBox.tsx      # contextual help tooltips
-│   ├── exportReport.ts  # generates downloadable HTML report
-│   └── fmt.ts           # ALL display formatting — rounding happens ONLY here
-├── store.ts             # localStorage save/load, rolling backups, JSON export/import
+│   ├── ReminderPanel.tsx       # next-rebalance reminder UI (calendar links + .ics download)
+│   ├── HowItWorksDrawer.tsx    # slide-out explainer drawer
+│   ├── DonutChart.tsx          # concentric donut (before/after by account type)
+│   ├── PieChart.tsx            # shared pie chart primitive
+│   ├── WeightPie.tsx           # asset-class allocation pie
+│   ├── AllocationPlot.tsx      # diversification/aggressiveness scatter plot
+│   ├── StackedBars.tsx         # asset class × account type stacked bars
+│   ├── HelpBox.tsx             # contextual help tooltips
+│   ├── Logo.tsx                # Drift mark + wordmark
+│   ├── exportReport.ts         # generates downloadable HTML report
+│   ├── ics.ts                  # builds the .ics calendar file for rebalance reminders
+│   ├── site.ts                 # canonical deployment-wide constants (e.g. DRIFT_URL)
+│   └── fmt.ts                  # ALL display formatting — rounding happens ONLY here
+├── store.ts                   # localStorage save/load, rolling backups, JSON export/import
 ├── store.test.ts
 ├── App.tsx
 └── data/
     ├── assetclass-map.json      # seed ticker → AssetClass (committed; no real data)
     ├── targetDateFunds.ts       # TDF-specific detection (glide-path estimates for blended-fund decomposition)
     ├── sample-portfolio.json    # synthetic fixture for demo mode (?demo URL param)
-    └── fixtures/                # synthetic CSV exports (schwab, fidelity, empower samples)
+    └── fixtures/                # synthetic CSV exports (schwab, fidelity, empower, vanguard, etrade, merrill samples)
 ```
 
 **Dependency rule:** `engine/` ← `ingest/` ← `ui/`. Engine never imports from UI or ingest. Never violate this.
@@ -148,7 +169,7 @@ Full spec: `PRINCIPLES.md`.
 
 ```bash
 npm run dev     # dev server → http://localhost:5173
-npm test        # Vitest (164 tests across 4 files)
+npm test        # Vitest (495 tests across 20 files)
 npm run build   # production build → dist/
 ```
 

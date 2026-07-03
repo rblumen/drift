@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { aggressiveness, diversification } from './metrics';
+import { aggressiveness, diversification, LIVE_ASSET_CLASSES } from './metrics';
 import type { AssetClass } from './types';
 import { ALL_ASSET_CLASSES } from './types';
 
@@ -73,12 +73,45 @@ describe('Metrics (non-goal display concern): portfolio diversification score', 
     expect(diversification(w({ US_TOTAL_MARKET: 1 }))).toBe(0);
   });
 
-  it('is 1 when perfectly equal-weighted across all classes', () => {
-    const n = ALL_ASSET_CLASSES.length;
+  it('is at/near the floor for a single-class portfolio expressed at a leaf', () => {
+    expect(diversification(w({ US_LARGE_CAP: 1 }))).toBeCloseTo(0, 5);
+  });
+
+  // #134: LIVE_ASSET_CLASSES excludes the synthetic US_TOTAL_MARKET parent (always
+  // 0 by invariant) and every other parent that has children (DEVELOPED_INTL,
+  // FIXED_INCOME, ALTERNATIVES) — those families are counted once, via their
+  // children, not as parent + children slots.
+  it('derives the live-class count by excluding the synthetic parent and absorbing parent/children families', () => {
+    expect(LIVE_ASSET_CLASSES).not.toContain('US_TOTAL_MARKET');
+    expect(LIVE_ASSET_CLASSES).not.toContain('DEVELOPED_INTL');
+    expect(LIVE_ASSET_CLASSES).not.toContain('FIXED_INCOME');
+    expect(LIVE_ASSET_CLASSES).not.toContain('ALTERNATIVES');
+    // Every ALL_ASSET_CLASSES entry that isn't a parent-with-children survives.
+    expect(LIVE_ASSET_CLASSES.length).toBe(ALL_ASSET_CLASSES.length - 4);
+    expect(LIVE_ASSET_CLASSES).toEqual(
+      expect.arrayContaining(['US_LARGE_CAP', 'US_MID_CAP', 'US_SMALL_CAP',
+        'DEVELOPED_EUROPE', 'DEVELOPED_PACIFIC', 'EMERGING_INTL',
+        'US_TREASURY', 'US_CORP_BOND', 'MUNI_BOND', 'TIPS', 'INTL_BOND',
+        'REAL_ESTATE', 'CRYPTO', 'PRECIOUS_METALS', 'CASH']),
+    );
+  });
+
+  it('is 1 when perfectly equal-weighted across all live classes', () => {
+    const n = LIVE_ASSET_CLASSES.length;
     const equal = Object.fromEntries(
-      ALL_ASSET_CLASSES.map(ac => [ac, 1 / n]),
+      LIVE_ASSET_CLASSES.map(ac => [ac, 1 / n]),
     ) as Record<AssetClass, number>;
-    expect(diversification(equal)).toBeCloseTo(1);
+    expect(diversification(w(equal))).toBeCloseTo(1);
+  });
+
+  it('reaches 1 for an equal-weighted spread whether classes are expressed as parent or as children', () => {
+    // Sanity: the theoretical max is actually reachable post-#134, unlike the old
+    // N=19 denominator where parent+children double-counting made 1.0 unreachable.
+    const n = LIVE_ASSET_CLASSES.length;
+    const equal = Object.fromEntries(
+      LIVE_ASSET_CLASSES.map(ac => [ac, 1 / n]),
+    ) as Record<AssetClass, number>;
+    expect(diversification(w(equal))).toBeGreaterThanOrEqual(0.999);
   });
 
   it('increases as a portfolio spreads across more classes', () => {

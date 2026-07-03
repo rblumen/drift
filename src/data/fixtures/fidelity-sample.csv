@@ -4,6 +4,7 @@ Account Number,Account Name,Symbol,Description,Quantity,Last Price,Last Price Ch
 "Z00000001","Fidelity Traditional IRA","FPADX","FIDELITY PACIFIC BASIN FUND","1050","$10.72","$0.03","$11,256.00","$31.50","0.28%","$500.00","4.65%","3.75%","$10,756.00","$10.24","Mutual Fund"
 "Z00000001","Fidelity Traditional IRA","GLD","SPDR GOLD SHARES","41","$227.50","$1.25","$9,327.50","$51.25","0.55%","$327.50","3.64%","3.11%","$9,000.00","$219.51","ETF"
 "Z00000001","Fidelity Traditional IRA","","Pending Activity","","","","$0.00","","","","","","","",""
+"Z00000001","Fidelity Traditional IRA","","Pending Activity - Debit","","","","($45.00)","","","","","","","",""
 
 "The data and information in this spreadsheet is provided to you solely for your use and is not for distribution."
 
