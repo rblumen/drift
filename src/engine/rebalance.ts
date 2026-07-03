@@ -8,13 +8,12 @@ import { consolidateParentClasses, childrenOf } from './hierarchy';
 import { accountBucket, greedyPlace } from './placement';
 import { targetTaxTreatment } from './placementHierarchy';
 import { fillOrdered } from './cashfill';
-import { isTaxableSale } from './taxableSale';
+import { deriveAdvisoryFlags } from './advisoryFlags';
 import { EPSILON, effectiveTolerance, targetTolerance, zeroByClass } from './utils';
 import {
   positionTaxFactor,
   contributionTaxFactor,
   findMissingCostBasis,
-  taxableClassSaleIsKnownGain,
 } from './taxAdjust';
 
 // ── Tax-adjusted allocation (issue #7) ───────────────────────────────────────
@@ -606,6 +605,55 @@ function surfaceIdleCash(
   return { ...currentWeights, CASH: currentWeights.CASH + totalCash / householdValue };
 }
 
+/**
+ * Result assembler (extracted, #128).
+ *
+ * The two early returns (empty household, all-within-tolerance) and the main path
+ * each built a near-identical RebalanceResult object literal, differing only in the
+ * genuinely path-specific inputs below. Extracting one assembler collapses those
+ * three copies into a single shape so a new result field can't be added to one path
+ * and forgotten on another.
+ *
+ * `contributionSummary` is always derived from `trades` (empty trades → an all-zero
+ * summary), and the optional `taxAdjusted` view is spread in only when the caller
+ * supplies it — the early returns never do (they exit before trade conversion, and
+ * an untraded portfolio has no distinct after-tax projection to report). Every real
+ * difference between the paths is a parameter here; nothing is inferred implicitly.
+ */
+function buildResult(fields: {
+  householdValue: number;
+  currentWeights: Record<AssetClass, number>;
+  targetWeights: Record<AssetClass, number>;
+  projectedWeights: Record<AssetClass, number>;
+  currentValueByAccount: Record<string, Record<AssetClass, number>>;
+  nativeValueByAccount: Record<string, Record<AssetClass, number>>;
+  projectedNativeValueByAccount: Record<string, Record<AssetClass, number>>;
+  withdrawalByAccount: Record<string, number>;
+  depositByAccount: Record<string, number>;
+  trades: Trade[];
+  flags: Flag[];
+  /** Tax-adjusted parallel view (issue #7). Supplied only by the main path when
+   *  tax adjustment is enabled; omitted (undefined) leaves it off the result. */
+  taxAdjusted?: RebalanceResult['taxAdjusted'];
+}): RebalanceResult {
+  const result: RebalanceResult = {
+    householdValue: fields.householdValue,
+    currentWeights: fields.currentWeights,
+    targetWeights: fields.targetWeights,
+    projectedWeights: fields.projectedWeights,
+    currentValueByAccount: fields.currentValueByAccount,
+    nativeValueByAccount: fields.nativeValueByAccount,
+    projectedNativeValueByAccount: fields.projectedNativeValueByAccount,
+    withdrawalByAccount: fields.withdrawalByAccount,
+    depositByAccount: fields.depositByAccount,
+    trades: fields.trades,
+    flags: fields.flags,
+    contributionSummary: summarizeContributions(fields.trades),
+  };
+  if (fields.taxAdjusted) result.taxAdjusted = fields.taxAdjusted;
+  return result;
+}
+
 export function rebalance(
   accounts: Account[],
   positions: Position[],
@@ -820,7 +868,7 @@ export function rebalance(
   if (householdValue === 0) {
     const zeros = zeroByClass();
     const nativeValueByAccount = nativeAllocationByAccount(originalAccounts, originalPositions, classify, decompositions);
-    return {
+    return buildResult({
       householdValue: 0,
       currentWeights: zeros,
       targetWeights: strategy.targets,
@@ -831,9 +879,13 @@ export function rebalance(
       withdrawalByAccount,
       depositByAccount,
       trades: [],
-      flags,
-      contributionSummary: summarizeContributions([]),
-    };
+      // Shared advisory-flag derivation (#128). Empty trades → no trade-derived
+      // advisories, but routing every path through deriveAdvisoryFlags keeps the
+      // early returns from silently skipping a future flag (the #114 failure mode).
+      flags: [...flags, ...deriveAdvisoryFlags({
+        trades: [], accounts, originalPositions, classify, decompositions, avoidableSells: [],
+      })],
+    });
   }
 
   // Step 0.9 — REVISIT_PLACEMENT check (uses all accounts, including locked).
@@ -889,7 +941,7 @@ export function rebalance(
       nativeValueByAccount, projectedNativeValueByAccount,
       currentValueByAccount, [], currentWeights, householdValue,
     );
-    return {
+    return buildResult({
       householdValue,
       currentWeights: adjustedWeights,
       targetWeights: strategy.targets,
@@ -900,9 +952,13 @@ export function rebalance(
       withdrawalByAccount,
       depositByAccount,
       trades: [],
-      flags,
-      contributionSummary: summarizeContributions([]),
-    };
+      // Shared advisory-flag derivation (#128). No trades here, so this yields no
+      // trade-derived advisories — but going through the same function as the main
+      // path is the structural guarantee against a dropped flag (#114).
+      flags: [...flags, ...deriveAdvisoryFlags({
+        trades: [], accounts, originalPositions, classify, decompositions, avoidableSells: [],
+      })],
+    });
   }
 
   // Step 3 — Target dollar values (based on full household value including locked).
@@ -1269,59 +1325,15 @@ export function rebalance(
     );
   }
 
-  // Generate TAXABLE_SALE flags from the corrected trade list.
-  // Cash position reductions are not real trades; they don't generate capital-gains exposure.
-  for (const trade of trades) {
-    if (isTaxableSale(trade)) {
-      flags.push({ kind: 'TAXABLE_SALE', accountId: trade.accountId, assetClass: trade.assetClass, amountUsd: Math.abs(trade.deltaUsd) });
-    }
-  }
-
-  // 529 rebalance limit warning (issue #6). The IRS allows only two investment-direction
-  // changes per 529 account per calendar year. Flag whenever any trade touches a 529.
-  const fiveTwentyNineIds = [...new Set(
-    trades
-      .filter(t => accounts.find(a => a.id === t.accountId)?.type === 'FIVE_TWENTY_NINE')
-      .map(t => t.accountId),
-  )];
-  if (fiveTwentyNineIds.length > 0) {
-    flags.push({ kind: 'FIVE_TWENTY_NINE_REBALANCE_LIMIT', accountIds: fiveTwentyNineIds });
-  }
-
-  // Wash-sale cross-account warning (issue #5). Selling an asset class at a loss
-  // in a taxable account while buying the *same* class in any other account in the
-  // same run disallows the loss under the IRS wash-sale rule (across IRA/401k and
-  // spouse accounts too). We flag conservatively: emit unless cost basis is known
-  // for the sold class and the sale is a gain (no loss to disallow). Exact-class
-  // match only — parent/child "substantially identical" matching is out of scope
-  // for v1. Uses originalPositions (nominal basis & value). De-duped to one flag
-  // per taxable-account × class × buy-account triple.
-  const washSeen = new Set<string>();
-  for (const sell of trades) {
-    if (sell.deltaUsd >= 0 || !sell.inTaxableAccount || sell.assetClass === 'CASH') continue;
-    if (taxableClassSaleIsKnownGain(sell.accountId, sell.assetClass, originalPositions, classify, decompositions)) {
-      continue;   // realizes a gain — no loss for the wash-sale rule to disallow
-    }
-    for (const buy of trades) {
-      if (buy.deltaUsd <= 0 || buy.assetClass !== sell.assetClass) continue;
-      if (buy.accountId === sell.accountId) continue;   // same account — not cross-account
-      const key = `${sell.accountId}|${sell.assetClass}|${buy.accountId}`;
-      if (washSeen.has(key)) continue;
-      washSeen.add(key);
-      flags.push({
-        kind: 'WASH_SALE_RISK',
-        taxableAccountId: sell.accountId,
-        assetClass: sell.assetClass,
-        buyAccountId: buy.accountId,
-      });
-    }
-  }
-
-  // Surface avoidable taxable sells (only populated when preferTaxAdvantagedRebalance
-  // is disabled and the redirect would have reduced taxable selling).
-  for (const a of avoidableSells) {
-    flags.push({ kind: 'TAXABLE_REBALANCE_AVOIDABLE', accountId: a.accountId, assetClass: a.assetClass, amountUsd: a.amountUsd });
-  }
+  // Trade-derived advisory flags (#128): TAXABLE_SALE, 529 rebalance-limit,
+  // WASH_SALE_RISK, and TAXABLE_REBALANCE_AVOIDABLE. Extracted into deriveAdvisoryFlags
+  // so the early returns share the exact same derivation (see advisoryFlags.ts) — the
+  // structural guard that prevents a future flag from being skipped on a result path,
+  // which is how bug #114 happened. Wash-sale gain detection reads originalPositions
+  // (nominal basis); the trade list here is the final corrected/nominal one.
+  flags.push(...deriveAdvisoryFlags({
+    trades, accounts, originalPositions, classify, decompositions, avoidableSells,
+  }));
 
   // Step 10 — Projected weights after trades. (Step 9, the REVISIT_PLACEMENT
   // check, moved to Step 0.9 so it runs before the early returns — issue #114.)
@@ -1474,7 +1486,7 @@ export function rebalance(
     resultCurrentValueByAccount, resolvedForDisplay, nominalCurrentWeights, resultHouseholdValue,
   );
 
-  return {
+  return buildResult({
     householdValue: resultHouseholdValue,
     currentWeights: nominalCurrentWeights,
     targetWeights: strategy.targets,
@@ -1486,13 +1498,10 @@ export function rebalance(
     depositByAccount,
     trades,
     flags,
-    contributionSummary: summarizeContributions(trades),
-    ...(taEnabled && taCurrentWeights && taProjectedWeights ? {
-      taxAdjusted: {
-        householdValue: householdValue, // engine's householdValue is in TA dollars
-        currentWeights: taCurrentWeights,
-        projectedWeights: taProjectedWeights,
-      },
-    } : {}),
-  };
+    taxAdjusted: taEnabled && taCurrentWeights && taProjectedWeights ? {
+      householdValue: householdValue, // engine's householdValue is in TA dollars
+      currentWeights: taCurrentWeights,
+      projectedWeights: taProjectedWeights,
+    } : undefined,
+  });
 }
