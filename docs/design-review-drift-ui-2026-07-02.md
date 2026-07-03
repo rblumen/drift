@@ -115,6 +115,7 @@ branding fix available — one component, every screen.
 ### B2 — Data-viz palette doesn't match the brand identity
 
 > **Status (2026-07-03):** Tracked in [#150](https://github.com/rblumen/drift/issues/150) — **open**. Folded into the grouped design-system polish issue (with B3); awaiting a maintainer decision on palette/icon direction.
+> **Update (2026-07-03, later):** [#150](https://github.com/rblumen/drift/issues/150) **closed** in two parts — [PR #188](https://github.com/rblumen/drift/pull/188) (brand-tuned two-tier data-viz palette: family-level landing ramp via `FAMILY_COLOR`/`--dv-*`, distinct brand-tuned hues per class in `AC_COLOR`; plus brand-toned status badges) and [PR #192](https://github.com/rblumen/drift/pull/192) (shared 13-icon drawn SVG set replacing all UI-chrome emoji and text glyphs). See also [PR #189](https://github.com/rblumen/drift/pull/189), which adopted the family ramp for the new allocation chart views (#98).
 
 The landing page charts use brand navy tones + burnt orange
 (`src/ui/LandingPage.tsx:16`); the in-app charts use bright, unrelated Tailwind
@@ -129,6 +130,7 @@ semantic-color level.
 ### B3 — Icon language mixes drawn SVG and emoji
 
 > **Status (2026-07-03):** Tracked in [#150](https://github.com/rblumen/drift/issues/150) — **open**. Folded into the grouped design-system polish issue (with B2); awaiting a maintainer decision on palette/icon direction.
+> **Update (2026-07-03, later):** [#150](https://github.com/rblumen/drift/issues/150) **closed** in two parts — [PR #188](https://github.com/rblumen/drift/pull/188) (brand-tuned two-tier data-viz palette: family-level landing ramp via `FAMILY_COLOR`/`--dv-*`, distinct brand-tuned hues per class in `AC_COLOR`; plus brand-toned status badges) and [PR #192](https://github.com/rblumen/drift/pull/192) (shared 13-icon drawn SVG set replacing all UI-chrome emoji and text glyphs). See also [PR #189](https://github.com/rblumen/drift/pull/189), which adopted the family ramp for the new allocation chart views (#98).
 
 The landing page and Overview panel use crisp custom SVGs; the app shell mixes in text
 glyphs (`↓ Save`, `↑ Load`, `✕ Reset`, `▾`/`▸` chevrons) and raw emoji (`🔒`/`🔓` lock
