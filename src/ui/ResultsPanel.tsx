@@ -4,7 +4,6 @@
 //   • SELL badge/amount → Burnt Orange (was red)
 //   • Drift: over  → #b34500, under → #1a5fa0; adds inline progress bars
 //   • Household section: radar/bar/donut allocation-view toggle (issue #98)
-//   • Per-account: one before/after radar replaces the two-small-pie grid
 //   • Tabular/mono figures throughout
 //   • indigo UI chrome → brand blue
 
@@ -18,10 +17,10 @@ import {
   AC_COLOR, AC_LABEL, AC_SHORT_LABEL, ACCT_TYPE_LABEL, fmtUsd, fmtPct, fmtDelta,
   FAMILY_COLOR, FAMILY_LABEL, rollupFamilies, activeFamilies,
 } from './fmt';
+import { PieChart } from './PieChart';
 import type { PieSlice } from './PieChart';
 import { AllocationViews } from './AllocationViews';
 import type { ChartView } from './AllocationViews';
-import { RadarChart } from './RadarChart';
 import type { RadarDatum } from './RadarChart';
 import type { BulletDatum } from './BulletBars';
 import { AllocationPlot } from './AllocationPlot';
@@ -357,24 +356,6 @@ function buildPieSlices(byClass: Record<AssetClass, number>): PieSlice[] {
   return ALL_ASSET_CLASSES
     .filter(ac => byClass[ac] > 0.5)
     .map(ac => ({ label: AC_LABEL[ac], value: byClass[ac], color: AC_COLOR[ac] }));
-}
-
-// Per-account radar data (issue #98): family weights before (pre-trade) vs after
-// (post-trade), from the account's native USD-by-class maps. Shaded polygon =
-// Before, dashed outline = After, drift segment = the trade.
-function buildAccountRadar(
-  beforeNative: Partial<Record<AssetClass, number>>,
-  afterNative: Partial<Record<AssetClass, number>>,
-): RadarDatum[] {
-  const bTotal = Object.values(beforeNative).reduce((s, v) => s + (v ?? 0), 0);
-  const aTotal = Object.values(afterNative).reduce((s, v) => s + (v ?? 0), 0);
-  const bFam = rollupFamilies(
-    Object.fromEntries(Object.entries(beforeNative).map(([k, v]) => [k, (v ?? 0) / (bTotal || 1)])),
-  );
-  const aFam = rollupFamilies(
-    Object.fromEntries(Object.entries(afterNative).map(([k, v]) => [k, (v ?? 0) / (aTotal || 1)])),
-  );
-  return activeFamilies(bFam, aFam).map(f => ({ label: FAMILY_LABEL[f], a: bFam[f], b: aFam[f] }));
 }
 
 // ── Contribution-first funding breakdown ──────────────────────────────────────
@@ -771,12 +752,9 @@ export function ResultsPanel({
       const acctTrades = resolvedTrades
         .filter(t => t.accountId === account.id)
         .sort((a, b) => Math.abs(b.deltaUsd) - Math.abs(a.deltaUsd));
-      const beforeNative = nativeValueByAccount[account.id] ?? {};
-      const afterNative   = projectedNativeValueByAccount[account.id] ?? {};
-      const before = buildPieSlices(beforeNative);
-      const after  = buildPieSlices(afterNative);
-      const radarData = buildAccountRadar(beforeNative, afterNative);
-      return { account, trades: acctTrades, before, after, radarData };
+      const before = buildPieSlices(nativeValueByAccount[account.id] ?? {});
+      const after  = buildPieSlices(projectedNativeValueByAccount[account.id] ?? {});
+      return { account, trades: acctTrades, before, after };
     })
     .filter(g => g.trades.length > 0 || g.before.length > 0);
 
@@ -1041,7 +1019,7 @@ export function ResultsPanel({
 
           {/* Visualization: radar/bar/donut toggle + companion drift table (#98),
               with the AllocationPlot below it. */}
-          <div className="p-4 border-b border-gray-100 space-y-6">
+          <div className="p-4 border-b border-gray-100 space-y-4">
             {hasAllocation && (
               <AllocationViews
                 view={chartView}
@@ -1151,12 +1129,13 @@ export function ResultsPanel({
         <div className="space-y-4">
           <h3 className="text-sm font-medium text-gray-700">Recommended trades</h3>
 
-          {tradesByAccount.map(({ account, trades: acctTrades, before, after, radarData }) => {
+          {tradesByAccount.map(({ account, trades: acctTrades, before, after }) => {
             const deposit    = depositByAccount[account.id] ?? 0;
             const withdrawal = withdrawalByAccount[account.id] ?? 0;
             const netUsd     = deposit - withdrawal;
             const hasTransfer = deposit > 0.5 || withdrawal > 0.5;
             const isOpen  = !collapsed.has(account.id);
+            const hasBothPies = before.length > 0 && after.length > 0;
             const locked  = account.locked;
 
             return (
@@ -1192,31 +1171,18 @@ export function ResultsPanel({
 
                 {isOpen && (
                   <div>
-                    {radarData.length > 0 && (before.length > 0 || after.length > 0) && (
-                      <div className="px-4 py-4 border-b border-gray-100 flex flex-col items-center gap-3">
-                        <RadarChart
-                          data={radarData}
-                          size={320}
-                          scaleMax={0.8}
-                          aName="Before"
-                          bName={acctTrades.length > 0 ? 'After' : 'Current'}
-                        />
-                        <div className="flex flex-wrap gap-3.5 justify-center" style={{ fontSize: '11.5px', color: '#6b7280' }}>
-                          <span className="flex items-center gap-1.5">
-                            <span className="shrink-0" style={{ width: 16, height: 10, borderRadius: 2, background: 'rgba(13,62,122,.15)', border: '2px solid #0d3e7a' }} />
-                            Before
-                          </span>
-                          <span className="flex items-center gap-1.5">
-                            <span className="shrink-0" style={{ width: 16, height: 0, borderTop: '2px dashed #8792a0' }} />
-                            {acctTrades.length > 0 ? 'After' : 'Current'}
-                          </span>
-                          {acctTrades.length > 0 && (
-                            <span className="flex items-center gap-1.5">
-                              <span className="shrink-0" style={{ width: 14, height: 4, borderRadius: 2, background: '#e8600a' }} />
-                              the trade
-                            </span>
-                          )}
-                        </div>
+                    {(before.length > 0 || after.length > 0) && (
+                      <div className={`px-4 py-4 border-b border-gray-100 ${hasBothPies ? 'grid grid-cols-2 gap-6' : ''}`}>
+                        {before.length > 0 && (
+                          <PieChart title="Before" slices={before} size={88} />
+                        )}
+                        {after.length > 0 && (
+                          <PieChart
+                            title={acctTrades.length > 0 ? 'After trades' : 'Current'}
+                            slices={after}
+                            size={88}
+                          />
+                        )}
                       </div>
                     )}
 

@@ -22,6 +22,12 @@ const NEUTRAL = '#9ca3af';
 const CURRENT = '#0d3e7a';
 const TARGET = '#8792a0';
 
+// Chart-pane min-height = the tallest of the three views after the #98 review
+// tightening pass: bar 264 > donut 232 > radar ~225 (270px radar, vertically
+// cropped; ~244 with a sixth Cash spoke). Keeps toggling reflow-free without
+// reserving the old 300px of air.
+const PANE_MIN_HEIGHT = 264;
+
 interface Props {
   view: ChartView;
   onViewChange: (v: ChartView) => void;
@@ -129,6 +135,12 @@ interface DriftRow {
   label: string;
   cur: number;
   tgt: number;
+  /**
+   * Row color key (donut view only): the family's donut-ramp color, shown as a
+   * small filled square before the name. The donut encodes families purely by
+   * color, so its table rows need the key; radar/bar encodings don't.
+   */
+  swatch?: string;
 }
 
 function driftMarks(cur: number, tgt: number) {
@@ -167,7 +179,16 @@ function DriftTable({ firstCol, rows }: { firstCol: string; rows: DriftRow[] }) 
             className="grid items-center border-b"
             style={{ gridTemplateColumns: cols, fontSize: '12.5px', padding: '5px 0', borderColor: '#f7f8fa' }}
           >
-            <span style={{ color: '#4b5563', fontWeight: 500 }}>{r.label}</span>
+            <span className="flex items-center gap-1.5 min-w-0" style={{ color: '#4b5563', fontWeight: 500 }}>
+              {r.swatch && (
+                <span
+                  data-testid="drift-row-swatch"
+                  className="shrink-0"
+                  style={{ width: 9, height: 9, borderRadius: 2, background: r.swatch }}
+                />
+              )}
+              <span className="truncate">{r.label}</span>
+            </span>
             <span className="text-right tabular-nums font-mono" style={{ color: CURRENT, fontSize: 12 }}>{fmtPct(r.cur)}</span>
             <span className="text-right tabular-nums font-mono" style={{ color: TARGET, fontSize: 12 }}>{fmtPct(r.tgt)}</span>
             <span className="text-right tabular-nums font-mono" style={{ color: d.color, fontSize: 12 }}>{d.text}</span>
@@ -215,9 +236,14 @@ export function AllocationViews({ view, onViewChange, familyRows, subRows, famil
   const donutInner: DonutSlice[] = familyRows.map((r, i) => ({ label: r.label, weight: r.a, color: familyColors[i] }));
   const donutOuter: DonutSlice[] = familyRows.map((r, i) => ({ label: r.label, weight: r.b, color: familyColors[i] }));
 
+  // Row color keys only in the donut view — it encodes families purely by
+  // color, so its table rows carry a swatch; radar/bar encodings don't need one.
   const tableRows: DriftRow[] = isBar
     ? subRows.map(r => ({ label: r.label, cur: r.a, tgt: r.b }))
-    : familyRows.map(r => ({ label: r.label, cur: r.a, tgt: r.b }));
+    : familyRows.map((r, i) => ({
+        label: r.label, cur: r.a, tgt: r.b,
+        swatch: view === 'donut' ? familyColors[i] : undefined,
+      }));
 
   return (
     <div>
@@ -226,14 +252,15 @@ export function AllocationViews({ view, onViewChange, familyRows, subRows, famil
         <ChartToggle view={view} onViewChange={onViewChange} />
       </div>
 
-      <div className="flex items-start gap-12 flex-wrap justify-center">
-        {/* chart pane — fixed 300px min so switching views never reflows */}
+      <div className="flex items-start flex-wrap justify-center" style={{ columnGap: 48, rowGap: 16 }}>
+        {/* chart pane — fixed min-height (= the tallest view, the 264px bar
+            chart) so switching views never reflows the layout below */}
         <div
           className="flex items-center justify-center shrink-0"
-          style={{ minWidth: 300, minHeight: 300 }}
+          style={{ minWidth: 300, minHeight: PANE_MIN_HEIGHT }}
         >
           {view === 'donut' && <DonutRings inner={donutInner} outer={donutOuter} size={232} />}
-          {view === 'radar' && <RadarChart data={familyRows} size={300} aName="Current" bName="Target" />}
+          {view === 'radar' && <RadarChart data={familyRows} size={270} aName="Current" bName="Target" />}
           {view === 'bar' && <BulletBars data={subRows} />}
         </div>
 

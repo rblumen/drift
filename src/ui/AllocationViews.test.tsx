@@ -159,4 +159,21 @@ describe('AllocationViews toggle (issue #98)', () => {
     expect(tab('Donut view').getAttribute('aria-pressed')).toBe('true');
     expect(tab('Radar view').getAttribute('aria-pressed')).toBe('false');
   });
+
+  // Review revision: the donut encodes families purely by color, so its table
+  // rows carry a color-key swatch; the radar/bar encodings don't need one.
+  it('renders per-row color swatches in the donut view only', async () => {
+    const swatches = () => container.querySelectorAll('[data-testid="drift-row-swatch"]');
+
+    // radar (default): no row swatches
+    expect(swatches()).toHaveLength(0);
+
+    // donut: one swatch per family row
+    await act(async () => { tab('Donut view').click(); });
+    expect(swatches()).toHaveLength(FAMILY.length);
+
+    // bar: no row swatches
+    await act(async () => { tab('Bar view').click(); });
+    expect(swatches()).toHaveLength(0);
+  });
 });

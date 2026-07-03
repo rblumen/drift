@@ -53,7 +53,9 @@ export function BulletBars({ data, scaleMax }: Props) {
   const padTop = 28;
   const padBottom = 44;
   const W = axisW + n * slot + 12;
-  const H = 304;
+  // 264 (design file used 304): tightened per the #98 review pass so the bar
+  // view no longer forces extra height onto the shared chart pane.
+  const H = 264;
   const y0 = H - padBottom;
   const plotH = y0 - padTop;
   const yOf = (v: number) => y0 - (Math.max(v, 0) / smax) * plotH;

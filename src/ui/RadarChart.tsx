@@ -82,6 +82,17 @@ export function RadarChart({
   const bPts = data.map((d, i) => ptStr(i, d.b)).join(' ');
   const aPts = data.map((d, i) => ptStr(i, d.a)).join(' ');
 
+  // Vertical crop (issue #98 review): a square layout box leaves dead space
+  // above/below the tip labels — with 5 spokes the lowest tips sit at sin 54°,
+  // well short of the bottom edge. Crop the SVG's layout height to the actual
+  // label ink extents (plus breathing room); overflow stays visible, so nothing
+  // is clipped — the card just stops reserving blank rows.
+  const sins = data.map((_, i) => Math.sin(ang(i)));
+  const topInk = cy + Math.min(...sins) * labelR - 3 - 13;    // name-text cap height
+  const bottomInk = cy + Math.max(...sins) * labelR + 11 + 4; // drift baseline + descender
+  const cropTop = Math.max(0, Math.floor(topInk - 2));
+  const cropH = Math.min(size, Math.ceil(bottomInk + 2)) - cropTop;
+
   // Screen-reader summary (both series), matching the DonutChart approach.
   const summary = (pick: (d: RadarDatum) => number) =>
     data.map(d => `${d.label} ${fmtPct(pick(d))}`).join(', ');
@@ -92,8 +103,8 @@ export function RadarChart({
   return (
     <svg
       width={size}
-      height={size}
-      viewBox={`0 0 ${size} ${size}`}
+      height={cropH}
+      viewBox={`0 ${cropTop} ${size} ${cropH}`}
       role="img"
       aria-label={ariaLabel}
       style={{ overflow: 'visible' }}
