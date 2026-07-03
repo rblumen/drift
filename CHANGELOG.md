@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Styled confirmation dialog replaces browser confirm() popups** ([#151](https://github.com/rblumen/drift/issues/151)) — the "Reset" (Accounts header) and "Remove account" actions now show an in-app confirmation dialog matching the rest of the product instead of the browser's native `confirm()` popup. Fully accessible: focus starts on Cancel, Escape cancels, Tab is trapped inside the dialog, clicking the backdrop cancels, and focus returns to the button you clicked when the dialog closes.
+
 - **Privacy promise sharpened to match reality** ([#168](https://github.com/rblumen/drift/issues/168)) — with anonymous pageview analytics added, the absolute "No telemetry" / "nothing leaves your browser" claims are now stated precisely: the landing page, meta tags, and docs say **no cookies, no personal data, and your financial data never leaves your browser**. The guardrail is now data-classification based (user data never leaves the browser; anonymous aggregate traffic is permitted) rather than a blanket "no network calls".
 
 - **Returning users skip the landing page** ([#147](https://github.com/rblumen/drift/issues/147)) — the marketing landing page now only appears on first run (no saved portfolio yet) or when the wordmark is clicked. If you already have a saved portfolio, or you open a `?demo` link, you go straight into the app instead of seeing the pitch every time.
