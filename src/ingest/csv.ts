@@ -38,9 +38,23 @@ export interface MultiAccountResult {
 
 // Strip currency symbols, commas, and whitespace then parse as float.
 // Handles "$1,234.56", "1234.56", "1,234", and negative values "$-50.00".
+// Also treats a fully parenthesized amount as negative — the accounting-style
+// convention some broker exports use for negative/pending amounts, e.g.
+// "(1,234.56)", "($1,234.56)", "$(1,234.56)" (issue #129). A trimmed value
+// wrapped in a single balanced pair of parens has its parens stripped and the
+// result negated; anything else (including unbalanced parens) falls through
+// to parseFloat unchanged and fails the same way it always has.
 export function parseMoney(raw: string | undefined): number {
   if (!raw) return NaN;
-  return parseFloat(raw.replace(/[$,\s]/g, ''));
+  const trimmed = raw.trim();
+  const parenMatch = /^\$?\((.*)\)$/.exec(trimmed);
+  if (parenMatch) {
+    const inner = parenMatch[1].replace(/[$,\s]/g, '');
+    if (inner === '' || !/^\d*\.?\d*$/.test(inner)) return NaN;
+    const value = parseFloat(inner);
+    return isNaN(value) ? NaN : -value;
+  }
+  return parseFloat(trimmed.replace(/[$,\s]/g, ''));
 }
 
 // Shared row options applied by both the single-account (parseCsv) and the
