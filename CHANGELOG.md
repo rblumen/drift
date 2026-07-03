@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Demo banner and Overview footnote copy cleanup** ([#146](https://github.com/rblumen/drift/issues/146)) — the demo-mode banner no longer expects users to decode "Dismiss (✕) ... ↑ Load / Reset" glyph shorthand; it now has a plain-text "Exit demo" action alongside the ✕ button, both performing the same restore. The Overview tab's privacy footnote no longer repeats "Not investment advice." — that disclaimer already lives in the persistent global footer.
+
 - **Privacy promise sharpened to match reality** ([#168](https://github.com/rblumen/drift/issues/168)) — with anonymous pageview analytics added, the absolute "No telemetry" / "nothing leaves your browser" claims are now stated precisely: the landing page, meta tags, and docs say **no cookies, no personal data, and your financial data never leaves your browser**. The guardrail is now data-classification based (user data never leaves the browser; anonymous aggregate traffic is permitted) rather than a blanket "no network calls".
 
 - **Returning users skip the landing page** ([#147](https://github.com/rblumen/drift/issues/147)) — the marketing landing page now only appears on first run (no saved portfolio yet) or when the wordmark is clicked. If you already have a saved portfolio, or you open a `?demo` link, you go straight into the app instead of seeing the pitch every time.
