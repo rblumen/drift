@@ -91,25 +91,58 @@ export const BUCKET_COLOR: Record<string, string> = {
   EDUCATION:     '#f472b6', // pink-400
 };
 
-// Chart colours for asset classes.
+// Chart colours for asset classes — brand-tuned data-viz palette (issue #150).
+//
+// SOURCE OF TRUTH: this map is the per-asset-class palette. The five --dv-*
+// family-anchor variables in src/index.css mirror the top-level family colours
+// here (US, developed-intl, emerging, bond, alternatives) for CSS-only chrome;
+// keep them in sync when these change.
+//
+// Design: each asset FAMILY keeps a distinct hue for legibility across up to 19
+// slices, but every hue is retuned to sit with the landing-page brand — the navy
+// ramp (#082855 → #2e72b4) plus burnt orange (#e8600a) on warm paper. Parents are
+// darkest; children are lightness/hue steps within the family. Siblings and
+// cross-family neighbours are kept perceptually distinct at 16px legend-dot sizes;
+// every colour stays visible against white.
 export const AC_COLOR: Record<string, string> = {
-  US_TOTAL_MARKET:  '#818cf8', // indigo-400
-  US_LARGE_CAP:     '#3b82f6', // blue-500
-  US_MID_CAP:       '#60a5fa', // blue-400
-  US_SMALL_CAP:     '#93c5fd', // blue-300
-  DEVELOPED_INTL:   '#38bdf8', // sky-400
-  DEVELOPED_EUROPE: '#0ea5e9', // sky-500
-  DEVELOPED_PACIFIC: '#7dd3fc', // sky-300
-  EMERGING_INTL:    '#34d399', // emerald-400
-  FIXED_INCOME:     '#fbbf24', // amber-400
-  US_TREASURY:      '#f59e0b', // amber-500
-  US_CORP_BOND:     '#fcd34d', // amber-300
-  MUNI_BOND:        '#ca8a04', // yellow-600
-  TIPS:             '#d97706', // amber-600
-  INTL_BOND:        '#fde68a', // amber-200
-  REAL_ESTATE:      '#14b8a6', // teal-500
-  ALTERNATIVES:     '#f87171', // red-400
-  CRYPTO:           '#fb923c', // orange-400
-  PRECIOUS_METALS:  '#facc15', // yellow-400
-  CASH:             '#9ca3af', // gray-400
+  // US equities — the brand navy ramp itself (parent darkest → children lighter).
+  US_TOTAL_MARKET:  '#082855', // brand ink (navy, darkest)
+  US_LARGE_CAP:     '#0d3e7a', // brand 600
+  US_MID_CAP:       '#1a5fa0', // brand 500
+  US_SMALL_CAP:     '#2e72b4', // brand 400
+  // Developed intl — muted steel/slate-blue, separable from the US navy ramp.
+  DEVELOPED_INTL:   '#3a6b8c', // steel blue (parent)
+  DEVELOPED_EUROPE: '#5a8cab', // steel blue, lighter
+  DEVELOPED_PACIFIC: '#7ba7c2', // steel blue, lightest
+  // Emerging — its own desaturated blue-teal, distinct from both blue families.
+  EMERGING_INTL:    '#2c8c85', // desaturated teal
+  // Bonds — earthy ochre/gold/tan family with real lightness spread (six values).
+  FIXED_INCOME:     '#8a6d1f', // deep ochre (parent)
+  US_TREASURY:      '#a8842c', // ochre
+  US_CORP_BOND:     '#c9a63f', // gold
+  MUNI_BOND:        '#dcb851', // light gold
+  TIPS:             '#e8ca73', // pale gold
+  INTL_BOND:        '#ecd694', // tan (lightest — still visible on white)
+  // Real estate — muted slate-green / olive.
+  REAL_ESTATE:      '#5f7a54', // olive
+  // Alternatives — the burnt-orange family anchored on the brand accent.
+  ALTERNATIVES:     '#e8600a', // burnt orange (brand accent, parent)
+  CRYPTO:           '#9c3408', // deep rust
+  PRECIOUS_METALS:  '#c67f30', // golden-bronze (kept clear of the bond golds)
+  // Cash — warm gray.
+  CASH:             '#8a8175', // warm gray
+};
+
+// FAMILY-level chart colours (issue #150). Distinct from the per-class AC_COLOR
+// map above: this is the strict landing-page CLS ramp (see src/ui/LandingPage.tsx),
+// the official family-level dataviz palette for family-rollup charts. It mirrors
+// the --dv-* variables in src/index.css — keep the two in sync.
+// Consumed by the radar/bar/donut family-allocation charts landing in issue #98.
+export const FAMILY_COLOR: Record<string, string> = {
+  US:    '#082855', // US equities family (brand navy, landing CLS[0])
+  INTL:  '#0d3e7a', // developed intl family (landing CLS[1])
+  EM:    '#1a5fa0', // emerging intl family (landing CLS[2])
+  BONDS: '#2e72b4', // fixed-income family (landing CLS[3])
+  ALTS:  '#e8600a', // alternatives family (brand accent, landing CLS[4])
+  CASH:  '#8a8175', // cash — warm gray (matches AC_COLOR.CASH)
 };

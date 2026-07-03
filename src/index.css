@@ -22,14 +22,18 @@
     --line: #e5e8ee;
     --line-2: #e5e8ee;
 
-    /* Data-viz family anchors. The full per-asset-class map still lives in
-       src/ui/fmt.ts — these are just the five top-level families, handy for
-       CSS-only chrome (legends, bars) that doesn't import the TS map. */
-    --dv-us:   #3b82f6;
-    --dv-intl: #38bdf8;
-    --dv-em:   #34d399;
-    --dv-bond: #fbbf24;
-    --dv-alt:  #f87171;
+    /* Data-viz FAMILY-level ramp (issue #150). These five anchors ARE the
+       landing-page CLS ramp (see src/ui/LandingPage.tsx) — the official
+       family-level dataviz palette used by family-rollup charts. They mirror
+       FAMILY_COLOR in src/ui/fmt.ts; keep them in sync.
+       NOTE: this is deliberately a separate tier from the per-CLASS AC_COLOR
+       map in fmt.ts. Family-rollup charts use this strict landing ramp;
+       class-level visuals/legends use the brand-tuned distinct AC_COLOR hues. */
+    --dv-us:   #082855; /* US family */
+    --dv-intl: #0d3e7a; /* developed + emerging intl family */
+    --dv-em:   #1a5fa0; /* emerging family */
+    --dv-bond: #2e72b4; /* bonds family */
+    --dv-alt:  #e8600a; /* alternatives family (brand accent) */
   }
 
   html { -webkit-text-size-adjust: 100%; }

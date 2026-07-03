@@ -181,7 +181,7 @@ function WithdrawalControl({
   const active: Record<WithdrawalPolicy, string> = {
     restricted: 'bg-red-100 text-red-600',
     eligible:   'bg-green-100 text-green-700',
-    required:   'bg-blue-100 text-blue-700',
+    required:   'bg-brand-100 text-brand-700',
   };
   return (
     <div className="inline-flex flex-col items-start gap-1">

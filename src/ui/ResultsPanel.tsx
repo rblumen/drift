@@ -83,7 +83,7 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
   }
   if (flag.kind === 'PLACEMENT_SPILLOVER') {
     return (
-      <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-sm text-blue-700">
+      <div className="bg-brand-50 border border-brand-200 rounded-lg px-4 py-3 text-sm text-brand-700">
         <strong>Placement spillover:</strong>{' '}
         {fmtUsd(flag.amountUsd)} of {AC_LABEL[flag.assetClass]} placed in a{' '}
         {flag.bucket.toLowerCase().replace('_', '-')} account (preferred bucket full).
@@ -143,7 +143,7 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
   }
   if (flag.kind === 'BLENDED_FUND_SOLD') {
     return (
-      <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-sm text-blue-700">
+      <div className="bg-brand-50 border border-brand-200 rounded-lg px-4 py-3 text-sm text-brand-700">
         <strong>Blended fund sold:</strong>{' '}
         {fmtUsd(flag.amountUsd)} of <code className="font-mono">{flag.ticker}</code> in{' '}
         <em>{acctName(flag.accountId)}</em> sold proportionally. Lock the position to preserve it.
@@ -957,7 +957,7 @@ export function ResultsPanel({
                     <td className="px-4 py-2 text-right">
                       <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
                         restricted ? 'bg-red-100 text-red-600'
-                          : required ? 'bg-blue-100 text-blue-700'
+                          : required ? 'bg-brand-100 text-brand-700'
                           : 'bg-green-100 text-green-700'
                       }`}>
                         {restricted ? 'Restricted' : required ? 'Required' : 'Eligible'}
