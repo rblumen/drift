@@ -133,12 +133,23 @@ Total US equity = 57.5%, expressed through the Russell cap split.
 
 ### Default placement rules
 
-| Asset class | 1st choice | Rationale |
+_Derived from `DEFAULT_PLACEMENT` in `src/engine/strategy.ts` (post-#89: equities and alternatives prefer tax-free before tax-deferred; bond sub-classes are no longer one-size-fits-all)._
+
+| Asset class | Placement order | Rationale |
 |---|---|---|
-| Fixed Income | Taxable | Held as NY tax-free munis (e.g. MUNY) — federal + state exempt |
-| Alternatives | Tax-Advantaged | Crypto/metals attract collectibles treatment; IRA shelter is valuable |
-| Equities (all) | Tax-Advantaged | Long-term growth; tax deferral compounds over time |
-| Cash | Taxable | Easiest to keep liquid in a brokerage |
+| Fixed Income (parent) | Taxable | Held as NY tax-free munis (e.g. MUNY) — federal + state exempt |
+| Muni Bond | Taxable | Same as above — munis are tax-exempt, so taxable is efficient |
+| US Treasury | Tax-Deferred → Taxable | Ordinary-income coupon; shelter first, taxable as overflow |
+| US Corp Bond | Tax-Deferred | Ordinary-income coupon |
+| TIPS | Tax-Deferred | Ordinary-income coupon; avoids phantom-income drag in taxable |
+| Intl Bond | Tax-Deferred | Ordinary-income coupon |
+| Alternatives (parent), Crypto, Precious Metals | Tax-Free → Tax-Deferred | High-growth/high-vol; collectibles tax treatment favors Roth shelter |
+| Real Estate | Tax-Free → Tax-Deferred | REIT dividends are largely non-qualified; shelter in Roth, then tax-deferred |
+| US equities (Total Market, Large/Mid/Small Cap), Emerging Intl | Tax-Free → Tax-Deferred → Taxable | Long-term growth; Roth shelter is most valuable, tax deferral next, taxable as overflow |
+| Developed Intl (parent, Europe, Pacific) | Tax-Deferred → Taxable | Long-term growth; foreign tax credit makes taxable placement less costly than for other equities |
+| Cash | Taxable → Tax-Advantaged | Easiest to keep liquid in a brokerage |
+
+"Tax-Free" = Roth IRA / HSA. "Tax-Deferred" = Traditional IRA / 401(k). Each class's full placement order (including further fallbacks) is user-editable in the Strategy tab.
 
 ### The REVISIT_PLACEMENT heads-up
 
@@ -150,6 +161,8 @@ The default keeps bonds in taxable and equities in tax-advantaged, which assumes
 
 ## Flags reference
 
+_Derived from the `Flag` union in `src/engine/types.ts`._
+
 | Flag | What it means | Suggested action |
 |---|---|---|
 | `REVISIT_PLACEMENT` | Taxable share of household > Fixed Income target weight | Update placement rules in Strategy tab |
@@ -158,10 +171,21 @@ The default keeps bonds in taxable and equities in tax-advantaged, which assumes
 | `NO_ELIGIBLE_ACCOUNT` | No account can hold a given asset class | Check account restrictions in Accounts tab |
 | `UNMAPPED_HOLDING` | A ticker has no asset class | Go to Classify tab and assign one |
 | `WITHIN_TOLERANCE` | A class is within ±tolerance of target | No trade generated for this class |
+| `EXCESS_CASH` | Household free cash couldn't be deposited anywhere (no eligible account, or deposit limits exhausted) | Add an account that accepts deposits, or raise a `depositLimitUsd` |
+| `TAXABLE_REBALANCE_AVOIDABLE` | Tax-advantaged-first rebalancing is disabled, and this taxable sale could have been reduced/avoided by redirecting it | Enable "prefer tax-advantaged rebalance" in Strategy tab |
+| `PROJECTED_OFF_TARGET` | After trades, a class is still outside its tolerance band — a hard constraint (locked positions, no eligible account, or a min-trade floor) blocked full correction | Review locked positions, account restrictions, or lower `minTradeUsd` |
+| `WITHDRAWAL_SHORTFALL` | In drawdown mode, the requested withdrawal couldn't be fully raised — every withdrawal-eligible account is restricted, locked, or out of sellable capacity | Allow withdrawals from another account, or reduce the requested amount |
+| `BLENDED_FUND_OVERSELL` | Selling a sub-class forced a proportional sale of a blended fund (e.g. a target-date fund) that over-sold another sub-class, with no eligible account to buy back the excess | Review the blended-fund holding; consider locking it or splitting into single-class funds |
+| `BLENDED_FUND_SOLD` | Informational: part of a blended fund (TDF, balanced fund) was sold this run. The engine can't symmetrically buy blended funds, so repeated rebalances trend away from this holding | Lock the position if you want this blended-fund holding preserved |
+| `MISSING_COST_BASIS` | Tax-adjusted allocation is enabled and this taxable position has no cost basis, so the engine assumed no gain (conservative fallback) | Enter cost basis on the position for a more accurate after-tax view |
+| `WASH_SALE_RISK` | The engine recommends selling a class in a taxable account while buying the same class elsewhere in the same run — if the sale is a loss, the IRS wash-sale rule may disallow it | Review before executing; consider substituting a similar (not identical) fund |
+| `FIVE_TWENTY_NINE_REBALANCE_LIMIT` | One or more trades touch a 529 account. The IRS allows only two investment-direction changes per 529 account per calendar year | Confirm you haven't already used both changes for the year |
 
 ---
 
 ## Ingest adapters
+
+_Derived from the header comments in `src/ingest/adapters/*.ts`._
 
 | Source | How to export |
 |---|---|
@@ -169,7 +193,12 @@ The default keeps bonds in taxable and equities in tax-advantaged, which assumes
 | **Fidelity CSV** | Accounts & Trade → Portfolio → Download (CSV). Supports multi-account files — the app maps each discovered account number to a registered account. |
 | **Empower CSV** | Copy the "My Investments" table into a `.csv` file |
 | **Empower Totals** | Enter dollar totals per asset class directly from Empower's Allocation/Holdings view. Fastest path when individual ticker detail isn't needed. |
+| **Vanguard CSV** | Log in → My Accounts → Transaction History → Download → spreadsheet-compatible CSV. Supports multi-account files (grouped by the row-level Account Number column). |
+| **E*TRADE CSV** | us.etrade.com → Portfolios → Positions tab → select an account → Download (CSV); choose "Collapsed View" and "All Positions". Single account per file. |
+| **Merrill Edge CSV** | Accounts → Holdings → click the lot-detail icon next to the Symbol column (includes cost basis) → Export → "Export as Comma-Separated Spreadsheet (.CSV)". Supports multi-account files (grouped by the row-level Account # column). |
 | **Manual entry** | Enter ticker + market value directly. Use for any position not covered by a CSV adapter. |
+
+Format detection (`src/ingest/detect.ts`) reads a CSV's header region and picks the right adapter automatically, without relying on the file name.
 
 Plaid (direct brokerage connection) is a planned future feature; not implemented in v1.
 
@@ -212,26 +241,41 @@ After `npm run build`, the `dist/` folder is a fully static site. Drag it to [Ne
 
 ## Project structure
 
+_Walked from the current `src/` tree; see `CONTEXT.md` for the fully-annotated version._
+
 ```
 src/
-├── engine/          # Pure TypeScript — no React. Fully unit-tested.
-│   ├── types.ts     # Domain model (Account, Position, Strategy, Trade, …)
-│   ├── strategy.ts  # DEFAULT_STRATEGY
-│   ├── classify.ts  # ticker → AssetClass lookup
-│   ├── rollup.ts    # positions → allocation (includes Russell cap split)
-│   ├── placement.ts # greedy placement fill algorithm
-│   ├── resolve.ts   # match trades to specific fund tickers
-│   └── rebalance.ts # orchestrator → RebalanceResult
-├── ingest/          # CSV adapters + zod schema validation
-│   └── adapters/    # schwab, fidelity, empower, plaid (stub)
+├── engine/               # Pure TypeScript — no React. Fully unit-tested.
+│   ├── types.ts          # Domain model (Account, Position, Strategy, Trade, Flag, AssetClass, …)
+│   ├── strategy.ts       # DEFAULT_STRATEGY + DEFAULT_PLACEMENT
+│   ├── classify.ts       # ticker → AssetClass lookup
+│   ├── hierarchy.ts      # asset-class parent/child tree + split weights
+│   ├── rollup.ts         # positions → allocation (parent-class redistribution via hierarchy.ts)
+│   ├── placement.ts      # greedy placement fill algorithm
+│   ├── placementHierarchy.ts # PlacementTarget tree helpers (bucket/tax-deferred/tax-free/account)
+│   ├── cashfill.ts       # concentrate-then-spill fill for deposits/withdrawals
+│   ├── taxAdjust.ts      # tax-adjusted (after-tax) balance haircuts
+│   ├── taxableSale.ts    # what counts as a taxable capital-gains sale
+│   ├── nativeAllocation.ts # holdings-lens (native) allocation views
+│   ├── metrics.ts        # diversification() / aggressiveness() summary metrics
+│   ├── resolve.ts        # match trades to specific fund tickers
+│   ├── rebalance.ts      # orchestrator → RebalanceResult
+│   └── scenarios/        # black-box scenario fixtures (*.scenario.json) + harness
+├── ingest/               # CSV adapters + zod schema validation
+│   ├── detect.ts         # content-based format detection
+│   └── adapters/         # schwab, fidelity, empower, vanguard, etrade, merrill, plaid (stub)
 └── ui/
-    ├── OverviewPanel.tsx   # orientation / cover-sheet tab
+    ├── LandingPage.tsx      # marketing / home screen
+    ├── OverviewPanel.tsx    # orientation / cover-sheet tab
     ├── AccountsPanel.tsx
     ├── ImportPanel.tsx
     ├── ClassifyPanel.tsx
     ├── StrategyPanel.tsx
     ├── ResultsPanel.tsx
-    └── HelpBox.tsx         # reusable collapsible help section
+    ├── ReminderPanel.tsx    # next-rebalance reminder (calendar links + .ics)
+    ├── HowItWorksDrawer.tsx
+    ├── AllocationPlot.tsx   # diversification/aggressiveness plot
+    └── HelpBox.tsx          # reusable collapsible help section
 ```
 
 See `IMPLEMENTATION_PLAN.md` for the full build spec and design decisions.

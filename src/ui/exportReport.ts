@@ -305,8 +305,9 @@ export function buildHtml(result: RebalanceResult, accounts: Account[], resolved
   }).join('');
 
   // ── Cash deployment summary ────────────────────────────────────────────────
-  const showCashSummary = freeCash > 0 || accounts.some(a => a.newCash);
-  const cashRows = accounts.filter(a => !a.locked).map(a => {
+  const unlockedAccounts = accounts.filter(a => !a.locked);
+  const showCashSummary = freeCash > 0 || unlockedAccounts.some(a => a.newCash);
+  const cashRows = unlockedAccounts.map(a => {
     const ownCash   = a.newCash ?? 0;
     const netDeploy = trades.filter(t => t.accountId === a.id).reduce((s, t) => s + t.deltaUsd, 0);
     const depositsOpen = a.acceptsDeposits !== false;
@@ -347,10 +348,10 @@ export function buildHtml(result: RebalanceResult, accounts: Account[], resolved
   </div>` : '';
 
   // ── Spending / withdrawal plan ──────────────────────────────────────────────
-  const totalRmd = accounts.reduce((s, a) => s + (a.rmdDueUsd ?? 0), 0);
+  const totalRmd = unlockedAccounts.reduce((s, a) => s + (a.rmdDueUsd ?? 0), 0);
   const totalWithdrawal = totalRmd + plannedWithdrawal; // Σ RMD + additional
   const showWithdrawalPlan = totalWithdrawal > 0;
-  const wdRowData = accounts.filter(a => !a.locked)
+  const wdRowData = unlockedAccounts
     .map(a => ({ account: a, withdrawn: withdrawalByAccount[a.id] ?? 0, rmd: a.rmdDueUsd ?? 0 }))
     .filter(r => r.withdrawn > 0.5 || r.rmd > 0)
     .sort((x, y) => withdrawalPriorityOf(x.account) - withdrawalPriorityOf(y.account)

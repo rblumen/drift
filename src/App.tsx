@@ -331,15 +331,22 @@ export default function App() {
             <div className="mb-2 bg-brand-50 border border-brand-200 rounded px-3 py-2 text-xs text-brand-800 flex items-center justify-between">
               <span>
                 Demo — showing a synthetic 5-account sample portfolio. Your saved data is untouched.
-                {' '}Dismiss (✕) to return to your saved portfolio, or use ↑ Load / Reset.
               </span>
-              <button
-                onClick={handleExitDemo}
-                aria-label="Exit demo and restore your saved portfolio"
-                className="ml-3 text-brand-400 hover:text-brand-700 flex-shrink-0"
-              >
-                ✕
-              </button>
+              <div className="ml-3 flex items-center gap-2 flex-shrink-0">
+                <button
+                  onClick={handleExitDemo}
+                  className="font-medium underline underline-offset-2 text-brand-700 hover:text-brand-900"
+                >
+                  Exit demo
+                </button>
+                <button
+                  onClick={handleExitDemo}
+                  aria-label="Exit demo and restore your saved portfolio"
+                  className="text-brand-400 hover:text-brand-700"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
           )}
 

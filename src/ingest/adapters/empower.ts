@@ -94,12 +94,25 @@ export function parseEmpowerCsv(csvText: string, accountId: string): CsvParseRes
 
 // ─── Manual-entry path ───────────────────────────────────────────────────────
 
+// The Empower-totals manual-entry path supports only these six broad
+// dashboard classes (Empower's Allocation view doesn't break out the
+// hierarchy sub-classes). This union is the single source of truth for
+// "which classes can the Empower-totals path emit" — EMPOWER_TICKER is keyed
+// over it (so the compiler rejects a class without a ticker), and the UI
+// derives its input list from SUPPORTED_EMPOWER_CLASSES so it can never offer
+// a class the adapter can't emit. Completing coverage for the remaining 13
+// hierarchy sub-classes is a data decision tracked in #118.
+export type SupportedEmpowerClass =
+  | 'US_TOTAL_MARKET'
+  | 'DEVELOPED_INTL'
+  | 'EMERGING_INTL'
+  | 'FIXED_INCOME'
+  | 'ALTERNATIVES'
+  | 'CASH';
+
 // Synthetic tickers that map to an AssetClass in assetclass-map.json.
 // Used only by parseEmpowerTotals when real fund tickers are unavailable.
-// Deliberately Partial: the Empower-totals entry path supports the six broad
-// dashboard classes only. parseEmpowerTotals skips classes without a synthetic
-// ticker; completing the map for the hierarchy sub-classes is tracked in #118.
-export const EMPOWER_TICKER: Partial<Record<AssetClass, string>> = {
+export const EMPOWER_TICKER: Record<SupportedEmpowerClass, string> = {
   US_TOTAL_MARKET: 'EMPOWER_US',
   DEVELOPED_INTL:  'EMPOWER_INTL',
   EMERGING_INTL:   'EMPOWER_EM',
@@ -108,18 +121,31 @@ export const EMPOWER_TICKER: Partial<Record<AssetClass, string>> = {
   CASH:            'EMPOWER_CASH',
 };
 
+// Derived from EMPOWER_TICKER's keys — the UI's Empower-totals form iterates
+// this (not ALL_ASSET_CLASSES) so adding a class to the map automatically
+// surfaces it there, and no unsupported class can appear as an input.
+export const SUPPORTED_EMPOWER_CLASSES = Object.keys(
+  EMPOWER_TICKER,
+) as SupportedEmpowerClass[];
+
+function isSupportedEmpowerClass(ac: AssetClass): ac is SupportedEmpowerClass {
+  return Object.prototype.hasOwnProperty.call(EMPOWER_TICKER, ac);
+}
+
 // Convert a map of { AssetClass → dollars } into normalised Position objects.
-// Classes with a zero or missing total — or without a synthetic ticker (only
-// the six broad dashboard classes have one) — are omitted.
+// Classes with a zero or missing total, or outside the supported six broad
+// dashboard classes, are omitted — parseEmpowerTotals can never emit a
+// position with an undefined ticker.
 export function parseEmpowerTotals(
   accountId: string,
   totals: Partial<Record<AssetClass, number>>,
 ): Position[] {
   return ALL_ASSET_CLASSES
-    .filter(ac => (totals[ac] ?? 0) > 0 && EMPOWER_TICKER[ac] !== undefined)
+    .filter(isSupportedEmpowerClass)
+    .filter(ac => (totals[ac] ?? 0) > 0)
     .map(ac => ({
       accountId,
-      ticker:      EMPOWER_TICKER[ac]!,
+      ticker:      EMPOWER_TICKER[ac],
       description: `Empower ${ac} (dashboard total)`,
       marketValue: totals[ac]!,
     }));

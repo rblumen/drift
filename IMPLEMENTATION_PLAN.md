@@ -72,12 +72,24 @@ Getting this household-vs-account distinction right is the whole point of the to
 
 ## Domain model (as built)
 
+_The `AssetClass` and `Flag` unions below are transcribed verbatim (minus doc comments) from `src/engine/types.ts`; keep them in sync with that file._
+
 ```ts
 type AssetClass =
   | 'US_TOTAL_MARKET' | 'US_LARGE_CAP' | 'US_MID_CAP' | 'US_SMALL_CAP'
-  | 'DEVELOPED_INTL' | 'EMERGING_INTL'
-  | 'FIXED_INCOME' | 'ALTERNATIVES' | 'CASH';
-// ALTERNATIVES is an extension point: split into CRYPTO + PRECIOUS_METALS in a future version.
+  | 'DEVELOPED_INTL' | 'DEVELOPED_EUROPE' | 'DEVELOPED_PACIFIC' | 'EMERGING_INTL'
+  | 'FIXED_INCOME' | 'US_TREASURY' | 'US_CORP_BOND' | 'MUNI_BOND' | 'TIPS' | 'INTL_BOND'
+  | 'REAL_ESTATE'
+  | 'ALTERNATIVES' | 'CRYPTO' | 'PRECIOUS_METALS'
+  | 'CASH';
+// 19 classes total, organized as a parent/child hierarchy (see hierarchy.ts / CLASS_HIERARCHY):
+//   US_TOTAL_MARKET  → US_LARGE_CAP, US_MID_CAP, US_SMALL_CAP (Russell split)
+//   DEVELOPED_INTL   → DEVELOPED_EUROPE, DEVELOPED_PACIFIC
+//   FIXED_INCOME     → US_TREASURY, US_CORP_BOND, MUNI_BOND, TIPS, INTL_BOND
+//   ALTERNATIVES     → CRYPTO, PRECIOUS_METALS
+// A parent's target/holdings apply at the parent level until the user opts into
+// (or holds a fund that maps to) a child, at which point rollup.ts redistributes.
+// REAL_ESTATE is a standalone top-level sleeve (REITs) with no children.
 
 type AccountType =
   | 'TAXABLE' | 'TRADITIONAL_IRA' | 'ROTH_IRA'
@@ -85,22 +97,43 @@ type AccountType =
 
 type PlacementBucket = 'TAXABLE' | 'TAX_ADVANTAGED' | 'EDUCATION';
 // TAXABLE → TAXABLE; FIVE_TWENTY_NINE → EDUCATION; all others → TAX_ADVANTAGED.
+// This coarse triple is the engine's *tax-treatment* vocabulary (accountBucket(),
+// tax-sale logic, withdrawal eligibility, REVISIT_PLACEMENT). Unchanged by #89.
+
+// A placement *preference* (issue #89) generalizes PlacementBucket into a tree node:
+// a broad tax-treatment bucket, an intermediate bucket, a specific account type, or
+// (Phase 2) a specific account via the `account:<accountId>` leaf.
+type PlacementTarget =
+  | PlacementBucket
+  | 'TAX_DEFERRED' | 'TAX_FREE'
+  | AccountType
+  | `account:${string}`;
 
 // Key Account fields (see types.ts for full definition):
-//   locked, acceptsDeposits, concentrateClasses, allowedAssetClasses, availableTickers
+//   locked, acceptsDeposits, depositLimitUsd, acceptsWithdrawals, withdrawalPriority,
+//   rmdDueUsd, concentrateClasses, allowedAssetClasses, availableTickers
 
-// Key Position fields: accountId, ticker, marketValue, price?, locked?
+// Key Position fields: accountId, ticker, marketValue, price?, locked?, edited?, costBasis?
 
 type Flag =
-  | { kind: 'WITHIN_TOLERANCE'; assetClass }
-  | { kind: 'TAXABLE_SALE'; accountId; assetClass; amountUsd }
-  | { kind: 'UNMAPPED_HOLDING'; ticker }
-  | { kind: 'PLACEMENT_SPILLOVER'; assetClass; bucket; amountUsd }
-  | { kind: 'REVISIT_PLACEMENT'; taxableShare; fixedIncomeTarget }
-  | { kind: 'NO_ELIGIBLE_ACCOUNT'; assetClass; amountUsd }
-  | { kind: 'EXCESS_CASH'; amountUsd }
-  | { kind: 'PROJECTED_OFF_TARGET'; assetClass; projectedWeight; targetWeight };
+  | { kind: 'WITHIN_TOLERANCE'; assetClass: AssetClass }
+  | { kind: 'TAXABLE_SALE'; accountId: string; assetClass: AssetClass; amountUsd: number }
+  | { kind: 'UNMAPPED_HOLDING'; ticker: string }
+  | { kind: 'PLACEMENT_SPILLOVER'; assetClass: AssetClass; bucket: PlacementTarget; amountUsd: number }
+  | { kind: 'REVISIT_PLACEMENT'; taxableShare: number; fixedIncomeTarget: number }
+  | { kind: 'NO_ELIGIBLE_ACCOUNT'; assetClass: AssetClass; amountUsd: number }
+  | { kind: 'EXCESS_CASH'; amountUsd: number }
+  | { kind: 'TAXABLE_REBALANCE_AVOIDABLE'; accountId: string; assetClass: AssetClass; amountUsd: number }
+  | { kind: 'PROJECTED_OFF_TARGET'; assetClass: AssetClass; projectedWeight: number; targetWeight: number }
+  | { kind: 'WITHDRAWAL_SHORTFALL'; amountUsd: number }
+  | { kind: 'BLENDED_FUND_OVERSELL'; accountId: string; ticker: string; assetClass: AssetClass; amountUsd: number }
+  | { kind: 'BLENDED_FUND_SOLD'; accountId: string; ticker: string; amountUsd: number }
+  | { kind: 'MISSING_COST_BASIS'; accountId: string; ticker: string }
+  | { kind: 'WASH_SALE_RISK'; taxableAccountId: string; assetClass: AssetClass; buyAccountId: string }
+  | { kind: 'FIVE_TWENTY_NINE_REBALANCE_LIMIT'; accountIds: string[] };
 ```
+
+See the README's [Flags reference](README.md#flags-reference) for a user-facing, one-line explanation of each flag.
 
 ---
 

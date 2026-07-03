@@ -13,6 +13,13 @@ import { createRoot, type Root } from 'react-dom/client';
 import { buildState, saveState } from './store';
 import { DEFAULT_STRATEGY } from './engine/strategy';
 import type { Account, Position } from './engine/types';
+// Warm the App module graph at collect time (side-effect import, instance
+// unused). Without this, the first per-test `await import('./App')` pays the
+// transform + evaluation cost of the entire app graph inside that test's 5s
+// timeout, which intermittently times out under full-suite CPU contention
+// (#175). vi.resetModules() clears the module registry but not the transform
+// cache, so the per-test re-imports below stay cheap.
+import './App';
 
 (globalThis as unknown as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 
