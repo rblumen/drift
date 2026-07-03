@@ -269,7 +269,7 @@ export function OverviewPanel({
 
       {/* ── Privacy footnote ────────────────────────────────────────────────── */}
       <p className="font-mono text-[11.5px] text-gray-400 mt-10 pt-4 border-t border-gray-100 leading-relaxed">
-        Private by default — all computation runs in your browser, nothing is sent anywhere.
+        Private by default — all computation runs in your browser; your financial data never leaves it. No cookies, no personal data.
       </p>
 
     </div>
