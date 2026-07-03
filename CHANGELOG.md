@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Diversification score no longer permanently compressed** ([#134](https://github.com/rblumen/drift/issues/134)) — the aggressiveness/diversification plot's diversification axis normalized against all 19 asset classes, including a synthetic always-zero class and parent/child pairs that can never both be held at once, so a perfectly even portfolio could never reach a reading of 1.0 and the score shrank every time a new sub-class was added. It now normalizes against the set of classes that can actually coexist in a single portfolio, so the axis reaches its full range and stays stable as classes are added.
+
 - **Privacy promise sharpened to match reality** ([#168](https://github.com/rblumen/drift/issues/168)) — with anonymous pageview analytics added, the absolute "No telemetry" / "nothing leaves your browser" claims are now stated precisely: the landing page, meta tags, and docs say **no cookies, no personal data, and your financial data never leaves your browser**. The guardrail is now data-classification based (user data never leaves the browser; anonymous aggregate traffic is permitted) rather than a blanket "no network calls".
 
 - **Returning users skip the landing page** ([#147](https://github.com/rblumen/drift/issues/147)) — the marketing landing page now only appears on first run (no saved portfolio yet) or when the wordmark is clicked. If you already have a saved portfolio, or you open a `?demo` link, you go straight into the app instead of seeing the pitch every time.
