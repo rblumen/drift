@@ -118,9 +118,9 @@ function DecompEditor({
   }
 
   return (
-    <div className="mt-2 p-3 bg-white border border-amber-200 rounded-lg space-y-2">
+    <div className="mt-2 p-3 bg-white border border-warn-banner-border rounded-lg space-y-2">
       {isEstimated && (
-        <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+        <p className="text-xs text-warn bg-warn-bg border border-warn-banner-border rounded px-2 py-1">
           Estimated from fund series. Verify on the fund's fact sheet page.
         </p>
       )}
@@ -147,7 +147,7 @@ function DecompEditor({
         ))}
       </div>
       <div className="flex items-center justify-between pt-1">
-        <span className={`inline-flex items-center gap-1 text-xs font-medium ${sumOk ? 'text-green-600' : 'text-red-500'}`}>
+        <span className={`inline-flex items-center gap-1 text-xs font-medium ${sumOk ? 'text-ok' : 'text-danger'}`}>
           Sum: {sum.toFixed(1)}% {sumOk ? <IconCheck size={12} /> : '(must be ~100%)'}
         </span>
         <div className="flex gap-2">
@@ -338,7 +338,7 @@ export function ClassifyPanel({
             the fund (with compensating buys in other tickers) only when the household drift demands it.
             Use the position-level lock if you want a specific blended-fund holding excluded entirely.
           </p>
-          <p className="mt-2 text-amber-700">
+          <p className="mt-2 text-warn">
             <strong>Asymmetry to be aware of:</strong> the engine will <em>sell</em> a blended fund when
             drift demands but has no symmetric mechanism to <em>buy</em> one back. Over repeated rebalances
             your allocation will gradually trend away from any blended fund the engine has touched.
@@ -368,25 +368,25 @@ export function ClassifyPanel({
 
       {/* ── Unclassified — needs attention ─────────────────────────────────── */}
       {unmapped.length > 0 && (
-        <div className="rounded-lg border border-amber-300 overflow-hidden">
-          <div className="bg-amber-50 px-4 py-2 flex items-center gap-2 border-b border-amber-200">
-            <span className="text-amber-600 text-sm font-semibold">
+        <div className="rounded-lg border border-warn-banner-border overflow-hidden">
+          <div className="bg-warn-bg px-4 py-2 flex items-center gap-2 border-b border-warn-banner-border">
+            <span className="text-warn text-sm font-semibold">
               ⚠ {unmapped.length} unclassified {unmapped.length === 1 ? 'holding' : 'holdings'}
             </span>
-            <span className="text-amber-500 text-xs">
+            <span className="text-warn text-xs">
               — excluded from the rebalance until assigned
             </span>
           </div>
-          <div className="bg-amber-50">
+          <div className="bg-warn-row-tint">
             {unmapped.map(row => {
               const tdfDetect = detectTargetDateFund(row.ticker, row.description);
               const isEditing = editState?.ticker === row.ticker;
               return (
-                <div key={row.ticker} className="border-b border-amber-100 last:border-b-0 px-4 py-3">
+                <div key={row.ticker} className="border-b border-warn-banner-border last:border-b-0 px-4 py-3">
                   <div className="flex items-center gap-3">
-                    <span className="font-mono font-semibold text-amber-900 w-24 flex-shrink-0">{row.ticker}</span>
-                    <span className="text-amber-700 text-sm truncate flex-1 max-w-[220px]">
-                      {row.description ?? <span className="text-amber-300">—</span>}
+                    <span className="font-mono font-semibold text-warn-banner-text w-24 flex-shrink-0">{row.ticker}</span>
+                    <span className="text-warn text-sm truncate flex-1 max-w-[220px]">
+                      {row.description ?? <span className="text-faint">—</span>}
                     </span>
                     <div className="flex items-center gap-2 ml-auto">
                       {tdfDetect && (
@@ -406,7 +406,7 @@ export function ClassifyPanel({
                             value=""
                             onChange={e => { if (e.target.value) assign(row.ticker, e.target.value as AssetClass); }}
                             aria-label={`Assign asset class to ${row.ticker}`}
-                            className={`text-xs border rounded px-1.5 py-0.5 bg-white ${tdfDetect ? 'border-gray-200 text-gray-500' : 'border-amber-300 text-gray-700'}`}
+                            className={`text-xs border rounded px-1.5 py-0.5 bg-white ${tdfDetect ? 'border-gray-200 text-gray-500' : 'border-warn text-gray-700'}`}
                           >
                             <option value="">{tdfDetect ? 'or single class…' : '— select class —'}</option>
                             <ClassOptions />
@@ -491,7 +491,7 @@ export function ClassifyPanel({
                             </button>
                             <button
                               onClick={() => removeDecomp(row.ticker)}
-                              className="inline-flex items-center text-gray-400 hover:text-red-500 border border-gray-200 rounded px-2 py-0.5 hover:bg-red-50"
+                              className="inline-flex items-center text-muted-2 hover:text-danger border border-line hover:border-danger-hover-border rounded px-2 py-0.5"
                               title="Remove decomposition"
                               aria-label={`Remove decomposition for ${row.ticker}`}
                             >
@@ -560,7 +560,7 @@ export function ClassifyPanel({
                               {!isEditing && (
                                 <button
                                   onClick={() => assign(row.ticker, '')}
-                                  className="inline-flex hover:text-red-500"
+                                  className="inline-flex hover:text-danger"
                                   title="Revert to built-in"
                                   aria-label={`Revert ${row.ticker} to the built-in classification`}
                                 ><IconX size={12} /></button>
@@ -574,7 +574,7 @@ export function ClassifyPanel({
                           {isEditing ? (
                             <button
                               onClick={() => setEditState(null)}
-                              className="text-xs text-gray-400 hover:text-red-500"
+                              className="text-xs text-muted-2 hover:text-ink"
                             >
                               Cancel
                             </button>

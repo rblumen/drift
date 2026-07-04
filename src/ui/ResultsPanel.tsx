@@ -50,7 +50,12 @@ const BRAND      = 'var(--brand, #0d3e7a)';
 const BRAND_2    = 'var(--brand-2, #1a5fa0)';
 const BRAND_50   = 'var(--brand-50, #e8f0f8)';
 const ORANGE_2   = '#b34500';
-const ORANGE_50  = '#fdf0ea';
+// Trade side colours (#194 kit — Tables: BUY #1f8a5b / SELL #b3403a). BUY reads
+// as ok-green, SELL as danger-red, each on its own faint tint.
+const BUY_TEXT   = '#1f8a5b';
+const BUY_BG     = '#eaf5ef';
+const SELL_TEXT  = '#b3403a';
+const SELL_BG    = '#fbeeee';
 
 interface Props {
   result: RebalanceResult;
@@ -71,7 +76,7 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
 
   if (flag.kind === 'REVISIT_PLACEMENT') {
     return (
-      <div className="bg-orange-50 border border-orange-300 rounded-lg px-4 py-3 text-sm text-orange-800">
+      <div className="bg-warn-bg border border-warn-banner-border rounded-lg px-4 py-3 text-sm text-warn-banner-text">
         <strong>Revisit placement strategy.</strong>{' '}
         Taxable accounts hold {fmtPct(flag.taxableShare)} of household value, which exceeds
         the {fmtPct(flag.fixedIncomeTarget)} fixed-income target.
@@ -81,7 +86,7 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
   }
   if (flag.kind === 'TAXABLE_SALE') {
     return (
-      <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
+      <div className="bg-warn-bg border border-warn-banner-border rounded-lg px-4 py-3 text-sm text-warn-banner-text">
         <strong>Taxable sale:</strong>{' '}
         Selling {fmtUsd(flag.amountUsd)} of {AC_LABEL[flag.assetClass]} in{' '}
         <em>{acctName(flag.accountId)}</em> may trigger a capital gain. Review before executing.
@@ -90,7 +95,7 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
   }
   if (flag.kind === 'TAXABLE_REBALANCE_AVOIDABLE') {
     return (
-      <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
+      <div className="bg-warn-bg border border-warn-banner-border rounded-lg px-4 py-3 text-sm text-warn-banner-text">
         <strong>Avoidable taxable sale:</strong>{' '}
         About {fmtUsd(flag.amountUsd)} of the {AC_LABEL[flag.assetClass]} sale in{' '}
         <em>{acctName(flag.accountId)}</em> could be avoided by rebalancing within your
@@ -109,7 +114,7 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
   }
   if (flag.kind === 'UNMAPPED_HOLDING') {
     return (
-      <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
+      <div className="bg-warn-bg border border-warn-banner-border rounded-lg px-4 py-3 text-sm text-warn-banner-text">
         <strong>Unmapped holding:</strong>{' '}
         Ticker <code className="font-mono">{flag.ticker}</code> has no asset class.
         Go to the Classify tab to assign one.
@@ -118,7 +123,7 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
   }
   if (flag.kind === 'NO_ELIGIBLE_ACCOUNT') {
     return (
-      <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
+      <div className="bg-danger-bg border border-danger-hover-border rounded-lg px-4 py-3 text-sm text-danger">
         <strong>No eligible account:</strong>{' '}
         {fmtUsd(flag.amountUsd)} of {AC_LABEL[flag.assetClass]} could not be placed —
         no account has capacity for this asset class.
@@ -129,7 +134,7 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
     const gap = flag.projectedWeight - flag.targetWeight;
     const over = gap > 0;
     return (
-      <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
+      <div className="bg-danger-bg border border-danger-hover-border rounded-lg px-4 py-3 text-sm text-danger">
         <strong>Target not reachable — {AC_LABEL[flag.assetClass]}:</strong>{' '}
         projects to <strong>{fmtPct(flag.projectedWeight)}</strong> after trades
         (target {fmtPct(flag.targetWeight)}, still{' '}
@@ -142,7 +147,7 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
   }
   if (flag.kind === 'EXCESS_CASH') {
     return (
-      <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
+      <div className="bg-warn-bg border border-warn-banner-border rounded-lg px-4 py-3 text-sm text-warn-banner-text">
         <strong>Free cash undeployed:</strong>{' '}
         {fmtUsd(flag.amountUsd)} of household free cash could not be distributed — every
         eligible account is closed, locked, or has hit its deposit limit.
@@ -151,7 +156,7 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
   }
   if (flag.kind === 'WITHDRAWAL_SHORTFALL') {
     return (
-      <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
+      <div className="bg-warn-bg border border-warn-banner-border rounded-lg px-4 py-3 text-sm text-warn-banner-text">
         <strong>Withdrawal not fully funded:</strong>{' '}
         {fmtUsd(flag.amountUsd)} of the additional withdrawal could not be raised.
         Mark another account Eligible to cover it.
@@ -169,7 +174,7 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
   }
   if (flag.kind === 'BLENDED_FUND_OVERSELL') {
     return (
-      <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
+      <div className="bg-danger-bg border border-danger-hover-border rounded-lg px-4 py-3 text-sm text-danger">
         <strong>Blended fund over-sell:</strong>{' '}
         Selling <code className="font-mono">{flag.ticker}</code> in{' '}
         <em>{acctName(flag.accountId)}</em> forced an extra {fmtUsd(flag.amountUsd)} of{' '}
@@ -179,7 +184,7 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
   }
   if (flag.kind === 'MISSING_COST_BASIS') {
     return (
-      <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
+      <div className="bg-warn-bg border border-warn-banner-border rounded-lg px-4 py-3 text-sm text-warn-banner-text">
         <strong>Missing cost basis:</strong>{' '}
         <code className="font-mono">{flag.ticker}</code> in{' '}
         <em>{acctName(flag.accountId)}</em> has no cost basis recorded. Add it in the Import tab.
@@ -190,7 +195,7 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
   if (flag.kind === 'FIVE_TWENTY_NINE_REBALANCE_LIMIT') {
     const names = flag.accountIds.map(acctName).join(', ');
     return (
-      <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
+      <div className="bg-warn-bg border border-warn-banner-border rounded-lg px-4 py-3 text-sm text-warn-banner-text">
         <strong>529 rebalance limit:</strong>{' '}
         Trades are recommended for {names}. The IRS allows only{' '}
         <strong>2 investment-direction changes per 529 account per calendar year.</strong>
@@ -205,7 +210,7 @@ function WashSaleBanner({ flags, accounts }: { flags: Flag[]; accounts: Account[
   const risks = flags.filter((f): f is Extract<Flag, { kind: 'WASH_SALE_RISK' }> => f.kind === 'WASH_SALE_RISK');
   if (risks.length === 0) return null;
   return (
-    <div className="bg-red-50 border border-red-300 rounded-lg px-4 py-3 text-sm text-red-800">
+    <div className="bg-danger-bg border border-danger-hover-border rounded-lg px-4 py-3 text-sm text-danger">
       <strong>Possible wash sale.</strong>{' '}
       Selling in a taxable account and buying the same asset class within 30 days
       may trigger the wash-sale rule. Consult your tax advisor.
@@ -302,20 +307,20 @@ function TradeRow({ trade }: { trade: ResolvedTrade }) {
         <span
           className="text-xs font-mono font-semibold px-2 py-0.5 rounded-full tracking-wide"
           style={{
-            background: isBuy ? BRAND_50 : ORANGE_50,
-            color:      isBuy ? BRAND    : ORANGE_2,
+            background: isBuy ? BUY_BG   : SELL_BG,
+            color:      isBuy ? BUY_TEXT : SELL_TEXT,
           }}
         >
           {isBuy ? 'BUY' : 'SELL'}
         </span>
       </td>
       <td className="px-4 py-2 text-right font-mono tabular-nums font-semibold text-[14px]">
-        <span style={{ color: isBuy ? BRAND : ORANGE_2 }}>
+        <span style={{ color: isBuy ? BUY_TEXT : SELL_TEXT }}>
           {fmtDelta(trade.deltaUsd)}
         </span>
       </td>
       {isTaxableSale(trade)
-        ? <td className="px-4 py-2 text-xs text-amber-600">⚠ taxable sale</td>
+        ? <td className="px-4 py-2 text-xs text-warn">⚠ taxable sale</td>
         : <td className="px-4 py-2" />}
     </tr>
   );
@@ -371,17 +376,17 @@ function ContributionSummary({ summary }: { summary: RebalanceResult['contributi
     <div className="border border-gray-200 rounded-lg p-4 space-y-3">
       <h3 className="text-sm font-medium text-gray-700">How this rebalance is funded</h3>
       <div className="grid grid-cols-2 gap-3">
-        <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2">
-          <div className="text-xs text-green-700">Funded by new &amp; free cash</div>
-          <div className="text-lg font-mono font-semibold text-green-800 tabular-nums">{fmtUsd(newCashDeployed)}</div>
+        <div className="bg-ok-bg border border-line rounded-lg px-3 py-2">
+          <div className="text-xs text-ok">Funded by new &amp; free cash</div>
+          <div className="text-lg font-mono font-semibold text-ok tabular-nums">{fmtUsd(newCashDeployed)}</div>
         </div>
-        <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-          <div className="text-xs text-amber-700">Requires sales</div>
-          <div className="text-lg font-mono font-semibold text-amber-800 tabular-nums">{fmtUsd(sellsUsd)}</div>
+        <div className="bg-warn-bg border border-warn-banner-border rounded-lg px-3 py-2">
+          <div className="text-xs text-warn">Requires sales</div>
+          <div className="text-lg font-mono font-semibold text-warn tabular-nums">{fmtUsd(sellsUsd)}</div>
         </div>
       </div>
       {withdrawalRaised > 0 && (
-        <p className="text-xs text-amber-700">
+        <p className="text-xs text-warn">
           Net cash raised by this drawdown: <strong>{fmtUsd(withdrawalRaised)}</strong>
         </p>
       )}
@@ -825,8 +830,8 @@ export function ResultsPanel({
         <div
           className={`rounded-lg border px-4 py-3 text-sm flex items-start gap-3
             ${reminderDays! < 0
-              ? 'bg-red-50 border-red-200 text-red-800'
-              : 'bg-amber-50 border-amber-200 text-amber-800'}`}
+              ? 'bg-danger-bg border-danger-hover-border text-danger'
+              : 'bg-warn-bg border-warn-banner-border text-warn-banner-text'}`}
           data-testid="reminder-banner"
         >
           <span className="inline-flex leading-none mt-0.5"><IconClock size={18} /></span>
@@ -898,11 +903,11 @@ export function ResultsPanel({
 
       {/* Cash deployment summary */}
       {showCashSummary && (
-        <div className="border border-green-200 rounded-lg overflow-hidden">
-          <div className="bg-green-50 px-4 py-2 text-xs font-medium text-green-800 flex items-center justify-between">
+        <div className="border border-line rounded-lg overflow-hidden">
+          <div className="bg-ok-bg px-4 py-2 text-xs font-medium text-ok flex items-center justify-between">
             <span>Cash deployment</span>
             {freeCash > 0 && (
-              <span className="text-green-600 font-mono tabular-nums">
+              <span className="text-ok font-mono tabular-nums">
                 {fmtUsd(freeCash)} household free cash distributed
               </span>
             )}
@@ -936,20 +941,20 @@ export function ResultsPanel({
                     {freeCash > 0 && (
                       <td className="px-4 py-2 text-right font-mono tabular-nums text-gray-600">
                         {depositsOpen && freeCashShare > 0.5
-                          ? <span className="text-green-700">{fmtUsd(freeCashShare)}</span>
+                          ? <span className="text-ok">{fmtUsd(freeCashShare)}</span>
                           : <span className="text-gray-400">—</span>}
                       </td>
                     )}
                     <td className="px-4 py-2 text-right font-mono tabular-nums font-medium">
                       {netDeploy > 0.5
-                        ? <span className="text-green-700">+{fmtUsd(netDeploy)}</span>
+                        ? <span className="text-ok">+{fmtUsd(netDeploy)}</span>
                         : <span className="text-gray-400">—</span>}
                     </td>
                     <td className="px-4 py-2 text-right">
                       <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                        !depositsOpen ? 'bg-red-100 text-red-600'
-                          : limited ? 'bg-amber-100 text-amber-700'
-                          : 'bg-green-100 text-green-700'
+                        !depositsOpen ? 'bg-danger-bg text-danger'
+                          : limited ? 'bg-warn-bg text-warn'
+                          : 'bg-ok-bg text-ok'
                       }`}>
                         {!depositsOpen ? 'Closed'
                           : limited ? `Open · ${fmtUsd(a.depositLimitUsd!)} cap`
@@ -966,10 +971,10 @@ export function ResultsPanel({
 
       {/* Withdrawal plan */}
       {showWithdrawalPlan && (
-        <div className="overflow-hidden border border-amber-200 rounded-lg">
-          <div className="bg-amber-50 px-4 py-2 text-xs font-medium text-amber-900 flex items-center justify-between">
+        <div className="overflow-hidden border border-warn-banner-border rounded-lg">
+          <div className="bg-warn-bg px-4 py-2 text-xs font-medium text-warn-banner-text flex items-center justify-between">
             <span>Spending / withdrawal plan</span>
-            <span className="font-mono tabular-nums text-amber-700">
+            <span className="font-mono tabular-nums text-warn">
               {fmtUsd(totalRaised)} raised of {fmtUsd(totalWithdrawal)} planned
             </span>
           </div>
@@ -994,14 +999,14 @@ export function ResultsPanel({
                     </td>
                     <td className="px-4 py-2 text-right font-mono tabular-nums font-medium">
                       {withdrawn > 0.5
-                        ? <span className="text-amber-700">−{fmtUsd(withdrawn)}</span>
+                        ? <span className="text-warn">−{fmtUsd(withdrawn)}</span>
                         : <span className="text-gray-400">—</span>}
                     </td>
                     <td className="px-4 py-2 text-right">
                       <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                        restricted ? 'bg-red-100 text-red-600'
+                        restricted ? 'bg-danger-bg text-danger'
                           : required ? 'bg-brand-100 text-brand-700'
-                          : 'bg-green-100 text-green-700'
+                          : 'bg-ok-bg text-ok'
                       }`}>
                         {restricted ? 'Restricted' : required ? 'Required' : 'Eligible'}
                       </span>
@@ -1126,7 +1131,7 @@ export function ResultsPanel({
 
       {/* Per-account trade sections */}
       {resolvedTrades.length === 0 ? (
-        <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
+        <div className="text-sm text-ok bg-ok-bg border border-line rounded-lg px-4 py-3">
           Portfolio is within tolerance — no trades needed.
         </div>
       ) : (
@@ -1152,7 +1157,7 @@ export function ResultsPanel({
                     <span className="text-sm font-medium text-gray-700">{account.name}</span>
                     <span className="text-xs text-gray-400">{account.institution} · {ACCT_TYPE_LABEL[account.type]}</span>
                     {locked && (
-                      <span className="inline-flex items-center gap-1 text-xs text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">
+                      <span className="inline-flex items-center gap-1 text-xs text-warn bg-warn-bg border border-warn-banner-border px-1.5 py-0.5 rounded-full">
                         <IconLock size={12} /> locked
                       </span>
                     )}
@@ -1162,7 +1167,7 @@ export function ResultsPanel({
                       Net:{' '}
                       <span className={
                         Math.abs(netUsd) < 0.5 ? 'text-gray-500 font-medium'
-                          : netUsd > 0 ? 'text-green-600 font-medium'
+                          : netUsd > 0 ? 'text-ok font-medium'
                           : 'font-medium'
                       }
                       style={netUsd < -0.5 ? { color: ORANGE_2 } : undefined}>

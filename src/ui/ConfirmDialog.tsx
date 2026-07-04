@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { btnGhost, btnDanger, btnPrimary } from './buttons';
 
 interface Props {
   open: boolean;
@@ -100,30 +101,28 @@ export function ConfirmDialog({
           aria-modal="true"
           aria-labelledby={titleId}
           onClick={e => e.stopPropagation()}
-          className="w-full max-w-sm bg-white border border-gray-200 rounded-xl shadow-[0_20px_50px_-15px_rgba(17,22,29,0.35)] px-5 py-4"
+          className="w-full max-w-sm bg-white rounded-[14px] shadow-[0_16px_40px_-16px_rgba(8,40,85,0.25)] overflow-hidden"
         >
-          <h2 id={titleId} className="font-semibold text-[15px] text-gray-900">
-            {title}
-          </h2>
-          <p className="text-[13px] text-gray-500 leading-relaxed mt-1.5">
-            {message}
-          </p>
-          <div className="flex justify-end gap-2 mt-5">
+          <div className="px-5 pt-[18px] pb-1.5">
+            <h2 id={titleId} className="font-semibold text-[15px] tracking-[-0.01em] text-brand-ink">
+              {title}
+            </h2>
+            <p className="text-[13px] text-muted-1 leading-[1.55] mt-1.5">
+              {message}
+            </p>
+          </div>
+          <div className="flex justify-end gap-2 px-5 pb-4 pt-3.5">
             <button
               ref={cancelRef}
               onClick={onCancel}
-              className="text-gray-500 text-sm px-3 py-1.5 rounded-md hover:bg-gray-100"
+              className={btnGhost}
             >
               {cancelLabel}
             </button>
             <button
               ref={confirmRef}
               onClick={onConfirm}
-              className={
-                destructive
-                  ? 'bg-red-600 text-white text-sm px-4 py-1.5 rounded-md hover:bg-red-700'
-                  : 'bg-brand-600 text-white text-sm px-4 py-1.5 rounded-md hover:bg-brand-700'
-              }
+              className={destructive ? btnDanger : btnPrimary}
             >
               {confirmLabel}
             </button>

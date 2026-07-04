@@ -20,6 +20,11 @@
     --ink: #2a3441;
     --paper: #fbfcfd;
     --line: #e5e8ee;
+    /* NOTE (#194): the app-shell design redefines a "line-2" neutral as #f1f3f6
+       (inner card dividers). That value ships as the Tailwind `line-2` token in
+       tailwind.config.js. This CSS var stays #e5e8ee — it drives the landing
+       trust strip (#143) and the Results share-channel dividers, whose rendered
+       look must not change — so the two are intentionally distinct. */
     --line-2: #e5e8ee;
 
     /* Data-viz FAMILY-level ramp (issue #150). These five anchors ARE the

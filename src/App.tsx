@@ -22,7 +22,7 @@ import { DriftWordmark } from './ui/Logo';
 import { HowItWorksDrawer } from './ui/HowItWorksDrawer';
 import { ConfirmDialog } from './ui/ConfirmDialog';
 import { LandingPage } from './ui/LandingPage';
-import { IconDownload, IconUpload, IconX, IconCheck } from './ui/icons';
+import { IconDownload, IconUpload, IconX, IconCheck, IconInfo } from './ui/icons';
 import {
   buildState, clearState, DEFAULT_APP_STATE, saveJson, loadJson,
   loadState, saveState, saveBackup, type AppState,
@@ -282,21 +282,21 @@ export default function App() {
                 <button
                   onClick={handleSave}
                   title="Save portfolio as JSON"
-                  className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-800 border border-gray-200 rounded px-2 py-1 hover:bg-gray-50 transition-colors"
+                  className="inline-flex items-center gap-1 text-[12px] font-medium text-muted-1 hover:text-ink border border-line hover:border-muted-2 rounded-md px-2 py-1 transition-colors"
                 >
                   <IconDownload size={13} /> Save
                 </button>
                 <button
                   onClick={() => loadFileRef.current?.click()}
                   title="Load portfolio from JSON"
-                  className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-800 border border-gray-200 rounded px-2 py-1 hover:bg-gray-50 transition-colors"
+                  className="inline-flex items-center gap-1 text-[12px] font-medium text-muted-1 hover:text-ink border border-line hover:border-muted-2 rounded-md px-2 py-1 transition-colors"
                 >
                   <IconUpload size={13} /> Load
                 </button>
                 <button
                   onClick={handleReset}
                   title="Clear all data"
-                  className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-red-500 border border-gray-200 rounded px-2 py-1 hover:bg-red-50 transition-colors"
+                  className="inline-flex items-center gap-1 text-[12px] font-medium text-muted-2 hover:text-danger border border-line hover:border-danger-hover-border rounded-md px-2 py-1 transition-colors"
                 >
                   <IconX size={13} /> Reset
                 </button>
@@ -315,13 +315,9 @@ export default function App() {
                 onClick={() => setHowItWorksOpen(true)}
                 title="How Drift works"
                 aria-label="How it works"
-                className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-gray-900 border border-gray-200 rounded px-2 sm:px-2.5 py-1 hover:border-brand-200 hover:bg-brand-50 transition-colors flex-shrink-0"
+                className="flex items-center gap-1.5 text-[12px] font-medium text-info bg-info-bg hover:bg-brand-100 border border-info-border rounded-md px-2 sm:px-2.5 py-1 transition-colors flex-shrink-0"
               >
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                  <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.4" />
-                  <path d="M8 7v4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-                  <circle cx="8" cy="4.7" r="1" fill="currentColor" />
-                </svg>
+                <IconInfo size={14} />
                 <span className="hidden sm:inline">How it works</span>
               </button>
             </div>
@@ -332,78 +328,88 @@ export default function App() {
               via a plain localStorage flag, separate from the AppState
               schema, so it stays gone across sessions once dismissed. */}
           {!betaBannerDismissed && (
-            <div className="mb-2 bg-amber-50 border border-amber-200 rounded px-3 py-2 text-xs text-amber-800 flex items-center justify-between">
-              <span className="flex items-center gap-1.5 flex-wrap">
-                <span>Drift is in early beta.</span>
-                <a
-                  href={`https://docs.google.com/forms/d/e/1FAIpQLSdG-V4Zq4X-fwal9ThhM4PQSFSwinrFo8fyWpZLCWu7mGXHlA/viewform?usp=pp_url&entry.715582229=${__COMMIT_SHA__}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-medium underline underline-offset-2 hover:text-amber-900"
-                >
-                  Share your feedback
-                </a>
-                <span>— it helps a lot.</span>
+            <div className="mb-1.5 flex items-center justify-between gap-3 px-3.5 py-[7px] rounded-[9px] border border-line bg-paper font-mono text-[11px] text-muted-1">
+              <span className="flex items-center gap-2.5 flex-wrap min-w-0">
+                <span className="font-semibold tracking-[0.1em] text-accent shrink-0">BETA</span>
+                <span>
+                  Drift is in early beta — {' '}
+                  <a
+                    href={`https://docs.google.com/forms/d/e/1FAIpQLSdG-V4Zq4X-fwal9ThhM4PQSFSwinrFo8fyWpZLCWu7mGXHlA/viewform?usp=pp_url&entry.715582229=${__COMMIT_SHA__}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-info underline underline-offset-2 hover:text-brand-ink"
+                  >
+                    share your feedback
+                  </a>
+                  , it helps a lot.
+                </span>
               </span>
               <button
                 onClick={dismissBetaBanner}
                 aria-label="Dismiss beta banner"
-                className="ml-3 text-amber-600 hover:text-amber-800 flex-shrink-0"
+                className="text-muted-3 hover:text-ink flex-shrink-0"
               >
-                <IconX size={14} />
+                <IconX size={11} />
               </button>
             </div>
           )}
 
-          {/* Demo mode banner */}
+          {/* Demo mode banner — info colors (#194 kit). */}
           {isDemoMode && (
-            <div className="mb-2 bg-brand-50 border border-brand-200 rounded px-3 py-2 text-xs text-brand-800 flex items-center justify-between">
-              <span>
-                Demo — showing a synthetic 5-account sample portfolio. Your saved data is untouched.
+            <div className="mb-1.5 flex items-center justify-between gap-3 px-3.5 py-[7px] rounded-[9px] border border-info-border bg-info-bg font-mono text-[11px] text-info">
+              <span className="flex items-center gap-2.5 min-w-0">
+                <span className="font-semibold tracking-[0.1em] shrink-0">DEMO</span>
+                <span>Synthetic 5-account sample portfolio. Your saved data is untouched.</span>
               </span>
-              <div className="ml-3 flex items-center gap-2 flex-shrink-0">
+              <div className="ml-3 flex items-center gap-3 flex-shrink-0">
                 <button
                   onClick={handleExitDemo}
-                  className="font-medium underline underline-offset-2 text-brand-700 hover:text-brand-900"
+                  className="font-semibold underline underline-offset-2 text-info hover:text-brand-ink"
                 >
                   Exit demo
                 </button>
                 <button
                   onClick={handleExitDemo}
                   aria-label="Exit demo and restore your saved portfolio"
-                  className="text-brand-400 hover:text-brand-700"
+                  className="text-brand-300 hover:text-info"
                 >
-                  <IconX size={14} />
+                  <IconX size={11} />
                 </button>
               </div>
             </div>
           )}
 
-          {/* Restored-from-backup banner */}
+          {/* Restored-from-backup banner — warn colors (#194 kit). */}
           {restoredFromBackup !== null && (
-            <div className="mb-2 bg-amber-50 border border-amber-200 rounded px-3 py-2 text-xs text-amber-800 flex items-center justify-between">
-              <span>
-                ⚠ Your last save couldn't be read — portfolio restored from a backup taken at{' '}
-                {new Date(restoredFromBackup).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
-                {' '}on{' '}
-                {new Date(restoredFromBackup).toLocaleDateString([], { month: 'short', day: 'numeric' })}.
-                {' '}Recent changes may be missing. Save a copy to preserve what's here.
+            <div className="mb-1.5 flex items-center justify-between gap-3 px-3.5 py-[7px] rounded-[9px] border border-warn-banner-border bg-warn-banner-bg font-mono text-[11px] text-warn-banner-text">
+              <span className="flex items-center gap-2.5 min-w-0">
+                <span className="font-semibold tracking-[0.1em] shrink-0">RESTORED</span>
+                <span>
+                  Last save couldn't be read — restored from a backup taken{' '}
+                  {new Date(restoredFromBackup).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                  {', '}
+                  {new Date(restoredFromBackup).toLocaleDateString([], { month: 'short', day: 'numeric' })}.
+                  {' '}Recent changes may be missing. Save a copy to preserve what's here.
+                </span>
               </span>
               <button
                 onClick={() => setRestoredFromBackup(null)}
                 aria-label="Dismiss"
-                className="ml-3 text-amber-600 hover:text-amber-800 flex-shrink-0"
+                className="text-warn hover:text-warn-banner-text flex-shrink-0"
               >
-                <IconX size={14} />
+                <IconX size={11} />
               </button>
             </div>
           )}
 
-          {/* Load error */}
+          {/* Load error — danger colors (#194 kit). */}
           {loadError && (
-            <div className="mb-2 bg-red-50 border border-red-200 rounded px-3 py-2 text-xs text-red-700 flex items-center justify-between">
-              <span>{loadError}</span>
-              <button onClick={() => setLoadError(null)} aria-label="Dismiss" className="ml-3 text-red-400 hover:text-red-600"><IconX size={14} /></button>
+            <div className="mb-1.5 flex items-center justify-between gap-3 px-3.5 py-[7px] rounded-[9px] border border-danger-hover-border bg-danger-bg font-mono text-[11px] text-danger">
+              <span className="flex items-center gap-2.5 min-w-0">
+                <span className="font-semibold tracking-[0.1em] shrink-0">ERROR</span>
+                <span>{loadError}</span>
+              </span>
+              <button onClick={() => setLoadError(null)} aria-label="Dismiss" className="text-danger hover:text-danger-solid-hover flex-shrink-0"><IconX size={11} /></button>
             </div>
           )}
 
@@ -430,7 +436,7 @@ export default function App() {
               >
                 {tab.label}
                 {tab.id === 'classify' && unmappedCount > 0 && (
-                  <span className="ml-1.5 bg-amber-100 text-amber-700 text-xs px-1.5 py-0.5 rounded-full">
+                  <span className="ml-1.5 bg-warn-bg text-warn text-xs px-1.5 py-0.5 rounded-full">
                     {unmappedCount}
                   </span>
                 )}

@@ -167,9 +167,12 @@ export function DonutChart({ inner, outer, size = 180 }: Props) {
           const driftLabel = significant
             ? (drift > 0 ? `+${fmtPct(drift)}` : fmtPct(drift))
             : '—';
-          const driftColor = !significant    ? 'text-gray-300'
-                           : drift > 0       ? 'text-red-400'
-                           :                   'text-sky-500';
+          // Drift direction follows the kit's drift-value colours (over → accent
+          // orange #e8600a, under → brand-500 #1a5fa0), matching AllocationViews
+          // and the ▲/▼ drift chips — not a raw red/sky pair. (#194)
+          const driftColor = !significant    ? 'text-faint'
+                           : drift > 0       ? 'text-[#e8600a]'
+                           :                   'text-[#1a5fa0]';
           return (
             <div
               key={sl.label}

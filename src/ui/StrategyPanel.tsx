@@ -593,12 +593,12 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
   const defensivePct = Math.max(0, 100 - growthPct);
 
   const { label: riskLabel, color: riskColor } = ((): { label: string; color: string } => {
-    if (growthPct < 25) return { label: 'Very Conservative',     color: 'text-sky-600'     };
-    if (growthPct < 45) return { label: 'Conservative',          color: 'text-sky-500'     };
-    if (growthPct < 65) return { label: 'Moderate',              color: 'text-emerald-600' };
-    if (growthPct < 80) return { label: 'Moderately Aggressive', color: 'text-amber-600'   };
-    if (growthPct < 95) return { label: 'Aggressive',            color: 'text-orange-500'  };
-    return               { label: 'Very Aggressive',             color: 'text-red-500'     };
+    if (growthPct < 25) return { label: 'Very Conservative',     color: 'text-info'       };
+    if (growthPct < 45) return { label: 'Conservative',          color: 'text-brand-400'  };
+    if (growthPct < 65) return { label: 'Moderate',              color: 'text-ok'         };
+    if (growthPct < 80) return { label: 'Moderately Aggressive', color: 'text-warn'       };
+    if (growthPct < 95) return { label: 'Aggressive',            color: 'text-accent-ink' };
+    return               { label: 'Very Aggressive',             color: 'text-danger'     };
   })();
 
   // Diversification score via Herfindahl-Hirschman Index (sum of squared weights).
@@ -616,11 +616,11 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
   const maxWeight     = Math.max(...effectiveLeaves.map(ac => parseFloat(weights[ac]) || 0));
 
   const { label: diversLabel, color: diversColor } = ((): { label: string; color: string } => {
-    if (hhi < 0.15) return { label: 'Well Diversified',        color: 'text-sky-600'     };
-    if (hhi < 0.25) return { label: 'Diversified',             color: 'text-emerald-600' };
-    if (hhi < 0.35) return { label: 'Mod. Concentrated',       color: 'text-amber-600'   };
-    if (hhi < 0.50) return { label: 'Concentrated',            color: 'text-orange-500'  };
-    return               { label: 'Highly Concentrated',       color: 'text-red-500'     };
+    if (hhi < 0.15) return { label: 'Well Diversified',        color: 'text-info'       };
+    if (hhi < 0.25) return { label: 'Diversified',             color: 'text-ok'         };
+    if (hhi < 0.35) return { label: 'Mod. Concentrated',       color: 'text-warn'       };
+    if (hhi < 0.50) return { label: 'Concentrated',            color: 'text-accent-ink' };
+    return               { label: 'Highly Concentrated',       color: 'text-danger'     };
   })();
 
   // Parent classes render with their sub-classes indented beneath; children are
@@ -922,10 +922,10 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
                   <td className="px-4 py-2 text-xs font-medium text-gray-500">
                     Total
                     {sumOk && (
-                      <span className="ml-2 inline-flex items-center gap-1 font-normal text-green-500"><IconCheck size={12} /> sums to 100%</span>
+                      <span className="ml-2 inline-flex items-center gap-1 font-normal text-ok"><IconCheck size={12} /> sums to 100%</span>
                     )}
                   </td>
-                  <td className={`px-4 py-2 text-right text-sm font-semibold ${sumOk ? 'text-green-600' : 'text-red-600'}`}>
+                  <td className={`px-4 py-2 text-right text-sm font-semibold ${sumOk ? 'text-ok' : 'text-danger'}`}>
                     {sum.toFixed(1)}%
                   </td>
                 </tr>
@@ -989,7 +989,7 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
         </div>
 
         {!sumOk && (
-          <p className="text-xs text-red-600">
+          <p className="text-xs text-danger">
             Weights must sum to 100% (±0.1%). Adjust the values above, then click outside to apply.
           </p>
         )}

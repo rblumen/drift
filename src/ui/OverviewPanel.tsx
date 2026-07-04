@@ -56,11 +56,11 @@ function WarnIcon() {
 function Badge({ state, n, payoff }: { state: StepState; n: string; payoff?: boolean }) {
   const base = 'w-7 h-7 rounded-[8px] flex items-center justify-center mb-3 flex-none';
   if (state === 'done')
-    return <div className={`${base} bg-green-50 text-green-600`}><CheckIcon /></div>;
+    return <div className={`${base} bg-ok-bg text-ok`}><CheckIcon /></div>;
   if (state === 'warn')
-    return <div className={`${base} bg-amber-50 text-amber-600`}><WarnIcon /></div>;
+    return <div className={`${base} bg-warn-bg text-warn`}><WarnIcon /></div>;
   if (state === 'locked')
-    return <div className={`${base} bg-gray-100 text-gray-400 font-mono text-[13px] font-semibold`}>—</div>;
+    return <div className={`${base} bg-tint text-faint font-mono text-[13px] font-semibold`}>—</div>;
   if (payoff)
     return <div className={`${base} bg-accent text-white font-mono text-[13px] font-semibold`}>{n}</div>;
   return <div className={`${base} bg-brand text-white font-mono text-[13px] font-semibold`}>{n}</div>;
@@ -69,16 +69,16 @@ function Badge({ state, n, payoff }: { state: StepState; n: string; payoff?: boo
 // ── Status chip ───────────────────────────────────────────────────────────────
 function Chip({ state, stat }: { state: StepState; stat: string }) {
   const clr: Record<StepState, string> = {
-    done:   'bg-green-50 text-green-700',
-    warn:   'bg-amber-50 text-amber-700',
-    idle:   'bg-gray-100 text-gray-400',
-    locked: 'bg-gray-100 text-gray-400',
+    done:   'bg-ok-bg text-ok',
+    warn:   'bg-warn-bg text-warn',
+    idle:   'bg-tint text-muted-2',
+    locked: 'bg-tint text-muted-2',
   };
   const dot: Record<StepState, string> = {
-    done:   'bg-green-500',
-    warn:   'bg-amber-500',
-    idle:   'bg-gray-300',
-    locked: 'bg-gray-300',
+    done:   'bg-ok',
+    warn:   'bg-warn',
+    idle:   'bg-faint',
+    locked: 'bg-faint',
   };
   return (
     <span className={`inline-flex items-center gap-1.5 font-mono text-[11px] px-2 py-0.5 rounded-full ${clr[state]}`}>
@@ -184,7 +184,7 @@ export function OverviewPanel({
           <span className="font-mono text-[10px] tracking-[.12em] uppercase text-gray-400">Unclassified</span>
           <span className={`inline-flex items-center font-semibold text-xl tracking-tight leading-7 ${
             !hasPositions ? 'text-gray-300' :
-            unmappedCount > 0 ? 'text-amber-600' : 'text-green-600'
+            unmappedCount > 0 ? 'text-warn' : 'text-ok'
           }`}>
             {!hasPositions ? '—' : unmappedCount > 0 ? unmappedCount : <IconCheck size={20} aria-label="All tagged" />}
           </span>
@@ -227,10 +227,10 @@ export function OverviewPanel({
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3.5 relative">
         {steps.map((step, i) => {
           const borderCls =
-            step.state === 'done'   ? 'border-green-200' :
-            step.state === 'warn'   ? 'border-amber-200' :
-            step.state === 'locked' ? 'border-gray-100 opacity-50' :
-            'border-gray-200';
+            step.state === 'done'   ? 'border-ok/40' :
+            step.state === 'warn'   ? 'border-warn-banner-border' :
+            step.state === 'locked' ? 'border-line-2 opacity-50' :
+            'border-line';
           const hoverCls = step.state === 'locked' ? 'pointer-events-none' :
             'hover:border-brand-200 hover:shadow-[0_8px_24px_-16px_rgba(13,62,122,0.2)] cursor-pointer';
           return (

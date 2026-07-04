@@ -35,7 +35,7 @@ const TIERS: {
 }[] = [
   {
     tier: 'Hard constraints',
-    pill: 'bg-rose-100 text-rose-700',
+    pill: 'bg-danger-bg text-danger',
     items: [
       { num: 1, heading: 'Respect locked accounts & positions', body: 'Locked accounts generate zero trades. Locked positions are frozen and excluded from trade math.' },
       { num: 2, heading: 'Respect per-account class restrictions', body: "Allowlists or ticker menus limit which classes land in an account. No trade places a class where it can't go." },
@@ -53,7 +53,7 @@ const TIERS: {
   },
   {
     tier: 'Secondary objectives',
-    pill: 'bg-amber-100 text-amber-700',
+    pill: 'bg-warn-bg text-warn',
     items: [
       { num: 7, heading: 'Minimize taxable sells', body: 'Sells in taxable accounts are avoided or redirected to tax-advantaged accounts wherever possible.' },
       { num: 8, heading: 'Concentrate each class in fewest accounts', body: "Within a bucket, the engine fills the largest-capacity account first, spilling only when it's exhausted." },
@@ -62,7 +62,7 @@ const TIERS: {
   },
   {
     tier: 'Simplicity objectives',
-    pill: 'bg-gray-100 text-gray-500',
+    pill: 'bg-tint text-muted-2',
     items: [
       { num: 10, heading: 'Minimize the number of trades', body: 'Dust trades below the minimum are suppressed. A post-pass drops marginal trades whose removal keeps every weight within its band.' },
       { num: 11, heading: 'Minimize accounts touched', body: 'When the target can be met by touching fewer accounts, the simpler plan wins. Trades are concentrated before being spread.' },
@@ -71,11 +71,11 @@ const TIERS: {
 ];
 
 const FLAGS: { name: string; color: string; meaning: string }[] = [
-  { name: 'REVISIT_PLACEMENT', color: 'text-orange-700', meaning: 'Taxable share of the household exceeds the fixed-income target weight. Bonds-only taxable is no longer feasible — update placement rules.' },
-  { name: 'TAXABLE_SALE', color: 'text-amber-700', meaning: 'A recommended sell is in a taxable account. May trigger a capital gain — review before executing.' },
-  { name: 'PLACEMENT_SPILLOVER', color: 'text-brand-700', meaning: 'An asset class filled its preferred bucket and spilled into a secondary one. Informational only.' },
-  { name: 'NO_ELIGIBLE_ACCOUNT', color: 'text-red-700', meaning: 'No account has capacity for a given asset class. Check account restrictions in the Accounts tab.' },
-  { name: 'UNMAPPED_HOLDING', color: 'text-amber-700', meaning: 'A ticker has no asset class assigned. Go to the Classify tab.' },
+  { name: 'REVISIT_PLACEMENT', color: 'text-accent-ink', meaning: 'Taxable share of the household exceeds the fixed-income target weight. Bonds-only taxable is no longer feasible — update placement rules.' },
+  { name: 'TAXABLE_SALE', color: 'text-warn', meaning: 'A recommended sell is in a taxable account. May trigger a capital gain — review before executing.' },
+  { name: 'PLACEMENT_SPILLOVER', color: 'text-info', meaning: 'An asset class filled its preferred bucket and spilled into a secondary one. Informational only.' },
+  { name: 'NO_ELIGIBLE_ACCOUNT', color: 'text-danger', meaning: 'No account has capacity for a given asset class. Check account restrictions in the Accounts tab.' },
+  { name: 'UNMAPPED_HOLDING', color: 'text-warn', meaning: 'A ticker has no asset class assigned. Go to the Classify tab.' },
 ];
 
 const SectionLabel = ({ children }: { children: React.ReactNode }) => (

@@ -403,7 +403,7 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
     return (
       <div className="space-y-4">
         <h2 className="text-lg font-semibold text-gray-800">Import Positions</h2>
-        <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+        <p className="text-sm text-warn bg-warn-bg border border-warn-banner-border rounded-lg px-4 py-3">
           Add at least one account in the Accounts tab before importing positions.
         </p>
       </div>
@@ -505,7 +505,7 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
               ))}
             </select>
             {detected && (
-              <span className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-2 py-0.5">
+              <span className="text-xs text-ok bg-ok-bg border border-line rounded px-2 py-0.5">
                 Auto-detected
               </span>
             )}
@@ -515,7 +515,7 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
       )}
 
       {parseErrors.length > 0 && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700 space-y-1">
+        <div className="bg-danger-bg border border-danger-hover-border rounded-lg p-3 text-sm text-danger space-y-1">
           {parseErrors.map((e, i) => <div key={i}>{e}</div>)}
         </div>
       )}
@@ -746,7 +746,7 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
                     tabIndex={0}
                     onClick={e => { e.stopPropagation(); setPositions(positions.filter(p => p.accountId !== account.id)); }}
                     onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); setPositions(positions.filter(p => p.accountId !== account.id)); } }}
-                    className="text-xs text-red-400 hover:underline ml-2 cursor-pointer"
+                    className="text-xs text-muted-2 hover:text-danger hover:underline ml-2 cursor-pointer"
                   >
                     Clear
                   </span>
@@ -759,7 +759,7 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
                       {rows.map(({ pos: p, posIdx }) => (
                         <tr key={posIdx} className={`hover:bg-gray-50 ${p.locked ? 'opacity-60' : ''}`}>
                           {/* Edited indicator */}
-                          <td className="pl-3 pr-0 py-2 w-4 text-amber-500">
+                          <td className="pl-3 pr-0 py-2 w-4 text-warn">
                             {p.edited && <span className="inline-flex" title="Manually edited" aria-label="Manually edited"><IconPencil size={13} /></span>}
                           </td>
                           {/* Ticker */}
@@ -857,7 +857,7 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
                               onClick={() => updatePositionByIdx(posIdx, { locked: !p.locked }, false)}
                               title={p.locked ? 'Unlock position (allow trades)' : 'Lock position (exclude from trades)'}
                               aria-label={p.locked ? 'Unlock position (allow trades)' : 'Lock position (exclude from trades)'}
-                              className={`inline-flex transition-colors ${p.locked ? 'text-amber-500 hover:text-gray-400' : 'text-gray-300 hover:text-amber-500'}`}
+                              className={`inline-flex transition-colors ${p.locked ? 'text-warn hover:text-gray-400' : 'text-gray-300 hover:text-warn'}`}
                             >
                               {p.locked ? <IconLock size={15} /> : <IconLockOpen size={15} />}
                             </button>
@@ -866,7 +866,7 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
                           <td className="px-3 py-2 text-right w-8">
                             <button
                               onClick={() => setPositions(positions.filter((_, idx) => idx !== posIdx))}
-                              className="inline-flex text-gray-300 hover:text-red-400"
+                              className="inline-flex text-muted-2 hover:text-danger"
                               title="Remove"
                               aria-label={`Remove ${p.ticker}`}
                             ><IconX size={13} /></button>
