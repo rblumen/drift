@@ -17,12 +17,15 @@ import { ImportPanel } from './ui/ImportPanel';
 import { ClassifyPanel } from './ui/ClassifyPanel';
 import { StrategyPanel } from './ui/StrategyPanel';
 import { ResultsPanel } from './ui/ResultsPanel';
-import { fmtUsd } from './ui/fmt';
+import { fmtUsd, rollupFamilies, ALLOCATION_FAMILIES } from './ui/fmt';
+import { effectiveTolerance } from './engine/utils';
+import { ALL_ASSET_CLASSES } from './engine/types';
 import { DriftWordmark } from './ui/Logo';
 import { HowItWorksDrawer } from './ui/HowItWorksDrawer';
 import { ConfirmDialog } from './ui/ConfirmDialog';
 import { LandingPage } from './ui/LandingPage';
-import { IconDownload, IconUpload, IconX, IconCheck, IconInfo } from './ui/icons';
+import { WorkflowRail, type RailStep } from './ui/WorkflowRail';
+import { IconX, IconInfo, IconDownload, IconUpload } from './ui/icons';
 import {
   buildState, clearState, DEFAULT_APP_STATE, saveJson, loadJson,
   loadState, saveState, saveBackup, type AppState,
@@ -97,14 +100,16 @@ export default function App() {
   const loadFileRef = useRef<HTMLInputElement>(null);
   const tabRefs = useRef<Record<Tab, HTMLButtonElement | null>>({} as Record<Tab, HTMLButtonElement | null>);
 
-  /** WAI-ARIA tabs pattern: Left/Right (and Home/End) move focus between tabs
-   *  and activate them (roving tabindex — only the active tab is tabbable). */
+  /** WAI-ARIA tabs pattern with roving tabindex — only the active tab is
+   *  tabbable. Both orientations are handled so the same routine drives the
+   *  vertical desktop rail (ArrowUp/Down) and the horizontal mobile tab bar
+   *  (ArrowLeft/Right); Home/End and wrap apply to both. */
   function handleTabKeyDown(e: React.KeyboardEvent, index: number) {
     let next = index;
-    if (e.key === 'ArrowRight')      next = (index + 1) % TABS.length;
-    else if (e.key === 'ArrowLeft')  next = (index - 1 + TABS.length) % TABS.length;
-    else if (e.key === 'Home')       next = 0;
-    else if (e.key === 'End')        next = TABS.length - 1;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown')     next = (index + 1) % TABS.length;
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp')   next = (index - 1 + TABS.length) % TABS.length;
+    else if (e.key === 'Home')                               next = 0;
+    else if (e.key === 'End')                                next = TABS.length - 1;
     else return;
     e.preventDefault();
     const nextTab = TABS[next].id;
@@ -152,6 +157,79 @@ export default function App() {
   }, [result.trades, positions, decompositions, tickerOverrides, strategy.targets]);
 
   const unmappedCount = result.flags.filter(f => f.kind === 'UNMAPPED_HOLDING').length;
+
+  const hasAccounts   = accounts.length > 0;
+  const hasPositions  = positions.length > 0;
+  const allClassified = hasPositions && unmappedCount === 0;
+
+  // ── Drift-from-target summary (Overview "Drift from target" cell) ───────────
+  // Max absolute per-class drift (current − target) across every class, plus a
+  // count of classes currently out of their rebalance band. Pure derivation from
+  // the same currentWeights / targets / tolerance the engine already exposes, so
+  // the Overview cell and the Results allocation table agree.
+  const driftInfo = useMemo(() => {
+    let maxAbs = 0;
+    let outOfBand = 0;
+    for (const ac of ALL_ASSET_CLASSES) {
+      const cur = result.currentWeights[ac] ?? 0;
+      const tgt = strategy.targets[ac] ?? 0;
+      if (cur === 0 && tgt === 0) continue;
+      const dev = Math.abs(cur - tgt);
+      if (dev > maxAbs) maxAbs = dev;
+      if (dev > effectiveTolerance(ac, strategy)) outOfBand += 1;
+    }
+    return { maxAbs, outOfBand };
+  }, [result.currentWeights, strategy]);
+
+  // ── Allocation-vs-target family rows (Overview table) ───────────────────────
+  // Roll the per-class current/target weights up to the five brand families and
+  // pair them for the Overview "Allocation vs target" table.
+  const familyRows = useMemo(() => {
+    const cur = rollupFamilies(result.currentWeights);
+    const tgt = rollupFamilies(strategy.targets);
+    return ALLOCATION_FAMILIES
+      .filter(f => (cur[f] ?? 0) > 0 || (tgt[f] ?? 0) > 0)
+      .map(f => ({ family: f, current: cur[f] ?? 0, target: tgt[f] ?? 0 }));
+  }, [result.currentWeights, strategy.targets]);
+
+  // ── Rail steps — numbered nav rows with completion/badge state ──────────────
+  const railSteps: RailStep[] = [
+    { id: 'overview', label: 'Overview', n: '01', done: false },
+    { id: 'accounts', label: 'Accounts', n: '02', done: hasAccounts },
+    { id: 'import',   label: 'Import',   n: '03', done: hasPositions },
+    { id: 'classify', label: 'Classify', n: '04', done: allClassified, warnCount: unmappedCount },
+    { id: 'strategy', label: 'Strategy', n: '05', done: hasPositions },
+    { id: 'results',  label: 'Results',  n: '06', done: false, infoCount: resolvedTrades.length },
+  ];
+
+  // Context-bar status caption per active tab. Warn-colored when the active tab
+  // needs attention (e.g. Classify with untagged tickers, mirroring the rail
+  // badge). Falls back to a neutral orientation line otherwise.
+  const contextStatus = useMemo((): { text: string; warn: boolean } => {
+    switch (activeTab) {
+      case 'overview':
+        if (!hasAccounts) return { text: 'Not started', warn: false };
+        if (!hasPositions) return { text: 'Step 2 of 5', warn: false };
+        if (unmappedCount > 0) return { text: `${unmappedCount} ticker${unmappedCount !== 1 ? 's' : ''} need tagging`, warn: true };
+        return { text: 'Ready for results', warn: false };
+      case 'accounts':
+        return { text: hasAccounts ? `${accounts.length} account${accounts.length !== 1 ? 's' : ''}` : 'No accounts yet', warn: false };
+      case 'import':
+        return { text: hasPositions ? `${positions.length} position${positions.length !== 1 ? 's' : ''}` : 'No positions yet', warn: false };
+      case 'classify':
+        return unmappedCount > 0
+          ? { text: `${unmappedCount} ticker${unmappedCount !== 1 ? 's' : ''} need tagging`, warn: true }
+          : { text: 'All tagged', warn: false };
+      case 'strategy':
+        return { text: 'Target allocation', warn: false };
+      case 'results':
+        return resolvedTrades.length > 0
+          ? { text: `${resolvedTrades.length} trade${resolvedTrades.length !== 1 ? 's' : ''}`, warn: false }
+          : { text: 'Within tolerance', warn: false };
+    }
+  }, [activeTab, hasAccounts, hasPositions, unmappedCount, accounts.length, positions.length, resolvedTrades.length]);
+
+  const activeTabLabel = TABS.find(t => t.id === activeTab)?.label ?? 'Overview';
 
   const fmtSavedTime = useCallback((d: Date) =>
     d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }), []);
@@ -236,323 +314,350 @@ export default function App() {
     );
   }
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto px-4">
+  const feedbackHref =
+    `https://docs.google.com/forms/d/e/1FAIpQLSdG-V4Zq4X-fwal9ThhM4PQSFSwinrFo8fyWpZLCWu7mGXHlA/viewform?usp=pp_url&entry.715582229=${__COMMIT_SHA__}`;
 
-          {/* Top row: wordmark + actions */}
-          <div className="flex items-center justify-between py-3">
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setShowLanding(true)}
-                className="p-0 border-0 bg-transparent cursor-pointer flex items-center"
-                title="Back to Drift home"
+  // Banners relocate directly under the context bar (order: beta, demo,
+  // restored, load-error). All dismiss/persistence semantics unchanged — only
+  // the mount point moved (#194 stage 2).
+  const banners = (
+    <>
+      {/* Beta banner — dismissible + remembered via a plain localStorage flag,
+          separate from the AppState schema, so it stays gone once dismissed. */}
+      {!betaBannerDismissed && (
+        <div className="flex items-center justify-between gap-3 px-6 py-1.5 border-b border-line-2 bg-paper font-mono text-[11px] text-muted-1">
+          <span className="flex items-center gap-2.5 flex-wrap min-w-0">
+            <span className="font-semibold tracking-[0.1em] text-accent shrink-0">BETA</span>
+            <span>
+              Drift is in early beta — {' '}
+              <a
+                href={feedbackHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-info underline underline-offset-2 hover:text-brand-ink"
               >
-                <DriftWordmark height={32} />
-              </button>
-              <span className="text-xs text-gray-400 hidden sm:inline border-l border-gray-200 pl-2.5">
-                DIY Portfolio Rebalancer
-              </span>
-            </div>
+                share your feedback
+              </a>
+              , it helps a lot.
+            </span>
+          </span>
+          <button
+            onClick={dismissBetaBanner}
+            aria-label="Dismiss beta banner"
+            className="text-muted-3 hover:text-ink flex-shrink-0"
+          >
+            <IconX size={11} />
+          </button>
+        </div>
+      )}
 
-            <div className="flex items-center gap-3">
-              {/* Household value + save time are also in the Overview status
-                  strip, so hide them here on mobile to keep the header on one
-                  row (#142). */}
-              {result.householdValue > 0 && (
-                <span className="hidden sm:inline text-sm text-gray-500 font-mono tabular-nums">
-                  {fmtUsd(result.householdValue)}
-                </span>
-              )}
-
-              {/* Autosave indicator */}
-              {lastSavedAt && (accounts.length > 0 || positions.length > 0) && (
-                <span
-                  className="hidden sm:inline-flex items-center gap-1 text-xs text-gray-400 tabular-nums"
-                  title={`Last saved at ${lastSavedAt.toLocaleTimeString()}`}
-                >
-                  <IconCheck size={13} /> Saved {fmtSavedTime(lastSavedAt)}
-                </span>
-              )}
-
-              {/* File actions */}
-              <div className="flex items-center gap-1.5 border-l border-gray-200 pl-3">
-                <button
-                  onClick={handleSave}
-                  title="Save portfolio as JSON"
-                  className="inline-flex items-center gap-1 text-[12px] font-medium text-muted-1 hover:text-ink border border-line hover:border-muted-2 rounded-md px-2 py-1 transition-colors"
-                >
-                  <IconDownload size={13} /> Save
-                </button>
-                <button
-                  onClick={() => loadFileRef.current?.click()}
-                  title="Load portfolio from JSON"
-                  className="inline-flex items-center gap-1 text-[12px] font-medium text-muted-1 hover:text-ink border border-line hover:border-muted-2 rounded-md px-2 py-1 transition-colors"
-                >
-                  <IconUpload size={13} /> Load
-                </button>
-                <button
-                  onClick={handleReset}
-                  title="Clear all data"
-                  className="inline-flex items-center gap-1 text-[12px] font-medium text-muted-2 hover:text-danger border border-line hover:border-danger-hover-border rounded-md px-2 py-1 transition-colors"
-                >
-                  <IconX size={13} /> Reset
-                </button>
-                <input
-                  ref={loadFileRef}
-                  type="file"
-                  accept=".json"
-                  onChange={handleLoadFile}
-                  className="hidden"
-                />
-              </div>
-
-              {/* Icon-only on mobile (label hidden < sm) so the drawer stays
-                  reachable on phones (#142). */}
-              <button
-                onClick={() => setHowItWorksOpen(true)}
-                title="How Drift works"
-                aria-label="How it works"
-                className="flex items-center gap-1.5 text-[12px] font-medium text-info bg-info-bg hover:bg-brand-100 border border-info-border rounded-md px-2 sm:px-2.5 py-1 transition-colors flex-shrink-0"
-              >
-                <IconInfo size={14} />
-                <span className="hidden sm:inline">How it works</span>
-              </button>
-            </div>
+      {/* Demo mode banner — info colors (#194 kit). */}
+      {isDemoMode && (
+        <div className="flex items-center justify-between gap-3 px-6 py-1.5 border-b border-line-2 bg-info-bg font-mono text-[11px] text-info">
+          <span className="flex items-center gap-2.5 min-w-0">
+            <span className="font-semibold tracking-[0.1em] shrink-0">DEMO</span>
+            <span>Synthetic 5-account sample portfolio. Your saved data is untouched.</span>
+          </span>
+          <div className="ml-3 flex items-center gap-3 flex-shrink-0">
+            <button
+              onClick={handleExitDemo}
+              className="font-semibold underline underline-offset-2 text-info hover:text-brand-ink"
+            >
+              Exit demo
+            </button>
+            <button
+              onClick={handleExitDemo}
+              aria-label="Exit demo and restore your saved portfolio"
+              className="text-brand-300 hover:text-info"
+            >
+              <IconX size={11} />
+            </button>
           </div>
+        </div>
+      )}
 
-          {/* Beta banner — contained pill matching the demo-mode and
-              restored-from-backup banners (#152). Dismissible and remembered
-              via a plain localStorage flag, separate from the AppState
-              schema, so it stays gone across sessions once dismissed. */}
-          {!betaBannerDismissed && (
-            <div className="mb-1.5 flex items-center justify-between gap-3 px-3.5 py-[7px] rounded-[9px] border border-line bg-paper font-mono text-[11px] text-muted-1">
-              <span className="flex items-center gap-2.5 flex-wrap min-w-0">
-                <span className="font-semibold tracking-[0.1em] text-accent shrink-0">BETA</span>
-                <span>
-                  Drift is in early beta — {' '}
-                  <a
-                    href={`https://docs.google.com/forms/d/e/1FAIpQLSdG-V4Zq4X-fwal9ThhM4PQSFSwinrFo8fyWpZLCWu7mGXHlA/viewform?usp=pp_url&entry.715582229=${__COMMIT_SHA__}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-info underline underline-offset-2 hover:text-brand-ink"
-                  >
-                    share your feedback
-                  </a>
-                  , it helps a lot.
-                </span>
-              </span>
-              <button
-                onClick={dismissBetaBanner}
-                aria-label="Dismiss beta banner"
-                className="text-muted-3 hover:text-ink flex-shrink-0"
-              >
-                <IconX size={11} />
-              </button>
-            </div>
-          )}
+      {/* Restored-from-backup banner — warn colors (#194 kit). */}
+      {restoredFromBackup !== null && (
+        <div className="flex items-center justify-between gap-3 px-6 py-1.5 border-b border-line-2 bg-warn-banner-bg font-mono text-[11px] text-warn-banner-text">
+          <span className="flex items-center gap-2.5 min-w-0">
+            <span className="font-semibold tracking-[0.1em] shrink-0">RESTORED</span>
+            <span>
+              Last save couldn't be read — restored from a backup taken{' '}
+              {new Date(restoredFromBackup).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+              {', '}
+              {new Date(restoredFromBackup).toLocaleDateString([], { month: 'short', day: 'numeric' })}.
+              {' '}Recent changes may be missing. Save a copy to preserve what's here.
+            </span>
+          </span>
+          <button
+            onClick={() => setRestoredFromBackup(null)}
+            aria-label="Dismiss"
+            className="text-warn hover:text-warn-banner-text flex-shrink-0"
+          >
+            <IconX size={11} />
+          </button>
+        </div>
+      )}
 
-          {/* Demo mode banner — info colors (#194 kit). */}
-          {isDemoMode && (
-            <div className="mb-1.5 flex items-center justify-between gap-3 px-3.5 py-[7px] rounded-[9px] border border-info-border bg-info-bg font-mono text-[11px] text-info">
-              <span className="flex items-center gap-2.5 min-w-0">
-                <span className="font-semibold tracking-[0.1em] shrink-0">DEMO</span>
-                <span>Synthetic 5-account sample portfolio. Your saved data is untouched.</span>
-              </span>
-              <div className="ml-3 flex items-center gap-3 flex-shrink-0">
-                <button
-                  onClick={handleExitDemo}
-                  className="font-semibold underline underline-offset-2 text-info hover:text-brand-ink"
-                >
-                  Exit demo
-                </button>
-                <button
-                  onClick={handleExitDemo}
-                  aria-label="Exit demo and restore your saved portfolio"
-                  className="text-brand-300 hover:text-info"
-                >
-                  <IconX size={11} />
-                </button>
-              </div>
-            </div>
-          )}
+      {/* Load error — danger colors (#194 kit). */}
+      {loadError && (
+        <div className="flex items-center justify-between gap-3 px-6 py-1.5 border-b border-line-2 bg-danger-bg font-mono text-[11px] text-danger">
+          <span className="flex items-center gap-2.5 min-w-0">
+            <span className="font-semibold tracking-[0.1em] shrink-0">ERROR</span>
+            <span>{loadError}</span>
+          </span>
+          <button onClick={() => setLoadError(null)} aria-label="Dismiss" className="text-danger hover:text-danger-solid-hover flex-shrink-0"><IconX size={11} /></button>
+        </div>
+      )}
+    </>
+  );
 
-          {/* Restored-from-backup banner — warn colors (#194 kit). */}
-          {restoredFromBackup !== null && (
-            <div className="mb-1.5 flex items-center justify-between gap-3 px-3.5 py-[7px] rounded-[9px] border border-warn-banner-border bg-warn-banner-bg font-mono text-[11px] text-warn-banner-text">
-              <span className="flex items-center gap-2.5 min-w-0">
-                <span className="font-semibold tracking-[0.1em] shrink-0">RESTORED</span>
-                <span>
-                  Last save couldn't be read — restored from a backup taken{' '}
-                  {new Date(restoredFromBackup).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
-                  {', '}
-                  {new Date(restoredFromBackup).toLocaleDateString([], { month: 'short', day: 'numeric' })}.
-                  {' '}Recent changes may be missing. Save a copy to preserve what's here.
-                </span>
-              </span>
-              <button
-                onClick={() => setRestoredFromBackup(null)}
-                aria-label="Dismiss"
-                className="text-warn hover:text-warn-banner-text flex-shrink-0"
-              >
-                <IconX size={11} />
-              </button>
-            </div>
-          )}
+  return (
+    <div className="min-h-screen bg-paper flex flex-col md:flex-row">
+      {/* Hidden file input for the Load action (shared by rail + mobile). */}
+      <input
+        ref={loadFileRef}
+        type="file"
+        accept=".json"
+        onChange={handleLoadFile}
+        className="hidden"
+      />
 
-          {/* Load error — danger colors (#194 kit). */}
-          {loadError && (
-            <div className="mb-1.5 flex items-center justify-between gap-3 px-3.5 py-[7px] rounded-[9px] border border-danger-hover-border bg-danger-bg font-mono text-[11px] text-danger">
-              <span className="flex items-center gap-2.5 min-w-0">
-                <span className="font-semibold tracking-[0.1em] shrink-0">ERROR</span>
-                <span>{loadError}</span>
-              </span>
-              <button onClick={() => setLoadError(null)} aria-label="Dismiss" className="text-danger hover:text-danger-solid-hover flex-shrink-0"><IconX size={11} /></button>
-            </div>
-          )}
+      {/* ── Left workflow rail (desktop md+) ───────────────────────────────── */}
+      <WorkflowRail
+        steps={railSteps}
+        activeTab={activeTab}
+        onSelect={setActiveTab}
+        tabRefs={tabRefs}
+        onKeyDown={handleTabKeyDown}
+        onBackHome={() => setShowLanding(true)}
+        onSave={handleSave}
+        onLoad={() => loadFileRef.current?.click()}
+        onReset={handleReset}
+        onHowItWorks={() => setHowItWorksOpen(true)}
+      />
 
-          {/* ── Tab nav — active tab uses Anchor Blue (brand-600) ──
-              overflow-x-auto keeps the six tabs on one scrollable row on
-              narrow screens instead of overflowing the viewport (#142). */}
-          <nav className="flex gap-0 -mb-px overflow-x-auto no-scrollbar" role="tablist" aria-label="Workflow sections">
-            {TABS.map((tab, i) => (
+      {/* ── Content column ─────────────────────────────────────────────────── */}
+      <div className="flex-1 flex flex-col min-w-0 min-h-screen">
+
+        {/* Mobile top header (< md): compact wordmark + the four actions, so
+            the rail's affordances stay reachable on phones (#142). */}
+        <div className="md:hidden flex items-center justify-between px-4 py-2.5 bg-white border-b border-line">
+          <button
+            onClick={() => setShowLanding(true)}
+            className="p-0 border-0 bg-transparent cursor-pointer flex items-center"
+            title="Back to Drift home"
+          >
+            <DriftWordmark height={26} />
+          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={handleSave}
+              title="Save portfolio as JSON"
+              aria-label="Save portfolio as JSON"
+              className="inline-flex items-center justify-center text-muted-1 bg-white border border-line rounded-md p-1.5 hover:border-muted-2 hover:text-ink transition-colors"
+            >
+              <IconDownload size={14} />
+            </button>
+            <button
+              onClick={() => loadFileRef.current?.click()}
+              title="Load portfolio from JSON"
+              aria-label="Load portfolio from JSON"
+              className="inline-flex items-center justify-center text-muted-1 bg-white border border-line rounded-md p-1.5 hover:border-muted-2 hover:text-ink transition-colors"
+            >
+              <IconUpload size={14} />
+            </button>
+            <button
+              onClick={handleReset}
+              title="Clear all data"
+              aria-label="Clear all data"
+              className="inline-flex items-center justify-center text-muted-2 bg-white border border-line rounded-md p-1.5 hover:border-danger-hover-border hover:text-danger transition-colors"
+            >
+              <IconX size={14} />
+            </button>
+            <button
+              onClick={() => setHowItWorksOpen(true)}
+              title="How Drift works"
+              aria-label="How it works"
+              className="inline-flex items-center justify-center text-info bg-info-bg border border-info-border rounded-md p-1.5 hover:bg-brand-100 transition-colors"
+            >
+              <IconInfo size={14} />
+            </button>
+          </div>
+        </div>
+
+        {/* Mobile horizontal scrollable tab bar (< md) — the legacy #142 pattern.
+            Its own tablist with mtab-* ids so it doesn't collide with the rail's
+            canonical tab-* ids that the panel's aria-labelledby references. */}
+        <nav
+          className="md:hidden flex gap-0 overflow-x-auto no-scrollbar bg-white border-b border-line"
+          role="tablist"
+          aria-label="Workflow sections"
+        >
+          {TABS.map((tab) => {
+            const active = activeTab === tab.id;
+            return (
               <button
                 key={tab.id}
-                ref={el => { tabRefs.current[tab.id] = el; }}
                 role="tab"
-                id={`tab-${tab.id}`}
-                aria-selected={activeTab === tab.id}
+                id={`mtab-${tab.id}`}
+                aria-selected={active}
                 aria-controls={`panel-${tab.id}`}
-                tabIndex={activeTab === tab.id ? 0 : -1}
+                tabIndex={active ? 0 : -1}
                 onClick={() => setActiveTab(tab.id)}
-                onKeyDown={e => handleTabKeyDown(e, i)}
-                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap shrink-0
-                  ${activeTab === tab.id
-                    ? 'border-brand-600 text-brand-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap shrink-0
+                  ${active
+                    ? tab.id === 'results'
+                      ? 'border-accent text-accent-ink'
+                      : 'border-brand-600 text-brand-600'
+                    : 'border-transparent text-muted-2 hover:text-ink hover:border-line'
                   }`}
               >
                 {tab.label}
                 {tab.id === 'classify' && unmappedCount > 0 && (
-                  <span className="ml-1.5 bg-warn-bg text-warn text-xs px-1.5 py-0.5 rounded-full">
+                  <span className="ml-1.5 font-mono bg-warn-bg text-warn text-[11px] font-semibold px-1.5 py-0.5 rounded-full">
                     {unmappedCount}
                   </span>
                 )}
                 {tab.id === 'results' && resolvedTrades.length > 0 && (
-                  <span className="ml-1.5 bg-brand-100 text-brand-700 text-xs px-1.5 py-0.5 rounded-full">
+                  <span className={`ml-1.5 font-mono text-[11px] font-semibold px-1.5 py-0.5 rounded-full ${
+                    active ? 'bg-accent-50 text-accent-ink' : 'bg-info-bg text-info'
+                  }`}>
                     {resolvedTrades.length}
                   </span>
                 )}
               </button>
-            ))}
-          </nav>
+            );
+          })}
+        </nav>
+
+        {/* ── Context bar (46px) ───────────────────────────────────────────── */}
+        <div className="flex items-center justify-between gap-3 px-6 h-[46px] bg-white border-b border-line flex-none">
+          <span className="flex items-baseline gap-2.5 min-w-0">
+            <span className="text-[15px] font-semibold tracking-tight text-brand-ink truncate">{activeTabLabel}</span>
+            <span className={`font-mono text-[10px] tracking-[.12em] uppercase truncate ${contextStatus.warn ? 'text-warn' : 'text-muted-3'}`}>
+              {contextStatus.text}
+            </span>
+          </span>
+          <span className="flex items-center gap-3.5 flex-none">
+            {result.householdValue > 0 && (
+              <span className="font-mono text-[13px] font-medium text-brand-ink tabular-nums">
+                {fmtUsd(result.householdValue)}
+              </span>
+            )}
+            {lastSavedAt && (accounts.length > 0 || positions.length > 0) && (
+              <span
+                className="inline-flex items-center gap-1.5 font-mono text-[11px] text-muted-2 tabular-nums"
+                title={`Last saved at ${lastSavedAt.toLocaleTimeString()}`}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-ok flex-none" />
+                Saved {fmtSavedTime(lastSavedAt)}
+              </span>
+            )}
+          </span>
         </div>
-      </header>
 
-      {/* ── Panel ──────────────────────────────────────────────────────────── */}
-      <main
-        className="max-w-5xl mx-auto px-4 py-6"
-        role="tabpanel"
-        id={`panel-${activeTab}`}
-        aria-labelledby={`tab-${activeTab}`}
-      >
-        {activeTab === 'overview' && (
-          <OverviewPanel
-            accounts={accounts}
-            positions={positions}
-            unmappedCount={unmappedCount}
-            householdValue={result.householdValue}
-            lastSavedAt={lastSavedAt}
-            onNavigate={(tab) => setActiveTab(tab as Tab)}
-          />
-        )}
-        {activeTab === 'accounts' && (
-          <AccountsPanel
-            accounts={accounts}
-            setAccounts={setAccounts}
-            onDeleteAccount={handleDeleteAccount}
-            freeCash={freeCash}
-            setFreeCash={setFreeCash}
-            plannedWithdrawal={plannedWithdrawal}
-            setPlannedWithdrawal={setPlannedWithdrawal}
-            onLoadSample={handleLoadSample}
-          />
-        )}
-        {activeTab === 'import' && (
-          <ImportPanel
-            accounts={accounts}
-            positions={positions}
-            setPositions={setPositions}
-          />
-        )}
-        {activeTab === 'classify' && (
-          <ClassifyPanel
-            accounts={accounts}
-            positions={positions}
-            flags={result.flags}
-            tickerOverrides={tickerOverrides}
-            setTickerOverrides={setTickerOverrides}
-            decompositions={decompositions}
-            setDecompositions={setDecompositions}
-          />
-        )}
-        {activeTab === 'strategy' && (
-          <StrategyPanel
-            strategy={strategy}
-            setStrategy={setStrategy}
-            accounts={accounts}
-            currentWeights={result.currentWeights}
-            // Intentionally the NOMINAL projected view, not result.taxAdjusted.projectedWeights.
-            // The compare bars show the stated target (pre-tax) against the nominal allocation
-            // the engine must hold to hit that target in after-tax dollars — i.e. the gross-up.
-            // result.taxAdjusted.projectedWeights is the after-tax projected view, which by
-            // construction converges back onto strategy.targets, so wiring it here would collapse
-            // the two bars into one. Verified as-designed against issue #7; do not "fix" to
-            // taxAdjusted.projectedWeights (audit finding m11 / issue #125).
-            taxAdjustedTargetWeights={result.taxAdjusted ? result.projectedWeights : undefined}
-          />
-        )}
-        {activeTab === 'results' && (
-          <ResultsPanel
-            result={result}
-            accounts={accounts}
-            resolvedTrades={resolvedTrades}
-            freeCash={freeCash}
-            plannedWithdrawal={plannedWithdrawal}
-            reminder={reminder}
-            setReminder={setReminder}
-            onSave={handleSave}
-          />
-        )}
-      </main>
+        {/* ── Banners (relocated under the context bar) ────────────────────── */}
+        {banners}
 
-      {/* ── Footer ─────────────────────────────────────────────────────────── */}
-      <footer className="max-w-5xl mx-auto px-4 py-6 mt-8 border-t border-gray-100 text-xs text-gray-400 flex items-center justify-between">
-        <span className="flex items-center gap-3">
-          <span>© {new Date().getFullYear()} Drift</span>
-          <span className="text-gray-200">·</span>
-          <span>All computation is local — no data leaves your browser.</span>
-          {(__APP_VERSION__ && __APP_VERSION__ !== '0.0.0') && (
-            <>
-              <span className="text-gray-200">·</span>
-              <span className="font-mono" style={{ fontSize: 10 }}>v{__APP_VERSION__}{__COMMIT_SHA__ && __COMMIT_SHA__ !== 'unknown' ? ` (${__COMMIT_SHA__})` : ''}</span>
-            </>
+        {/* ── Panel content ────────────────────────────────────────────────── */}
+        <main
+          className="flex-1 px-5 md:px-6 py-[18px] md:py-5"
+          role="tabpanel"
+          id={`panel-${activeTab}`}
+          aria-labelledby={`tab-${activeTab}`}
+        >
+          {activeTab === 'overview' && (
+            <OverviewPanel
+              accounts={accounts}
+              positions={positions}
+              unmappedCount={unmappedCount}
+              householdValue={result.householdValue}
+              driftMaxAbs={driftInfo.maxAbs}
+              driftOutOfBand={driftInfo.outOfBand}
+              familyRows={familyRows}
+              onNavigate={(tab) => setActiveTab(tab as Tab)}
+            />
           )}
-        </span>
-        <span className="flex items-center gap-4">
-          <a
-            href={`https://docs.google.com/forms/d/e/1FAIpQLSdG-V4Zq4X-fwal9ThhM4PQSFSwinrFo8fyWpZLCWu7mGXHlA/viewform?usp=pp_url&entry.715582229=${__COMMIT_SHA__}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="hover:text-gray-600 underline underline-offset-2"
-          >
-            Share feedback
-          </a>
-          <span>Not investment advice.</span>
-        </span>
-      </footer>
+          {activeTab === 'accounts' && (
+            <AccountsPanel
+              accounts={accounts}
+              setAccounts={setAccounts}
+              onDeleteAccount={handleDeleteAccount}
+              freeCash={freeCash}
+              setFreeCash={setFreeCash}
+              plannedWithdrawal={plannedWithdrawal}
+              setPlannedWithdrawal={setPlannedWithdrawal}
+              onLoadSample={handleLoadSample}
+            />
+          )}
+          {activeTab === 'import' && (
+            <ImportPanel
+              accounts={accounts}
+              positions={positions}
+              setPositions={setPositions}
+            />
+          )}
+          {activeTab === 'classify' && (
+            <ClassifyPanel
+              accounts={accounts}
+              positions={positions}
+              flags={result.flags}
+              tickerOverrides={tickerOverrides}
+              setTickerOverrides={setTickerOverrides}
+              decompositions={decompositions}
+              setDecompositions={setDecompositions}
+            />
+          )}
+          {activeTab === 'strategy' && (
+            <StrategyPanel
+              strategy={strategy}
+              setStrategy={setStrategy}
+              accounts={accounts}
+              currentWeights={result.currentWeights}
+              // Intentionally the NOMINAL projected view, not result.taxAdjusted.projectedWeights.
+              // The compare bars show the stated target (pre-tax) against the nominal allocation
+              // the engine must hold to hit that target in after-tax dollars — i.e. the gross-up.
+              // result.taxAdjusted.projectedWeights is the after-tax projected view, which by
+              // construction converges back onto strategy.targets, so wiring it here would collapse
+              // the two bars into one. Verified as-designed against issue #7; do not "fix" to
+              // taxAdjusted.projectedWeights (audit finding m11 / issue #125).
+              taxAdjustedTargetWeights={result.taxAdjusted ? result.projectedWeights : undefined}
+            />
+          )}
+          {activeTab === 'results' && (
+            <ResultsPanel
+              result={result}
+              accounts={accounts}
+              resolvedTrades={resolvedTrades}
+              freeCash={freeCash}
+              plannedWithdrawal={plannedWithdrawal}
+              reminder={reminder}
+              setReminder={setReminder}
+              onSave={handleSave}
+            />
+          )}
+        </main>
+
+        {/* ── Footer ───────────────────────────────────────────────────────── */}
+        <footer className="flex items-center justify-between gap-3 px-6 py-2.5 border-t border-line bg-white font-mono text-[10.5px] text-muted-3 flex-none">
+          <span>© {new Date().getFullYear()} Drift · All computation is local</span>
+          <span className="flex items-center gap-4">
+            <a
+              href={feedbackHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline underline-offset-2 hover:text-muted-1"
+            >
+              Share feedback
+            </a>
+            <span>Not investment advice</span>
+            {(__APP_VERSION__ && __APP_VERSION__ !== '0.0.0') && (
+              <span>v{__APP_VERSION__}{__COMMIT_SHA__ && __COMMIT_SHA__ !== 'unknown' ? ` (${__COMMIT_SHA__})` : ''}</span>
+            )}
+          </span>
+        </footer>
+      </div>
 
       <HowItWorksDrawer open={howItWorksOpen} onClose={() => setHowItWorksOpen(false)} />
 
