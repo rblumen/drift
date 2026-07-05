@@ -56,15 +56,19 @@ export const ACCT_TYPE_LABEL: Record<string, string> = {
   OTHER:           'Other',
 };
 
-// Chart colours for account types.
+// Account-type tag/swatch colours — the brand ramp, not the old rainbow
+// (#194 kit, section 1d "Account-type tags — brand ramp, not rainbow"). Every
+// type sits on the brand navy ramp except Taxable, which takes the accent ink
+// to read as the one tax-exposed home. Consumed as a single swatch/dot colour
+// (Import composition donut) and as the text colour of account-type tag pills.
 export const ACCT_TYPE_COLOR: Record<string, string> = {
-  TAXABLE:          '#fb923c', // orange-400
-  TRADITIONAL_IRA:  '#60a5fa', // blue-400
-  ROTH_IRA:         '#34d399', // emerald-400
-  FOUR_OH_ONE_K:    '#818cf8', // indigo-400
-  FIVE_TWENTY_NINE: '#f472b6', // pink-400
-  HSA:              '#2dd4bf', // teal-400
-  OTHER:            '#9ca3af', // gray-400
+  TAXABLE:          '#b84a06', // accent ink (the lone taxable home)
+  TRADITIONAL_IRA:  '#082855', // brand ink
+  ROTH_IRA:         '#0d3e7a', // brand 600
+  FOUR_OH_ONE_K:    '#1a5fa0', // brand 500
+  FIVE_TWENTY_NINE: '#5b96cc', // brand 300
+  HSA:              '#2e72b4', // brand 400
+  OTHER:            '#8792a0', // muted-2
 };
 
 // Human-readable placement-target labels and chart colours. Beyond the three coarse
@@ -85,10 +89,13 @@ export const BUCKET_LABEL: Record<string, string> = {
   OTHER:           'Other',
 };
 
+// Placement-bucket swatch colours — brand ramp + accent, matching the
+// account-type tags (#194 kit). Taxable takes the accent ink; tax-advantaged
+// the brand; education a lighter brand step (no rainbow pink).
 export const BUCKET_COLOR: Record<string, string> = {
-  TAXABLE:       '#fb923c', // orange-400
-  TAX_ADVANTAGED: '#818cf8', // indigo-400
-  EDUCATION:     '#f472b6', // pink-400
+  TAXABLE:       '#b84a06', // accent ink
+  TAX_ADVANTAGED: '#0d3e7a', // brand 600
+  EDUCATION:     '#5b96cc', // brand 300
 };
 
 // Chart colours for asset classes — brand-tuned data-viz palette (issue #150).

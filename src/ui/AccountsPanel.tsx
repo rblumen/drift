@@ -158,7 +158,7 @@ function DepositToggle({ open, onChange }: { open: boolean; onChange: (open: boo
           onClick={() => onChange(val)}
           className={`px-2.5 py-0.5 font-medium transition-colors ${i > 0 ? 'border-l border-gray-200' : ''} ${
             open === val
-              ? (val ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600')
+              ? (val ? 'bg-ok-bg text-ok' : 'bg-danger-bg text-danger')
               : 'bg-white text-gray-400 hover:bg-gray-50'
           }`}
         >
@@ -180,8 +180,8 @@ function WithdrawalControl({
   onRmdChange: (v: string) => void;
 }) {
   const active: Record<WithdrawalPolicy, string> = {
-    restricted: 'bg-red-100 text-red-600',
-    eligible:   'bg-green-100 text-green-700',
+    restricted: 'bg-danger-bg text-danger',
+    eligible:   'bg-ok-bg text-ok',
     required:   'bg-brand-100 text-brand-700',
   };
   return (
@@ -405,7 +405,7 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
     return (
       <div className="mt-0.5 space-y-0.5">
         {excluded.length > 0 && (
-          <div className="text-xs text-orange-500 font-normal">
+          <div className="text-xs text-warn font-normal">
             excl. {excluded.map(c => AC_LABEL[c]).join(', ')}
           </div>
         )}
@@ -503,7 +503,7 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
       {/* Planned cash flows: deposits (left) and withdrawals (right). */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {/* Planned deposits */}
-        <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+        <div className="p-3 bg-ok-bg border border-line rounded-lg">
           <label className="block text-xs font-medium text-gray-700 mb-1">
             Planned deposits ($)
             <HelpTip>
@@ -533,14 +533,14 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
             className="w-full border rounded px-2 py-1 text-sm"
           />
           {freeCash > 0 && (
-            <p className="mt-1 text-xs text-green-700">
+            <p className="mt-1 text-xs text-ok">
               {fmtUsd(freeCash)} deployed to eligible accounts at run time.
             </p>
           )}
         </div>
 
         {/* Planned withdrawals = Σ RMD + additional */}
-        <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+        <div className="p-3 bg-warn-bg border border-warn-banner-border rounded-lg">
           <label className="block text-xs font-medium text-gray-700 mb-1">
             Additional withdrawal ($)
             <HelpTip>
@@ -569,7 +569,7 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
             className="w-full border rounded px-2 py-1 text-sm"
           />
           {totalWithdrawal > 0 && (
-            <p className="mt-1 text-xs text-amber-700">
+            <p className="mt-1 text-xs text-warn">
               Total withdrawals: <strong>{fmtUsd(totalWithdrawal)}</strong>
               {totalRmd > 0 && <> = {fmtUsd(totalRmd)} RMD + {fmtUsd(plannedWithdrawal)} additional</>}
             </p>
@@ -777,7 +777,7 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
                         ))}
                         title={acct.locked ? 'Unlock account (allow trades)' : 'Lock account (exclude from trades)'}
                         aria-label={acct.locked ? 'Unlock account (allow trades)' : 'Lock account (exclude from trades)'}
-                        className={`inline-flex transition-colors ${acct.locked ? 'text-amber-500 hover:text-gray-400' : 'text-gray-300 hover:text-amber-500'}`}
+                        className={`inline-flex transition-colors ${acct.locked ? 'text-warn hover:text-gray-400' : 'text-gray-300 hover:text-warn'}`}
                       >
                         {acct.locked ? <IconLock size={15} /> : <IconLockOpen size={15} />}
                       </button>
@@ -789,7 +789,7 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
                       >Edit</button>
                       <button
                         onClick={() => setRemoveTarget(acct)}
-                        className="text-red-400 hover:underline text-xs"
+                        className="text-muted-2 hover:text-danger hover:underline text-xs"
                       >Remove</button>
                     </td>
                   </tr>

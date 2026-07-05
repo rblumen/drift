@@ -133,16 +133,16 @@ export function ReminderPanel({ reminder, setReminder }: Props) {
   }
 
   return (
-    <div className="border border-sky-200 rounded-lg px-4 py-3 bg-sky-50">
+    <div className="border border-info-border rounded-lg px-4 py-3 bg-info-bg">
       <div className="flex items-center justify-between mb-2">
-        <p className="text-sm font-semibold text-sky-900 flex items-center gap-1.5">
+        <p className="text-sm font-semibold text-brand-ink flex items-center gap-1.5">
           <IconClock size={15} />
           Next rebalance reminder
         </p>
         {due && (
           <button
             onClick={handleClear}
-            className="text-xs text-gray-400 hover:text-red-500 underline underline-offset-2"
+            className="text-xs text-muted-2 hover:text-danger underline underline-offset-2"
           >
             Clear
           </button>
@@ -152,16 +152,16 @@ export function ReminderPanel({ reminder, setReminder }: Props) {
       {status && (
         <div className="text-xs mb-3">
           {status.kind === 'overdue' && (
-            <span className="text-red-700">
+            <span className="text-danger">
               <span className="font-semibold">Overdue by {status.days} day{status.days === 1 ? '' : 's'}.</span>{' '}
               Was due {fmtDate(due!)}.
             </span>
           )}
           {status.kind === 'today' && (
-            <span className="text-orange-700 font-semibold">Due today.</span>
+            <span className="text-accent-ink font-semibold">Due today.</span>
           )}
           {status.kind === 'soon' && (
-            <span className="text-amber-700">
+            <span className="text-warn">
               <span className="font-semibold">Due in {status.days} day{status.days === 1 ? '' : 's'}</span>{' '}
               ({fmtDate(due!)}).
             </span>
@@ -197,7 +197,7 @@ export function ReminderPanel({ reminder, setReminder }: Props) {
             className={`text-xs px-2 py-1 rounded border transition-colors
               ${reminder.intervalMonths === p.months && due
                 ? 'border-brand-300 bg-brand-50 text-brand-700'
-                : 'border-sky-200 bg-white text-gray-600 hover:border-sky-300 hover:bg-white'}`}
+                : 'border-info-border bg-white text-gray-600 hover:border-brand-200 hover:bg-white'}`}
           >
             {p.label}
           </button>
@@ -213,7 +213,7 @@ export function ReminderPanel({ reminder, setReminder }: Props) {
           value={due ? toDateInputValue(due) : ''}
           min={toDateInputValue(now)}
           onChange={e => handleDateChange(e.target.value)}
-          className="text-xs border border-sky-200 bg-white rounded px-2 py-1 text-gray-700"
+          className="text-xs border border-info-border bg-white rounded px-2 py-1 text-gray-700"
         />
       </div>
 
@@ -234,7 +234,7 @@ export function ReminderPanel({ reminder, setReminder }: Props) {
               aria-haspopup="menu"
               aria-expanded={calMenuOpen}
               onClick={() => setCalMenuOpen(o => !o)}
-              className="text-xs border border-sky-200 bg-white text-gray-700 px-3 py-1.5 rounded hover:border-sky-300 transition-colors flex items-center gap-1.5"
+              className="text-xs border border-info-border bg-white text-gray-700 px-3 py-1.5 rounded hover:border-brand-200 transition-colors flex items-center gap-1.5"
             >
               <IconCalendar size={14} /> Add to calendar
               <span className="text-gray-400 inline-flex"><IconChevronDown size={13} /></span>

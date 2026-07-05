@@ -59,20 +59,20 @@ describe('issue #152 — beta banner is dismissible and remembered', () => {
   it('shows the beta banner by default', async () => {
     seedRealPortfolio();
     await renderApp();
-    expect(document.body.textContent).toContain('Drift is in early beta.');
+    expect(document.body.textContent).toContain('Drift is in early beta');
   });
 
   it('dismissing the beta banner hides it and sets the persistence flag', async () => {
     seedRealPortfolio();
     await renderApp();
-    expect(document.body.textContent).toContain('Drift is in early beta.');
+    expect(document.body.textContent).toContain('Drift is in early beta');
 
     const dismissBtn = [...document.querySelectorAll('button')]
       .find(b => b.getAttribute('aria-label') === 'Dismiss beta banner');
     expect(dismissBtn, 'expected beta banner dismiss button not found').toBeTruthy();
     await act(async () => { dismissBtn!.click(); });
 
-    expect(document.body.textContent).not.toContain('Drift is in early beta.');
+    expect(document.body.textContent).not.toContain('Drift is in early beta');
     expect(localStorage.getItem(BETA_BANNER_DISMISSED_KEY)).toBe('1');
   });
 
@@ -80,6 +80,6 @@ describe('issue #152 — beta banner is dismissible and remembered', () => {
     seedRealPortfolio();
     localStorage.setItem(BETA_BANNER_DISMISSED_KEY, '1');
     await renderApp();
-    expect(document.body.textContent).not.toContain('Drift is in early beta.');
+    expect(document.body.textContent).not.toContain('Drift is in early beta');
   });
 });

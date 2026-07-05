@@ -13,6 +13,7 @@ import type { RadarDatum } from './RadarChart';
 import { BulletBars } from './BulletBars';
 import type { BulletDatum } from './BulletBars';
 import { fmtPct } from './fmt';
+import { segmentedTrackStyle, segmentStyle } from './segmented';
 
 export type ChartView = 'donut' | 'radar' | 'bar';
 
@@ -94,7 +95,7 @@ function ChartToggle({ view, onViewChange }: { view: ChartView; onViewChange: (v
       role="group"
       aria-label="Allocation chart view"
       onKeyDown={onKeyDown}
-      style={{ display: 'inline-flex', background: '#eef1f5', padding: 3, borderRadius: 9, gap: 2 }}
+      style={segmentedTrackStyle}
     >
       {TAB_ORDER.map(v => {
         const active = view === v;
@@ -107,19 +108,7 @@ function ChartToggle({ view, onViewChange }: { view: ChartView; onViewChange: (v
             title={TAB_TITLE[v]}
             tabIndex={active ? 0 : -1}
             onClick={() => onViewChange(v)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              lineHeight: 0,
-              padding: '7px 14px',
-              border: 'none',
-              cursor: 'pointer',
-              borderRadius: 7,
-              transition: 'all .12s',
-              background: active ? CURRENT : 'transparent',
-              color: active ? '#fff' : '#8792a0',
-            }}
+            style={segmentStyle(active)}
           >
             <TabIcon view={v} />
           </button>

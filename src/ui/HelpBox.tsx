@@ -18,19 +18,19 @@ export function HelpBox({ label = 'About this step', children, defaultOpen = fal
   const [open, setOpen] = useState(defaultOpen);
 
   return (
-    <div className="border border-brand-100 rounded-lg bg-brand-50/40 text-sm">
+    <div className="border border-info-border rounded-lg bg-info-bg text-sm">
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center gap-2 px-4 py-2.5 text-left text-brand-700 hover:bg-brand-50 rounded-lg transition-colors"
+        className="w-full flex items-center gap-2 px-4 py-2.5 text-left text-info hover:bg-brand-100 rounded-lg transition-colors"
       >
         <span className="text-brand-400 inline-flex select-none"><IconInfo size={15} /></span>
-        <span className="font-medium text-xs tracking-wide flex-1">{label}</span>
+        <span className="font-mono text-[10px] uppercase tracking-[0.12em] flex-1">{label}</span>
         <span className="text-brand-300 inline-flex select-none">{open ? <IconChevronDown size={13} /> : <IconChevronRight size={13} />}</span>
       </button>
 
       {open && (
-        <div className="px-4 pb-4 pt-1 space-y-3 text-gray-600 text-xs leading-relaxed border-t border-brand-100">
+        <div className="px-4 pb-4 pt-1 space-y-3 text-muted-1 text-xs leading-relaxed border-t border-info-border">
           {children}
         </div>
       )}

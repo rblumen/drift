@@ -66,7 +66,7 @@ async function enterDemoFromLanding(): Promise<void> {
   await clickButton(b => b.title === 'Back to Drift home');
   await clickButton(byText('Try the demo'));
   // Demo banner confirms we're inside the app in demo mode.
-  expect(document.body.textContent).toContain('Demo — showing a synthetic');
+  expect(document.body.textContent).toContain('Synthetic 5-account sample portfolio');
 }
 
 beforeEach(() => {
@@ -102,7 +102,7 @@ describe('issue #112 — demo mode must not touch the saved portfolio', () => {
     await enterDemoFromLanding();
 
     await clickButton(b => b.getAttribute('aria-label') === 'Exit demo and restore your saved portfolio');
-    expect(document.body.textContent).not.toContain('Demo — showing a synthetic');
+    expect(document.body.textContent).not.toContain('Synthetic 5-account sample portfolio');
 
     // The real portfolio is back: the Accounts tab lists the saved account.
     await clickButton(byText('Accounts'));
