@@ -14,6 +14,7 @@
 import type { Account, Position } from '../engine/types';
 import { fmtUsd, FAMILY_COLOR, FAMILY_LABEL, type AllocationFamily } from './fmt';
 import { btnPrimary, btnTextLink } from './buttons';
+import { Card, Stat } from './card';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type AppTab = 'overview' | 'accounts' | 'import' | 'classify' | 'strategy' | 'results';
@@ -37,42 +38,6 @@ interface Props {
   /** Family-rolled current/target weights for the allocation table. */
   familyRows:     FamilyRow[];
   onNavigate:     (tab: AppTab) => void;
-}
-
-// ── Card shell ────────────────────────────────────────────────────────────────
-function Card({ title, meta, children, className = '' }: {
-  title: string; meta?: string; children: React.ReactNode; className?: string;
-}) {
-  return (
-    <div className={`bg-white border border-line rounded-xl overflow-hidden shadow-[0_1px_2px_rgba(8,40,85,.04)] ${className}`}>
-      <div className="flex items-center justify-between px-4 py-2 border-b border-line bg-tint">
-        <span className="font-mono text-[10px] tracking-[.12em] uppercase text-[#6b7685]">{title}</span>
-        {meta && <span className="font-mono text-[10px] text-muted-3">{meta}</span>}
-      </div>
-      {children}
-    </div>
-  );
-}
-
-// ── Stat cell ─────────────────────────────────────────────────────────────────
-function Stat({ label, value, caption, tone = 'ink' }: {
-  label: string; value: React.ReactNode; caption: string;
-  tone?: 'ink' | 'warn' | 'accent' | 'ok' | 'muted';
-}) {
-  const valCls =
-    tone === 'warn'   ? 'text-warn' :
-    tone === 'accent' ? 'text-accent' :
-    tone === 'ok'     ? 'text-ok' :
-    tone === 'muted'  ? 'text-faint' :
-    'text-brand-ink';
-  const capCls = tone === 'warn' ? 'text-warn' : 'text-muted-3';
-  return (
-    <div className="bg-white px-4 pt-2.5 pb-3 flex flex-col gap-px min-w-0">
-      <span className="font-mono text-[9.5px] tracking-[.12em] uppercase text-muted-3">{label}</span>
-      <span className={`text-[19px] font-semibold tracking-tight ${valCls}`}>{value}</span>
-      <span className={`font-mono text-[10.5px] truncate ${capCls}`}>{caption}</span>
-    </div>
-  );
 }
 
 // ── Drift value (signed, colored) ─────────────────────────────────────────────

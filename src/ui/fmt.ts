@@ -56,6 +56,17 @@ export const ACCT_TYPE_LABEL: Record<string, string> = {
   OTHER:           'Other',
 };
 
+// Short account-type labels for the dense kit-table tag pills (#194 designs
+// 3a/3b use "Trad IRA"). Exhaustive over AccountType so adding a type is a
+// compile error here rather than a silently blank tag.
+export const ACCT_TYPE_TAG_LABEL: Record<
+  'TAXABLE' | 'TRADITIONAL_IRA' | 'ROTH_IRA' | 'FOUR_OH_ONE_K' | 'FIVE_TWENTY_NINE' | 'HSA' | 'OTHER',
+  string
+> = {
+  TAXABLE: 'Taxable', TRADITIONAL_IRA: 'Trad IRA', ROTH_IRA: 'Roth IRA',
+  FOUR_OH_ONE_K: '401(k)', FIVE_TWENTY_NINE: '529', HSA: 'HSA', OTHER: 'Other',
+};
+
 // Account-type tag/swatch colours — the brand ramp, not the old rainbow
 // (#194 kit, section 1d "Account-type tags — brand ramp, not rainbow"). Every
 // type sits on the brand navy ramp except Taxable, which takes the accent ink

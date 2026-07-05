@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import type { Account, AccountType, AssetClass } from '../engine/types';
 import { defaultWithdrawalPriority, withdrawalPriorityOf } from '../engine/rebalance';
-import { ACCT_TYPE_LABEL, AC_LABEL, fmtUsd } from './fmt';
+import { ACCT_TYPE_COLOR, ACCT_TYPE_LABEL, ACCT_TYPE_TAG_LABEL, AC_LABEL, fmtUsd } from './fmt';
 import { HelpBox, HelpDef, HelpSection, HelpTip } from './HelpBox';
 import { ConfirmDialog } from './ConfirmDialog';
-import { IconLock, IconLockOpen } from './icons';
+import { IconLock, IconLockOpen, IconPencil, IconX } from './icons';
+import { Card, Stat, AcctTypeTag } from './card';
+import { btnPrimaryCompact, btnGhostCompact, btnTintedInfo } from './buttons';
 
 // ── Deposit eligibility (issue #30, revised in #14 review) ───────────────────
 // Deposits are a binary Open/Closed on the inline control; the optional
@@ -56,6 +58,10 @@ const ACCOUNT_TYPES: AccountType[] = [
 ];
 
 const INSTITUTIONS = ['Schwab', 'Fidelity', 'Empower', 'Vanguard', 'Other'];
+
+// Shared column template for the accounts kit-table (design 3a): Account (grows)
+// · Type · New cash (right) · Deposits · Withdrawals · actions.
+const ACCT_GRID = 'grid grid-cols-[1.4fr_6.2rem_5.6rem_8.4rem_11.4rem_4.6rem]';
 
 // Asset classes that can actually be placed (US_TOTAL_MARKET is always redistributed
 // to sub-classes by the engine, so it never appears in placement decisions).
@@ -146,20 +152,22 @@ function depositFieldsFromForm(form: FormState): Pick<Account, 'acceptsDeposits'
 
 // ── Inline controls ──────────────────────────────────────────────────────────
 
-// Binary Open/Closed pill for the deposit column.
+// Binary Open/Closed pill for the deposit column. Kit semantics (#194 3a): a
+// hairline-bordered rounded-full segmented control, active Open = ok, active
+// Closed = danger, idle = faint.
 function DepositToggle({ open, onChange }: { open: boolean; onChange: (open: boolean) => void }) {
   const opts: [string, boolean][] = [['Open', true], ['Closed', false]];
   return (
-    <div className="inline-flex rounded-full border border-gray-200 overflow-hidden text-xs">
+    <div className="inline-flex rounded-full border border-line overflow-hidden text-[11px] font-medium">
       {opts.map(([label, val], i) => (
         <button
           key={label}
           type="button"
           onClick={() => onChange(val)}
-          className={`px-2.5 py-0.5 font-medium transition-colors ${i > 0 ? 'border-l border-gray-200' : ''} ${
+          className={`px-2.5 py-0.5 transition-colors ${i > 0 ? 'border-l border-line' : ''} ${
             open === val
               ? (val ? 'bg-ok-bg text-ok' : 'bg-danger-bg text-danger')
-              : 'bg-white text-gray-400 hover:bg-gray-50'
+              : 'bg-white text-faint hover:bg-paper'
           }`}
         >
           {label}
@@ -172,37 +180,43 @@ function DepositToggle({ open, onChange }: { open: boolean; onChange: (open: boo
 // Presentational withdrawal control: Restricted · Eligible · Required, with an
 // RMD input revealed when Required. The caller owns (policy, rmd).
 function WithdrawalControl({
-  policy, rmd, onPolicyChange, onRmdChange,
+  policy, rmd, onPolicyChange, onRmdChange, short = false,
 }: {
   policy: WithdrawalPolicy;
   rmd: string;
   onPolicyChange: (p: WithdrawalPolicy) => void;
   onRmdChange: (v: string) => void;
+  /** Abbreviate "Restricted" → "Restr." (the dense table cell, design 3a). */
+  short?: boolean;
 }) {
+  // Kit 3a semantics: Restricted = danger, Eligible = ok, Required = info.
   const active: Record<WithdrawalPolicy, string> = {
     restricted: 'bg-danger-bg text-danger',
     eligible:   'bg-ok-bg text-ok',
-    required:   'bg-brand-100 text-brand-700',
+    required:   'bg-info-bg text-info',
+  };
+  const shortLabel: Record<WithdrawalPolicy, string> = {
+    restricted: 'Restr.', eligible: 'Eligible', required: 'Required',
   };
   return (
     <div className="inline-flex flex-col items-start gap-1">
-      <div className="inline-flex rounded-full border border-gray-200 overflow-hidden text-xs">
+      <div className="inline-flex rounded-full border border-line overflow-hidden text-[11px] font-medium">
         {WITHDRAWAL_OPTS.map((opt, i) => (
           <button
             key={opt.value}
             type="button"
             onClick={() => onPolicyChange(opt.value)}
-            className={`px-2.5 py-0.5 font-medium transition-colors ${i > 0 ? 'border-l border-gray-200' : ''} ${
-              policy === opt.value ? active[opt.value] : 'bg-white text-gray-400 hover:bg-gray-50'
+            className={`px-2.5 py-0.5 transition-colors ${i > 0 ? 'border-l border-line' : ''} ${
+              policy === opt.value ? active[opt.value] : 'bg-white text-faint hover:bg-paper'
             }`}
           >
-            {opt.label}
+            {short ? shortLabel[opt.value] : opt.label}
           </button>
         ))}
       </div>
       {policy === 'required' && (
-        <div className="flex items-center gap-1 text-xs text-gray-600">
-          <span className="text-gray-400">$</span>
+        <div className="flex items-center gap-1 text-xs text-muted-1">
+          <span className="text-muted-3">$</span>
           <input
             type="number"
             min="0"
@@ -210,9 +224,9 @@ function WithdrawalControl({
             onChange={e => onRmdChange(e.target.value)}
             placeholder="RMD"
             aria-label="Required minimum distribution (dollars)"
-            className="w-24 border rounded px-1.5 py-0.5 text-xs"
+            className="w-24 border border-line rounded px-1.5 py-0.5 text-xs"
           />
-          <span className="text-gray-400">RMD due</span>
+          <span className="font-mono text-[10px] text-muted-2">RMD due</span>
         </div>
       )}
     </div>
@@ -242,6 +256,7 @@ function WithdrawalCell({
     <WithdrawalControl
       policy={policy}
       rmd={rmd}
+      short
       onPolicyChange={p => commit(p, rmd)}
       onRmdChange={v => commit('required', v)}
     />
@@ -395,26 +410,30 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
     setEditingId(null);
   }
 
-  // Constraint badges shown in the view row under the account name.
-  function ConstraintBadges({ acct }: { acct: Account }) {
+  // Mono second line under the account name (design 3a): institution, then any
+  // constraint/cap notes joined with " · ". Exclusions read as warnings, so the
+  // whole line is warn-colored when the account excludes any class; otherwise
+  // it's the neutral label color. Every fact the old badge stack showed is kept
+  // (institution, cap left, excl. classes, concentrate classes, drain priority).
+  // concentrateClasses renders unfiltered — the engine honours whatever the
+  // account carries (even classes the form can't set), so the display must too.
+  function AccountSubLine({ acct }: { acct: Account }) {
     const excluded = acct.allowedAssetClasses
       ? PLACEABLE_CLASSES.filter(c => !acct.allowedAssetClasses!.includes(c))
       : [];
     const concentrated = acct.concentrateClasses ?? [];
-    if (excluded.length === 0 && concentrated.length === 0) return null;
+    const notes: string[] = [];
+    if (acct.depositLimitUsd != null && acct.depositLimitUsd > 0) {
+      notes.push(`cap ${fmtUsd(acct.depositLimitUsd)} left`);
+    }
+    if (excluded.length > 0) notes.push(`excl. ${excluded.map(c => AC_LABEL[c]).join(', ')}`);
+    if (concentrated.length > 0) notes.push(`concentrate ${concentrated.map(c => AC_LABEL[c] ?? c).join(', ')}`);
+    if (acct.withdrawalPriority != null) notes.push(`drain priority ${acct.withdrawalPriority}`);
+    const warn = excluded.length > 0;
     return (
-      <div className="mt-0.5 space-y-0.5">
-        {excluded.length > 0 && (
-          <div className="text-xs text-warn font-normal">
-            excl. {excluded.map(c => AC_LABEL[c]).join(', ')}
-          </div>
-        )}
-        {concentrated.length > 0 && (
-          <div className="text-xs text-brand-400 font-normal">
-            concentrate: {concentrated.map(c => AC_LABEL[c]).join(', ')}
-          </div>
-        )}
-      </div>
+      <span className={`font-mono text-[10.5px] ${warn ? 'text-warn' : 'text-muted-3'}`}>
+        {[acct.institution, ...notes].join(' · ')}
+      </span>
     );
   }
 
@@ -489,93 +508,94 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-gray-800">Accounts</h2>
-        <button
-          onClick={() => { setShowAdd(true); setEditingId(null); }}
-          className="text-sm bg-brand-600 text-white px-3 py-1.5 rounded-md hover:bg-brand-700"
-        >
-          + Add account
-        </button>
-      </div>
+    <div className="flex flex-col gap-4">
 
-      {/* Planned cash flows: deposits (left) and withdrawals (right). */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {/* Planned deposits */}
-        <div className="p-3 bg-ok-bg border border-line rounded-lg">
-          <label className="block text-xs font-medium text-gray-700 mb-1">
-            Planned deposits ($)
-            <HelpTip>
-              Household free cash not yet assigned to a specific account — a check you're about to
-              deposit, or sweep-fund proceeds to invest. The engine deploys it into the
-              deposit-eligible account with the most capacity first, spilling only when a
-              contribution cap forces it. Closed accounts are excluded.
-            </HelpTip>
-          </label>
-          <input
-            type="number"
-            min="0"
-            value={freeCashInput}
-            onChange={e => {
-              setFreeCashInput(e.target.value);
-              const v = parseFloat(e.target.value);
-              setFreeCash(isNaN(v) || v < 0 ? 0 : v);
-            }}
-            onBlur={() => {
-              if (!freeCashInput.trim() || parseFloat(freeCashInput) === 0) {
-                setFreeCashInput('');
-                setFreeCash(0);
-              }
-            }}
-            placeholder="e.g. 5000"
-            aria-label="Planned deposits (dollars)"
-            className="w-full border rounded px-2 py-1 text-sm"
-          />
-          {freeCash > 0 && (
-            <p className="mt-1 text-xs text-ok">
-              {fmtUsd(freeCash)} deployed to eligible accounts at run time.
-            </p>
-          )}
-        </div>
+      {/* ── HOUSEHOLD CASH ──────────────────────────────────────────────────── */}
+      <Card title="Household cash" meta="Applied across eligible accounts">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-px bg-tint-cell">
+          {/* Free cash to deploy */}
+          <div className="bg-white px-4 py-3 flex flex-col gap-1.5">
+            <span className="flex items-center gap-1 font-mono text-[9.5px] tracking-[.12em] uppercase text-muted-3">
+              Free cash to deploy
+              <HelpTip>
+                Household free cash not yet assigned to a specific account — a check you're about to
+                deposit, or sweep-fund proceeds to invest. The engine deploys it into the
+                deposit-eligible account with the most capacity first, spilling only when a
+                contribution cap forces it. Closed accounts are excluded.
+              </HelpTip>
+            </span>
+            <div className="inline-flex items-center gap-1.5 border border-line rounded-lg px-2.5 py-1.5 bg-paper w-[160px]">
+              <span className="font-mono text-[12px] text-muted-3">$</span>
+              <input
+                type="number"
+                min="0"
+                value={freeCashInput}
+                onChange={e => {
+                  setFreeCashInput(e.target.value);
+                  const v = parseFloat(e.target.value);
+                  setFreeCash(isNaN(v) || v < 0 ? 0 : v);
+                }}
+                onBlur={() => {
+                  if (!freeCashInput.trim() || parseFloat(freeCashInput) === 0) {
+                    setFreeCashInput('');
+                    setFreeCash(0);
+                  }
+                }}
+                placeholder="0"
+                aria-label="Planned deposits (dollars)"
+                className="w-full bg-transparent font-mono text-[13px] text-brand-ink outline-none"
+              />
+            </div>
+            {freeCash > 0 && (
+              <span className="font-mono text-[10.5px] text-ok">
+                {fmtUsd(freeCash)} deployed to eligible accounts at run time.
+              </span>
+            )}
+          </div>
 
-        {/* Planned withdrawals = Σ RMD + additional */}
-        <div className="p-3 bg-warn-bg border border-warn-banner-border rounded-lg">
-          <label className="block text-xs font-medium text-gray-700 mb-1">
-            Additional withdrawal ($)
-            <HelpTip>
-              Discretionary cash to raise by selling, on top of any RMDs. RMDs (set per account via
-              the "Required" withdrawal state) are taken first; this amount then drains
-              withdrawal-eligible accounts in drain-priority order, selling down toward your target.
-            </HelpTip>
-          </label>
-          <input
-            type="number"
-            min="0"
-            value={withdrawalInput}
-            onChange={e => {
-              setWithdrawalInput(e.target.value);
-              const v = parseFloat(e.target.value);
-              setPlannedWithdrawal(isNaN(v) || v < 0 ? 0 : v);
-            }}
-            onBlur={() => {
-              if (!withdrawalInput.trim() || parseFloat(withdrawalInput) === 0) {
-                setWithdrawalInput('');
-                setPlannedWithdrawal(0);
-              }
-            }}
-            placeholder="e.g. 20000"
-            aria-label="Additional withdrawal (dollars)"
-            className="w-full border rounded px-2 py-1 text-sm"
+          {/* Additional withdrawal */}
+          <div className="bg-white px-4 py-3 flex flex-col gap-1.5">
+            <span className="flex items-center gap-1 font-mono text-[9.5px] tracking-[.12em] uppercase text-muted-3">
+              Additional withdrawal
+              <HelpTip>
+                Discretionary cash to raise by selling, on top of any RMDs. RMDs (set per account via
+                the "Required" withdrawal state) are taken first; this amount then drains
+                withdrawal-eligible accounts in drain-priority order, selling down toward your target.
+              </HelpTip>
+            </span>
+            <div className="inline-flex items-center gap-1.5 border border-line rounded-lg px-2.5 py-1.5 bg-paper w-[160px]">
+              <span className="font-mono text-[12px] text-muted-3">$</span>
+              <input
+                type="number"
+                min="0"
+                value={withdrawalInput}
+                onChange={e => {
+                  setWithdrawalInput(e.target.value);
+                  const v = parseFloat(e.target.value);
+                  setPlannedWithdrawal(isNaN(v) || v < 0 ? 0 : v);
+                }}
+                onBlur={() => {
+                  if (!withdrawalInput.trim() || parseFloat(withdrawalInput) === 0) {
+                    setWithdrawalInput('');
+                    setPlannedWithdrawal(0);
+                  }
+                }}
+                placeholder="0"
+                aria-label="Additional withdrawal (dollars)"
+                className="w-full bg-transparent font-mono text-[13px] text-brand-ink outline-none"
+              />
+            </div>
+          </div>
+
+          {/* Total withdrawal = Σ RMD + additional */}
+          <Stat
+            label="Total withdrawal"
+            value={fmtUsd(totalWithdrawal)}
+            caption={`${fmtUsd(totalRmd)} RMD + ${fmtUsd(plannedWithdrawal)} additional`}
+            tone={totalWithdrawal > 0 ? 'ink' : 'muted'}
           />
-          {totalWithdrawal > 0 && (
-            <p className="mt-1 text-xs text-warn">
-              Total withdrawals: <strong>{fmtUsd(totalWithdrawal)}</strong>
-              {totalRmd > 0 && <> = {fmtUsd(totalRmd)} RMD + {fmtUsd(plannedWithdrawal)} additional</>}
-            </p>
-          )}
         </div>
-      </div>
+      </Card>
 
       <HelpBox label="About accounts">
         <p>
@@ -604,275 +624,272 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
       </HelpBox>
 
       {accounts.length === 0 && !showAdd && (
-        <div className="py-8 text-center border border-dashed rounded-lg flex flex-col items-center gap-3">
-          <p className="text-sm text-gray-500">No accounts yet. Add one to get started.</p>
-          <button
-            onClick={onLoadSample}
-            className="text-xs text-brand-600 hover:text-brand-800 border border-brand-200 rounded px-3 py-1.5 hover:bg-brand-50 transition-colors"
-          >
+        <div className="py-8 text-center border border-dashed border-line rounded-xl flex flex-col items-center gap-3">
+          <p className="text-sm text-muted-1">No accounts yet. Add one to get started.</p>
+          <button onClick={onLoadSample} className={btnTintedInfo}>
             Load sample portfolio
           </button>
         </div>
       )}
 
       {accounts.length > 0 && (
-        <div className="overflow-hidden border border-gray-200 rounded-lg">
-          <div className="overflow-x-auto"><table className="w-full text-sm">
-            <thead className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wide">
-              <tr>
-                <th className="px-4 py-2 text-left">Name</th>
-                <th className="px-4 py-2 text-left">Institution</th>
-                <th className="px-4 py-2 text-left">Type</th>
-                <th className="px-4 py-2 text-right">New Cash</th>
-                <th className="px-4 py-2 text-center">
-                  <span className="inline-flex items-center gap-0.5">
-                    Deposits
-                    <HelpTip dir="left">
-                      Whether this account can receive a share of household free cash.
-                      <strong> Open</strong> / <strong>Closed</strong>. Set an optional contribution
-                      cap in the Edit form. Closed accounts still rebalance internally.
-                    </HelpTip>
-                  </span>
-                </th>
-                <th className="px-4 py-2 text-center">
-                  <span className="inline-flex items-center gap-0.5">
-                    Withdrawals
-                    <HelpTip dir="left">
-                      How much of a withdrawal this account funds by selling.
-                      <strong> Eligible</strong> = any share; <strong>Restricted</strong> = none
-                      (default for tax-advantaged); <strong>Required</strong> = has an RMD, taken
-                      first and still able to fund more. Set drain priority in the Edit form.
-                    </HelpTip>
-                  </span>
-                </th>
-                <th className="px-4 py-2 text-center">
-                  <span className="inline-flex items-center gap-0.5">
-                    Locked
-                    <HelpTip dir="left">
-                      A locked account counts in household totals and weights but receives no trade
-                      suggestions. Use for accounts you're not actively managing right now — e.g. a
-                      401k at a former employer.
-                    </HelpTip>
-                  </span>
-                </th>
-                <th className="px-4 py-2" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {accounts.map(acct => (
+        <Card
+          title={`Accounts · ${accounts.length}`}
+          action={
+            <button onClick={() => { setShowAdd(true); setEditingId(null); }} className={btnTintedInfo}>
+              + Add account
+            </button>
+          }
+        >
+          <div className="px-4 pt-1 pb-2 overflow-x-auto">
+            <div className="min-w-[820px]">
+              {/* Header row */}
+              <div className={`${ACCT_GRID} font-mono text-[10px] tracking-[.06em] uppercase text-muted-3 py-1.5 border-b border-line-2 items-center`}>
+                <span>Account</span>
+                <span>Type</span>
+                <span className="text-right">New cash</span>
+                <span className="flex items-center gap-0.5">
+                  Deposits
+                  <HelpTip dir="left">
+                    Whether this account can receive a share of household free cash.
+                    <strong> Open</strong> / <strong>Closed</strong>. Set an optional contribution
+                    cap in the Edit form. Closed accounts still rebalance internally.
+                  </HelpTip>
+                </span>
+                <span className="flex items-center gap-0.5">
+                  Withdrawals
+                  <HelpTip dir="left">
+                    How much of a withdrawal this account funds by selling.
+                    <strong> Eligible</strong> = any share; <strong>Restricted</strong> = none
+                    (default for tax-advantaged); <strong>Required</strong> = has an RMD, taken
+                    first and still able to fund more. Set drain priority in the Edit form.
+                  </HelpTip>
+                </span>
+                <span className="flex items-center justify-end gap-0.5">
+                  Lock
+                  <HelpTip dir="left">
+                    A locked account counts in household totals and weights but receives no trade
+                    suggestions. Use for accounts you're not actively managing right now — e.g. a
+                    401k at a former employer. Toggle with the lock icon; the pencil edits and the
+                    ✕ removes the account.
+                  </HelpTip>
+                </span>
+              </div>
+
+              {accounts.map((acct, i) => (
                 editingId === acct.id ? (
-                  <tr key={acct.id}>
-                    <td colSpan={8} className="px-0 py-0">
-                      <div className="bg-brand-50 px-4 py-3 space-y-3">
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                          <div>
-                            <label className="block text-xs text-gray-500 mb-1">Name</label>
-                            <input
-                              value={editForm.name}
-                              onChange={e => setEditForm({ ...editForm, name: e.target.value })}
-                              aria-label="Account name"
-                              className="w-full border rounded px-2 py-1 text-sm"
-                              autoFocus
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs text-gray-500 mb-1">Institution</label>
-                            <select
-                              value={editForm.institution}
-                              onChange={e => setEditForm({ ...editForm, institution: e.target.value })}
-                              aria-label="Institution"
-                              className="w-full border rounded px-2 py-1 text-sm"
-                            >
-                              {INSTITUTIONS.map(i => <option key={i}>{i}</option>)}
-                            </select>
-                          </div>
-                          <div>
-                            <label className="block text-xs text-gray-500 mb-1">Account type</label>
-                            <select
-                              value={editForm.type}
-                              onChange={e => setEditForm(applyTypeDefaults(editForm, e.target.value as AccountType))}
-                              aria-label="Account type"
-                              className="w-full border rounded px-2 py-1 text-sm"
-                            >
-                              {ACCOUNT_TYPES.map(t => (
-                                <option key={t} value={t}>{ACCT_TYPE_LABEL[t]}</option>
-                              ))}
-                            </select>
-                          </div>
-                          <div>
-                            <label className="block text-xs text-gray-500 mb-1">
-                              New cash ($)
-                              <HelpTip>
-                                Uninvested cash already sitting in this account. Added to this
-                                account's capacity and steered toward underweight classes.
-                              </HelpTip>
-                            </label>
-                            <input
-                              type="number"
-                              value={editForm.newCash}
-                              onChange={e => setEditForm({ ...editForm, newCash: e.target.value })}
-                              placeholder="Optional"
-                              aria-label="New cash in account (dollars)"
-                              className="w-full border rounded px-2 py-1 text-sm"
-                            />
-                          </div>
+                  <div key={acct.id} className="border-b border-line-3 last:border-b-0">
+                    <div className="bg-rail-active rounded-lg my-2 px-4 py-3 space-y-3">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div>
+                          <label className="block text-xs text-muted-2 mb-1">Name</label>
+                          <input
+                            value={editForm.name}
+                            onChange={e => setEditForm({ ...editForm, name: e.target.value })}
+                            aria-label="Account name"
+                            className="w-full border border-line rounded px-2 py-1 text-sm"
+                            autoFocus
+                          />
                         </div>
-                        <EligibilityFormFields f={editForm} onChange={setEditForm} />
-                        <ConstraintFields f={editForm} onChange={setEditForm} />
-                        <div className="flex items-center gap-3 pt-1">
-                          <button
-                            onClick={() => saveEdit(acct.id)}
-                            className="bg-brand-600 text-white text-sm px-4 py-1.5 rounded-md hover:bg-brand-700"
-                          >Save</button>
-                          <button
-                            onClick={() => setEditingId(null)}
-                            className="text-gray-500 text-sm px-3 py-1.5 rounded-md hover:bg-gray-100"
-                          >Cancel</button>
-                          <span className="text-xs text-gray-400 ml-1">
-                            Lock:{' '}
-                            <span className="font-medium">{acct.locked ? 'on' : 'off'}</span>
-                            {' '}(toggle in the table view)
-                          </span>
+                        <div>
+                          <label className="block text-xs text-muted-2 mb-1">Institution</label>
+                          <select
+                            value={editForm.institution}
+                            onChange={e => setEditForm({ ...editForm, institution: e.target.value })}
+                            aria-label="Institution"
+                            className="w-full border border-line rounded px-2 py-1 text-sm"
+                          >
+                            {INSTITUTIONS.map(i => <option key={i}>{i}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs text-muted-2 mb-1">Account type</label>
+                          <select
+                            value={editForm.type}
+                            onChange={e => setEditForm(applyTypeDefaults(editForm, e.target.value as AccountType))}
+                            aria-label="Account type"
+                            className="w-full border border-line rounded px-2 py-1 text-sm"
+                          >
+                            {ACCOUNT_TYPES.map(t => (
+                              <option key={t} value={t}>{ACCT_TYPE_LABEL[t]}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs text-muted-2 mb-1">
+                            New cash ($)
+                            <HelpTip>
+                              Uninvested cash already sitting in this account. Added to this
+                              account's capacity and steered toward underweight classes.
+                            </HelpTip>
+                          </label>
+                          <input
+                            type="number"
+                            value={editForm.newCash}
+                            onChange={e => setEditForm({ ...editForm, newCash: e.target.value })}
+                            placeholder="Optional"
+                            aria-label="New cash in account (dollars)"
+                            className="w-full border border-line rounded px-2 py-1 text-sm"
+                          />
                         </div>
                       </div>
-                    </td>
-                  </tr>
+                      <EligibilityFormFields f={editForm} onChange={setEditForm} />
+                      <ConstraintFields f={editForm} onChange={setEditForm} />
+                      <div className="flex items-center gap-3 pt-1">
+                        <button onClick={() => saveEdit(acct.id)} className={btnPrimaryCompact}>Save</button>
+                        <button onClick={() => setEditingId(null)} className={btnGhostCompact}>Cancel</button>
+                        <span className="text-xs text-muted-3 ml-1">
+                          Lock:{' '}
+                          <span className="font-medium">{acct.locked ? 'on' : 'off'}</span>
+                          {' '}(toggle in the table view)
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                 ) : (
-                  <tr key={acct.id} className={`hover:bg-gray-50 ${acct.locked ? 'opacity-60' : ''}`}>
-                    <td className="px-4 py-2 font-medium text-gray-800">
-                      {acct.name}
-                      <ConstraintBadges acct={acct} />
-                    </td>
-                    <td className="px-4 py-2 text-gray-600">{acct.institution}</td>
-                    <td className="px-4 py-2 text-gray-600">{ACCT_TYPE_LABEL[acct.type]}</td>
-                    <td className="px-4 py-2 text-right text-gray-600">
+                  <div
+                    key={acct.id}
+                    className={`${ACCT_GRID} text-[12.5px] py-[7px] items-center hover:bg-paper ${
+                      i < accounts.length - 1 ? 'border-b border-line-3' : ''
+                    } ${acct.locked ? 'opacity-60' : ''}`}
+                  >
+                    {/* Account: name + institution/notes stacked */}
+                    <span className="flex flex-col gap-px min-w-0 pr-2">
+                      <span className="font-semibold text-brand-ink truncate">{acct.name}</span>
+                      <AccountSubLine acct={acct} />
+                    </span>
+                    {/* Type tag */}
+                    <span>
+                      <AcctTypeTag
+                        label={ACCT_TYPE_TAG_LABEL[acct.type]}
+                        color={ACCT_TYPE_COLOR[acct.type] ?? '#8792a0'}
+                        taxable={acct.type === 'TAXABLE'}
+                      />
+                    </span>
+                    {/* New cash */}
+                    <span className={`text-right font-mono text-[12px] tabular-nums ${acct.newCash ? 'text-brand-ink' : 'text-faint'}`}>
                       {acct.newCash ? `$${acct.newCash.toLocaleString()}` : '—'}
-                    </td>
-                    <td className="px-4 py-2 text-center">
-                      <div className="inline-flex justify-center">
-                        <DepositToggle
-                          open={accountDepositOpen(acct)}
-                          onChange={open => setAccounts(accounts.map(a =>
-                            a.id === acct.id ? { ...a, acceptsDeposits: open ? undefined : false } : a
-                          ))}
-                        />
-                      </div>
-                    </td>
-                    <td className="px-4 py-2 text-center">
-                      <div className="inline-flex justify-center">
-                        <WithdrawalCell
-                          key={`wd-${acct.id}`}
-                          initialPolicy={accountWithdrawalPolicy(acct)}
-                          initialRmd={acct.rmdDueUsd != null ? String(acct.rmdDueUsd) : ''}
-                          onChange={(policy, rmd) => setAccounts(accounts.map(a =>
-                            a.id === acct.id ? { ...a, ...withdrawalFields(policy, rmd) } : a
-                          ))}
-                        />
-                      </div>
-                    </td>
-                    <td className="px-4 py-2 text-center">
+                    </span>
+                    {/* Deposits */}
+                    <span>
+                      <DepositToggle
+                        open={accountDepositOpen(acct)}
+                        onChange={open => setAccounts(accounts.map(a =>
+                          a.id === acct.id ? { ...a, acceptsDeposits: open ? undefined : false } : a
+                        ))}
+                      />
+                    </span>
+                    {/* Withdrawals */}
+                    <span>
+                      <WithdrawalCell
+                        key={`wd-${acct.id}`}
+                        initialPolicy={accountWithdrawalPolicy(acct)}
+                        initialRmd={acct.rmdDueUsd != null ? String(acct.rmdDueUsd) : ''}
+                        onChange={(policy, rmd) => setAccounts(accounts.map(a =>
+                          a.id === acct.id ? { ...a, ...withdrawalFields(policy, rmd) } : a
+                        ))}
+                      />
+                    </span>
+                    {/* Actions: lock · edit · remove */}
+                    <span className="flex gap-2 justify-end items-center">
                       <button
                         onClick={() => setAccounts(accounts.map(a =>
                           a.id === acct.id ? { ...a, locked: !a.locked } : a
                         ))}
                         title={acct.locked ? 'Unlock account (allow trades)' : 'Lock account (exclude from trades)'}
                         aria-label={acct.locked ? 'Unlock account (allow trades)' : 'Lock account (exclude from trades)'}
-                        className={`inline-flex transition-colors ${acct.locked ? 'text-warn hover:text-gray-400' : 'text-gray-300 hover:text-warn'}`}
+                        className={`inline-flex transition-colors ${acct.locked ? 'text-warn hover:text-faint' : 'text-faint-2 hover:text-warn'}`}
                       >
-                        {acct.locked ? <IconLock size={15} /> : <IconLockOpen size={15} />}
+                        {acct.locked ? <IconLock size={14} /> : <IconLockOpen size={14} />}
                       </button>
-                    </td>
-                    <td className="px-4 py-2 text-right space-x-3 whitespace-nowrap">
                       <button
                         onClick={() => startEdit(acct)}
-                        className="text-brand-500 hover:underline text-xs"
-                      >Edit</button>
+                        title="Edit account"
+                        aria-label={`Edit ${acct.name}`}
+                        className="inline-flex text-muted-2 hover:text-brand-600 transition-colors"
+                      ><IconPencil size={14} /></button>
                       <button
                         onClick={() => setRemoveTarget(acct)}
-                        className="text-muted-2 hover:text-danger hover:underline text-xs"
-                      >Remove</button>
-                    </td>
-                  </tr>
+                        title="Remove account"
+                        aria-label={`Remove ${acct.name}`}
+                        className="inline-flex text-faint-2 hover:text-danger transition-colors"
+                      ><IconX size={14} /></button>
+                    </span>
+                  </div>
                 )
               ))}
-            </tbody>
-          </table></div>
-        </div>
+            </div>
+          </div>
+        </Card>
       )}
 
       {/* Add form */}
       {showAdd && (
-        <div className="border border-brand-200 rounded-lg p-4 bg-brand-50 space-y-3">
-          <h3 className="text-sm font-medium text-gray-700">New account</h3>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Name</label>
-              <input
-                value={form.name}
-                onChange={e => setForm({ ...form, name: e.target.value })}
-                placeholder="e.g. Schwab Brokerage"
-                aria-label="Account name"
-                className="w-full border rounded px-2 py-1.5 text-sm"
-                autoFocus
-                onKeyDown={e => e.key === 'Enter' && handleAdd()}
-              />
+        <Card title="New account">
+          <div className="px-4 py-3 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-muted-2 mb-1">Name</label>
+                <input
+                  value={form.name}
+                  onChange={e => setForm({ ...form, name: e.target.value })}
+                  placeholder="e.g. Schwab Brokerage"
+                  aria-label="Account name"
+                  className="w-full border border-line rounded px-2 py-1.5 text-sm"
+                  autoFocus
+                  onKeyDown={e => e.key === 'Enter' && handleAdd()}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-muted-2 mb-1">Institution</label>
+                <select
+                  value={form.institution}
+                  onChange={e => setForm({ ...form, institution: e.target.value })}
+                  aria-label="Institution"
+                  className="w-full border border-line rounded px-2 py-1.5 text-sm"
+                >
+                  {INSTITUTIONS.map(i => <option key={i}>{i}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-muted-2 mb-1">Account type</label>
+                <select
+                  value={form.type}
+                  onChange={e => setForm(applyTypeDefaults(form, e.target.value as AccountType))}
+                  aria-label="Account type"
+                  className="w-full border border-line rounded px-2 py-1.5 text-sm"
+                >
+                  {ACCOUNT_TYPES.map(t => (
+                    <option key={t} value={t}>{ACCT_TYPE_LABEL[t]}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-muted-2 mb-1">
+                  New cash in account ($)
+                  <HelpTip>
+                    Uninvested cash already sitting in this account (e.g. a dividend). Added to this
+                    account's capacity and steered toward underweight classes.
+                  </HelpTip>
+                </label>
+                <input
+                  type="number"
+                  value={form.newCash}
+                  onChange={e => setForm({ ...form, newCash: e.target.value })}
+                  placeholder="Optional"
+                  aria-label="New cash in account (dollars)"
+                  className="w-full border border-line rounded px-2 py-1.5 text-sm"
+                />
+              </div>
             </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Institution</label>
-              <select
-                value={form.institution}
-                onChange={e => setForm({ ...form, institution: e.target.value })}
-                aria-label="Institution"
-                className="w-full border rounded px-2 py-1.5 text-sm"
-              >
-                {INSTITUTIONS.map(i => <option key={i}>{i}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Account type</label>
-              <select
-                value={form.type}
-                onChange={e => setForm(applyTypeDefaults(form, e.target.value as AccountType))}
-                aria-label="Account type"
-                className="w-full border rounded px-2 py-1.5 text-sm"
-              >
-                {ACCOUNT_TYPES.map(t => (
-                  <option key={t} value={t}>{ACCT_TYPE_LABEL[t]}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">
-                New cash in account ($)
-                <HelpTip>
-                  Uninvested cash already sitting in this account (e.g. a dividend). Added to this
-                  account's capacity and steered toward underweight classes.
-                </HelpTip>
-              </label>
-              <input
-                type="number"
-                value={form.newCash}
-                onChange={e => setForm({ ...form, newCash: e.target.value })}
-                placeholder="Optional"
-                aria-label="New cash in account (dollars)"
-                className="w-full border rounded px-2 py-1.5 text-sm"
-              />
+            <EligibilityFormFields f={form} onChange={setForm} />
+            <ConstraintFields f={form} onChange={setForm} />
+            <div className="flex gap-2 pt-1">
+              <button onClick={handleAdd} disabled={!form.name.trim()} className={btnPrimaryCompact}>Add</button>
+              <button onClick={() => { setShowAdd(false); setForm(blankForm()); }} className={btnGhostCompact}>Cancel</button>
             </div>
           </div>
-          <EligibilityFormFields f={form} onChange={setForm} />
-          <ConstraintFields f={form} onChange={setForm} />
-          <div className="flex gap-2 pt-1">
-            <button
-              onClick={handleAdd}
-              disabled={!form.name.trim()}
-              className="bg-brand-600 text-white text-sm px-4 py-1.5 rounded-md hover:bg-brand-700 disabled:opacity-40"
-            >Add</button>
-            <button
-              onClick={() => { setShowAdd(false); setForm(blankForm()); }}
-              className="text-gray-500 text-sm px-3 py-1.5 rounded-md hover:bg-gray-100"
-            >Cancel</button>
-          </div>
-        </div>
+        </Card>
       )}
 
       <ConfirmDialog

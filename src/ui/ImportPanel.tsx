@@ -8,10 +8,13 @@ import { parseEtradeCsv } from '../ingest/adapters/etrade';
 import { detectFormat } from '../ingest/detect';
 import type { CsvParseResult, MultiAccountResult } from '../ingest/csv';
 import { parseEmpowerCsv, parseEmpowerTotals, SUPPORTED_EMPOWER_CLASSES } from '../ingest/adapters/empower';
-import { AC_LABEL, ACCT_TYPE_COLOR, ACCT_TYPE_LABEL, fmtUsd } from './fmt';
+import { AC_LABEL, ACCT_TYPE_COLOR, ACCT_TYPE_LABEL, ACCT_TYPE_TAG_LABEL, fmtUsd } from './fmt';
 import { PieChart } from './PieChart';
 import { HelpBox, HelpDef, HelpSection } from './HelpBox';
-import { IconLock, IconLockOpen, IconX, IconPencil, IconChevronDown, IconChevronRight } from './icons';
+import { IconLock, IconLockOpen, IconX, IconPencil, IconChevronDown, IconChevronRight, IconUpload } from './icons';
+import { Card, AcctTypeTag, StatusChip } from './card';
+import { btnPrimaryCompact, btnGhostCompact } from './buttons';
+import { segmentedTrackStyle, segmentStyle } from './segmented';
 
 // A broker CSV format. These are auto-detected from the file's contents
 // (detectFormat) and can also be picked manually from the Format dropdown.
@@ -267,9 +270,8 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
     }
   }
 
-  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // Shared file-ingest path for both the <input> picker and drag-drop.
+  async function ingestFile(file: File) {
     const text = await readFile(file);
     setFileText(text);
     setFileName(file.name);
@@ -281,8 +283,20 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
     setFileFormat(fmt);
     setDetected(det !== null);
     parseText(fmt, text);
+  }
 
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    await ingestFile(file);
     e.target.value = '';
+  }
+
+  // Drag-drop onto the dashed drop zone — same ingest path as the picker.
+  async function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    const file = e.dataTransfer.files?.[0];
+    if (file) await ingestFile(file);
   }
 
   // Manual Format override from the dropdown. Re-parses the loaded file (if any)
@@ -401,8 +415,7 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
 
   if (accounts.length === 0) {
     return (
-      <div className="space-y-4">
-        <h2 className="text-lg font-semibold text-gray-800">Import Positions</h2>
+      <div className="flex flex-col gap-4">
         <p className="text-sm text-warn bg-warn-bg border border-warn-banner-border rounded-lg px-4 py-3">
           Add at least one account in the Accounts tab before importing positions.
         </p>
@@ -411,8 +424,7 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
   }
 
   return (
-    <div className="space-y-6">
-      <h2 className="text-lg font-semibold text-gray-800">Import Positions</h2>
+    <div className="flex flex-col gap-4">
 
       <HelpBox label="About importing positions">
         <p>
@@ -435,84 +447,91 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
         </HelpSection>
       </HelpBox>
 
-      {/* Step 1 — Pick account + source */}
-      <div className="border border-gray-200 rounded-lg divide-y divide-gray-100">
-        <div className="px-4 py-3 flex items-center gap-4">
-          <span className="text-sm font-medium text-gray-700 w-28 shrink-0">Account</span>
-          <div className="flex flex-wrap gap-2">
-            {accounts.map(a => (
-              <button
-                key={a.id}
-                onClick={() => setAccountId(a.id)}
-                className={`px-3 py-1.5 text-sm rounded-md border transition-colors
-                  ${accountId === a.id
-                    ? 'bg-brand-600 text-white border-brand-600'
-                    : 'bg-white text-gray-600 border-gray-300 hover:border-brand-400'}`}
-              >
-                {a.name}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="px-4 py-3 flex items-center gap-4">
-          <span className="text-sm font-medium text-gray-700 w-28 shrink-0">Source</span>
-          <div className="flex flex-wrap gap-x-5 gap-y-2">
+      {/* ── SOURCE card ─────────────────────────────────────────────────────── */}
+      <Card
+        title="Source"
+        action={
+          <div style={segmentedTrackStyle} role="tablist" aria-label="Import source">
             {METHOD_META.map(m => (
-              <label key={m.id} className="flex items-center gap-1.5 text-sm text-gray-700 cursor-pointer">
-                <input
-                  type="radio"
-                  name="import-method"
-                  checked={method === m.id}
-                  onChange={() => changeMethod(m.id)}
-                  className="accent-brand-600"
-                />
+              <button
+                key={m.id}
+                type="button"
+                role="tab"
+                aria-selected={method === m.id}
+                onClick={() => changeMethod(m.id)}
+                style={{ ...segmentStyle(method === m.id), padding: '4px 12px' }}
+                className="text-[11.5px] font-medium"
+              >
                 {m.label}
-              </label>
+              </button>
             ))}
           </div>
-        </div>
-      </div>
-
-      {/* Step 2 — File import: choose file, then (auto-detected) format below */}
-      {method === 'file' && (
-        <div className="space-y-3">
-          {!preview && !multiAccount && (
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center space-y-3">
-              <input ref={fileRef} type="file" accept=".csv" onChange={handleFile} className="hidden" />
-              <button
-                onClick={() => fileRef.current?.click()}
-                className="bg-white border border-gray-300 text-gray-700 text-sm px-4 py-2 rounded-md hover:bg-gray-50"
+        }
+      >
+        <div className="px-4 py-3.5 flex flex-col gap-3">
+          <div className="flex gap-5 items-end flex-wrap">
+            {/* Into account */}
+            <label className="flex flex-col gap-1.5">
+              <span className="font-mono text-[9.5px] tracking-[.12em] uppercase text-muted-3">Into account</span>
+              <select
+                value={accountId}
+                onChange={e => setAccountId(e.target.value)}
+                aria-label="Import into account"
+                className="border border-line rounded-lg px-3 py-[7px] text-[13px] text-brand-ink font-medium bg-paper"
               >
-                Choose CSV file
-              </button>
-              <p className="text-xs text-gray-400">
-                {fileName ? `Loaded ${fileName}` : "We'll detect the format automatically."}
-              </p>
+                {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+              </select>
+            </label>
+
+            {/* Format (file method only) */}
+            {method === 'file' && (
+              <label className="flex flex-col gap-1.5">
+                <span className="font-mono text-[9.5px] tracking-[.12em] uppercase text-muted-3">Format</span>
+                <span className="flex items-center gap-2">
+                  <select
+                    value={fileFormat}
+                    onChange={e => changeFormat(e.target.value as FileFormat)}
+                    aria-label="File format"
+                    className="border border-line rounded-lg px-3 py-[7px] text-[13px] text-brand-ink font-medium bg-paper"
+                  >
+                    {FORMAT_META.map(f => (
+                      <option key={f.id} value={f.id}>{f.label}</option>
+                    ))}
+                  </select>
+                  {detected && <StatusChip tone="ok">Auto-detected</StatusChip>}
+                </span>
+              </label>
+            )}
+
+            {method === 'file' && (
+              <span className="font-mono text-[10.5px] text-muted-3 pb-[9px] flex-1 min-w-[200px]">{formatHint}</span>
+            )}
+          </div>
+
+          {/* Dashed drop zone wrapping the file picker (file method only) */}
+          {method === 'file' && !preview && !multiAccount && (
+            <div
+              // The hidden <input> is a descendant, so its programmatic .click()
+              // bubbles back here — ignore that echo or every user click would
+              // invoke the picker twice.
+              onClick={e => { if (e.target !== fileRef.current) fileRef.current?.click(); }}
+              onDragOver={e => { e.preventDefault(); }}
+              onDrop={handleDrop}
+              role="button"
+              tabIndex={0}
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileRef.current?.click(); } }}
+              className="border-[1.5px] border-dashed border-[#ccd4de] rounded-[10px] p-[22px] flex items-center justify-center gap-2.5 bg-paper cursor-pointer transition-colors hover:border-[#5b96cc] hover:bg-rail-active flex-wrap text-center"
+            >
+              <input ref={fileRef} type="file" accept=".csv" onChange={handleFile} className="hidden" />
+              <IconUpload size={15} className="text-muted-2" />
+              <span className="text-[13px] text-muted-1">
+                {fileName ? `Loaded ${fileName}` : <>Drop a broker CSV here, or <span className="text-brand-600 font-semibold underline underline-offset-2">browse</span> — we'll detect the format automatically</>}
+              </span>
+              <span className="font-mono text-[10.5px] text-faint">Schwab · Fidelity · Vanguard · E*TRADE · Merrill · Empower</span>
             </div>
           )}
-
-          {/* Format dropdown — auto-filled on detection, overridable here. */}
-          <div className="flex items-center gap-3 flex-wrap">
-            <span className="text-sm font-medium text-gray-700">Format</span>
-            <select
-              value={fileFormat}
-              onChange={e => changeFormat(e.target.value as FileFormat)}
-              className="border border-gray-300 rounded px-2 py-1.5 text-sm bg-white"
-            >
-              {FORMAT_META.map(f => (
-                <option key={f.id} value={f.id}>{f.label}</option>
-              ))}
-            </select>
-            {detected && (
-              <span className="text-xs text-ok bg-ok-bg border border-line rounded px-2 py-0.5">
-                Auto-detected
-              </span>
-            )}
-            <span className="text-xs text-gray-400">{formatHint}</span>
-          </div>
         </div>
-      )}
+      </Card>
 
       {parseErrors.length > 0 && (
         <div className="bg-danger-bg border border-danger-hover-border rounded-lg p-3 text-sm text-danger space-y-1">
@@ -522,191 +541,172 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
 
       {/* Multi-account mapping step (Fidelity / Schwab all-accounts) */}
       {multiAccount && (
-        <div className="border border-brand-200 rounded-lg p-4 space-y-4 bg-brand-50">
-          <div>
-            <h3 className="text-sm font-semibold text-brand-800">
-              Map imported accounts → your accounts
-            </h3>
-            <p className="text-xs text-brand-600 mt-0.5">
+        <Card title={`Map accounts · ${multiAccount.discovered.length} found`}>
+          <div className="px-4 py-3 space-y-4">
+            <p className="text-xs text-muted-1">
               {multiAccount.discovered.length} accounts found in the file. Route each one to an account you've added, or skip it.
             </p>
-          </div>
-          <div className="space-y-2">
-            {multiAccount.discovered.map(disc => {
-              const posCount = multiAccount.positionsByNumber[disc.accountNumber]?.length ?? 0;
-              return (
-                <div key={disc.accountNumber} className="flex items-center gap-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-gray-800 truncate">{disc.accountName}</div>
-                    <div className="text-xs text-gray-500">
-                      {disc.accountNumber} · {posCount} position{posCount !== 1 ? 's' : ''}
+            <div className="space-y-2">
+              {multiAccount.discovered.map(disc => {
+                const posCount = multiAccount.positionsByNumber[disc.accountNumber]?.length ?? 0;
+                return (
+                  <div key={disc.accountNumber} className="flex items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-brand-ink truncate">{disc.accountName}</div>
+                      <div className="font-mono text-[10.5px] text-muted-3">
+                        {disc.accountNumber} · {posCount} position{posCount !== 1 ? 's' : ''}
+                      </div>
                     </div>
+                    <span className="text-muted-3 text-sm shrink-0" aria-hidden="true">→</span>
+                    <select
+                      value={accountMapping[disc.accountNumber] ?? ''}
+                      onChange={e => setAccountMapping({ ...accountMapping, [disc.accountNumber]: e.target.value })}
+                      aria-label={`Map ${disc.accountName} to an account`}
+                      className="border border-line rounded-lg px-2.5 py-1.5 text-sm bg-white min-w-44"
+                    >
+                      <option value="">— skip —</option>
+                      {accounts.map(a => (
+                        <option key={a.id} value={a.id}>{a.name}</option>
+                      ))}
+                    </select>
                   </div>
-                  <span className="text-gray-400 text-sm shrink-0">→</span>
-                  <select
-                    value={accountMapping[disc.accountNumber] ?? ''}
-                    onChange={e => setAccountMapping({ ...accountMapping, [disc.accountNumber]: e.target.value })}
-                    className="border border-gray-300 rounded px-2 py-1.5 text-sm bg-white min-w-44"
-                  >
-                    <option value="">— skip —</option>
-                    {accounts.map(a => (
-                      <option key={a.id} value={a.id}>{a.name}</option>
-                    ))}
-                  </select>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={confirmMultiImport}
+                disabled={!multiAccount.discovered.some(d => accountMapping[d.accountNumber])}
+                className={btnPrimaryCompact}
+              >
+                Confirm import
+              </button>
+              <button
+                onClick={() => { setMultiAccount(null); setAccountMapping({}); setParseErrors([]); }}
+                className={btnGhostCompact}
+              >
+                Cancel
+              </button>
+            </div>
           </div>
-          <div className="flex gap-2">
-            <button
-              onClick={confirmMultiImport}
-              disabled={!multiAccount.discovered.some(d => accountMapping[d.accountNumber])}
-              className="bg-brand-600 text-white text-sm px-4 py-1.5 rounded-md hover:bg-brand-700 disabled:opacity-40"
-            >
-              Confirm import
-            </button>
-            <button
-              onClick={() => { setMultiAccount(null); setAccountMapping({}); setParseErrors([]); }}
-              className="text-gray-500 text-sm px-3 py-1.5 rounded-md hover:bg-gray-100"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
+        </Card>
       )}
 
       {preview && (
-        <div className="space-y-3">
-          <h3 className="text-sm font-medium text-gray-700">
-            Preview — {preview.length} position{preview.length !== 1 ? 's' : ''} parsed
-          </h3>
-          <div className="overflow-hidden border border-gray-200 rounded-lg">
-            <div className="overflow-x-auto"><table className="w-full text-sm">
-              <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
-                <tr>
-                  <th className="px-3 py-2 text-left">Ticker</th>
-                  <th className="px-3 py-2 text-left">Description</th>
-                  <th className="px-3 py-2 text-right">Market Value</th>
-                  <th className="px-3 py-2 text-right">Price</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {preview.map((p, i) => (
-                  <tr key={i}>
-                    <td className="px-3 py-2 font-mono font-medium">{p.ticker}</td>
-                    <td className="px-3 py-2 text-gray-500 truncate max-w-xs">{p.description ?? '—'}</td>
-                    <td className="px-3 py-2 text-right">{fmtUsd(p.marketValue)}</td>
-                    <td className="px-3 py-2 text-right text-gray-500">
-                      {p.price ? `$${p.price.toFixed(2)}` : '—'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table></div>
+        <Card title={`Preview · ${preview.length} position${preview.length !== 1 ? 's' : ''} parsed`}>
+          <div className="px-4 pt-1 pb-3 overflow-x-auto">
+            <div className="min-w-[520px]">
+              <div className="grid grid-cols-[5rem_1fr_6.4rem_5.6rem] font-mono text-[10px] tracking-[.06em] uppercase text-muted-3 py-1.5 border-b border-line-2">
+                <span>Ticker</span><span>Description</span>
+                <span className="text-right">Market value</span><span className="text-right">Price</span>
+              </div>
+              {preview.map((p, i) => (
+                <div
+                  key={i}
+                  className={`grid grid-cols-[5rem_1fr_6.4rem_5.6rem] text-[12.5px] py-[5px] items-center ${
+                    i < preview.length - 1 ? 'border-b border-line-3' : ''
+                  }`}
+                >
+                  <span className="font-mono font-semibold text-brand-ink">{p.ticker}</span>
+                  <span className="text-muted-1 text-[12px] truncate pr-2">{p.description ?? '—'}</span>
+                  <span className="text-right font-mono text-[12px] text-brand-ink tabular-nums">{fmtUsd(p.marketValue)}</span>
+                  <span className="text-right font-mono text-[12px] text-muted-1 tabular-nums">
+                    {p.price ? `$${p.price.toFixed(2)}` : '—'}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="flex gap-2">
-            <button
-              onClick={confirmImport}
-              className="bg-brand-600 text-white text-sm px-4 py-1.5 rounded-md hover:bg-brand-700"
-            >
-              Confirm import
-            </button>
-            <button
-              onClick={() => { setPreview(null); setParseErrors([]); }}
-              className="text-gray-500 text-sm px-3 py-1.5 rounded-md hover:bg-gray-100"
-            >
-              Cancel
-            </button>
+          <div className="px-4 pb-3 flex gap-2">
+            <button onClick={confirmImport} className={btnPrimaryCompact}>Confirm import</button>
+            <button onClick={() => { setPreview(null); setParseErrors([]); }} className={btnGhostCompact}>Cancel</button>
           </div>
-        </div>
+        </Card>
       )}
 
       {method === 'empower-totals' && (
-        <div className="border border-gray-200 rounded-lg p-4 space-y-3">
-          <p className="text-sm text-gray-500">Enter dollar totals per asset class from Empower's Investments → Holdings → Allocation view.</p>
-          <div className="grid grid-cols-2 gap-3">
-            {SUPPORTED_EMPOWER_CLASSES.map(ac => (
-              <div key={ac}>
-                <label className="block text-xs text-gray-500 mb-1">{AC_LABEL[ac]}</label>
-                <input
-                  type="number"
-                  value={empowerTotals[ac] ?? ''}
-                  onChange={e => setEmpowerTotals({ ...empowerTotals, [ac]: e.target.value })}
-                  placeholder="$0"
-                  className="w-full border rounded px-2 py-1.5 text-sm text-right"
-                />
-              </div>
-            ))}
+        <Card title="Empower totals">
+          <div className="px-4 py-3 space-y-3">
+            <p className="text-sm text-muted-1">Enter dollar totals per asset class from Empower's Investments → Holdings → Allocation view.</p>
+            <div className="grid grid-cols-2 gap-3">
+              {SUPPORTED_EMPOWER_CLASSES.map(ac => (
+                <div key={ac}>
+                  <label className="block text-xs text-muted-2 mb-1">{AC_LABEL[ac]}</label>
+                  <input
+                    type="number"
+                    value={empowerTotals[ac] ?? ''}
+                    onChange={e => setEmpowerTotals({ ...empowerTotals, [ac]: e.target.value })}
+                    placeholder="$0"
+                    className="w-full border border-line rounded px-2 py-1.5 text-sm text-right"
+                  />
+                </div>
+              ))}
+            </div>
+            <button onClick={loadEmpowerTotals} className={btnPrimaryCompact}>Load totals</button>
           </div>
-          <button
-            onClick={loadEmpowerTotals}
-            className="bg-brand-600 text-white text-sm px-4 py-1.5 rounded-md hover:bg-brand-700"
-          >
-            Load totals
-          </button>
-        </div>
+        </Card>
       )}
 
       {method === 'manual' && (
-        <div className="border border-gray-200 rounded-lg p-4 space-y-3">
-          <div className="flex gap-2 items-end">
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Ticker</label>
-              <input
-                value={manualRow.ticker}
-                onChange={e => setManualRow({ ...manualRow, ticker: e.target.value })}
-                placeholder="VTI"
-                className="w-24 border rounded px-2 py-1.5 text-sm font-mono uppercase"
-                onKeyDown={e => e.key === 'Enter' && addManualRow()}
-              />
+        <Card title="Manual entry">
+          <div className="px-4 py-3">
+            <div className="flex gap-2 items-end flex-wrap">
+              <div>
+                <label className="block text-xs text-muted-2 mb-1">Ticker</label>
+                <input
+                  value={manualRow.ticker}
+                  onChange={e => setManualRow({ ...manualRow, ticker: e.target.value })}
+                  placeholder="VTI"
+                  className="w-24 border border-line rounded px-2 py-1.5 text-sm font-mono uppercase"
+                  onKeyDown={e => e.key === 'Enter' && addManualRow()}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-muted-2 mb-1">Market value ($)</label>
+                <input
+                  type="number"
+                  value={manualRow.marketValue}
+                  onChange={e => setManualRow({ ...manualRow, marketValue: e.target.value })}
+                  placeholder="10000"
+                  className="w-32 border border-line rounded px-2 py-1.5 text-sm text-right"
+                  onKeyDown={e => e.key === 'Enter' && addManualRow()}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-muted-2 mb-1">Price (optional)</label>
+                <input
+                  type="number"
+                  value={manualRow.price}
+                  onChange={e => setManualRow({ ...manualRow, price: e.target.value })}
+                  placeholder="240.50"
+                  className="w-28 border border-line rounded px-2 py-1.5 text-sm text-right"
+                  onKeyDown={e => e.key === 'Enter' && addManualRow()}
+                />
+              </div>
+              <button
+                onClick={addManualRow}
+                disabled={!manualRow.ticker.trim() || !manualRow.marketValue}
+                className={btnPrimaryCompact}
+              >
+                Add
+              </button>
             </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Market value ($)</label>
-              <input
-                type="number"
-                value={manualRow.marketValue}
-                onChange={e => setManualRow({ ...manualRow, marketValue: e.target.value })}
-                placeholder="10000"
-                className="w-32 border rounded px-2 py-1.5 text-sm text-right"
-                onKeyDown={e => e.key === 'Enter' && addManualRow()}
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Price (optional)</label>
-              <input
-                type="number"
-                value={manualRow.price}
-                onChange={e => setManualRow({ ...manualRow, price: e.target.value })}
-                placeholder="240.50"
-                className="w-28 border rounded px-2 py-1.5 text-sm text-right"
-                onKeyDown={e => e.key === 'Enter' && addManualRow()}
-              />
-            </div>
-            <button
-              onClick={addManualRow}
-              disabled={!manualRow.ticker.trim() || !manualRow.marketValue}
-              className="bg-brand-600 text-white text-sm px-3 py-1.5 rounded-md hover:bg-brand-700 disabled:opacity-40"
-            >
-              Add
-            </button>
           </div>
-        </div>
+        </Card>
       )}
 
-      {/* Loaded positions — pie chart + collapsible account tables */}
+      {/* Loaded positions — pie charts + collapsible account groups (POSITIONS · n) */}
       {allGrouped.length > 0 && (
-        <div className="space-y-4 pt-2">
-          <h3 className="text-sm font-medium text-gray-700 border-t pt-4">Loaded positions</h3>
-
+        <>
           {/* Pie charts: by account and by account type */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="border border-gray-200 rounded-lg p-4">
+            <div className="border border-line rounded-xl bg-white p-4 shadow-[0_1px_2px_rgba(8,40,85,.04)]">
               <PieChart
                 title="By account"
                 slices={allGrouped.map(g => ({ label: g.account.name, value: g.total, color: g.color }))}
               />
             </div>
-            <div className="border border-gray-200 rounded-lg p-4">
+            <div className="border border-line rounded-xl bg-white p-4 shadow-[0_1px_2px_rgba(8,40,85,.04)]">
               <PieChart
                 title="By account type"
                 slices={typeSlices}
@@ -714,31 +714,40 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
             </div>
           </div>
 
-          {/* Per-account collapsible tables */}
+          {/* Positions grouped by account inside one card */}
+          <Card title={`Positions · ${positions.length}`} meta="Click any cell to edit">
+            <div className="px-4 pt-1 pb-2.5">
           {allGrouped.map(({ account, rows, total, color }) => {
             const pct = grandTotal > 0 ? (total / grandTotal) * 100 : 0;
             const isOpen = !collapsed.has(account.id);
             return (
-              <div key={account.id} className="overflow-hidden border border-gray-200 rounded-lg">
-                {/* Header row — clickable to collapse */}
+              <div key={account.id}>
+                {/* Group header row — clickable to collapse */}
                 <button
-                  className="w-full px-4 py-2.5 bg-gray-50 flex items-center gap-3 hover:bg-gray-100 transition-colors text-left"
+                  className="w-full flex items-center gap-2.5 py-2 border-b border-line-2 text-left"
                   onClick={() => toggleCollapsed(account.id)}
+                  aria-expanded={isOpen}
                 >
+                  {/* Chevron */}
+                  <span className="text-muted-2 inline-flex">{isOpen ? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}</span>
+
                   {/* Colour swatch */}
                   <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: color }} />
 
-                  {/* Name */}
-                  <span className="text-sm font-medium text-gray-700 flex-1">{account.name}</span>
+                  {/* Name + type tag */}
+                  <span className="text-[13px] font-semibold text-brand-ink">{account.name}</span>
+                  <AcctTypeTag
+                    label={ACCT_TYPE_TAG_LABEL[account.type]}
+                    color={ACCT_TYPE_COLOR[account.type] ?? '#8792a0'}
+                    taxable={account.type === 'TAXABLE'}
+                  />
 
-                  {/* Totals */}
-                  <span className="text-sm text-gray-600 tabular-nums">{fmtUsd(total)}</span>
-                  <span className="text-xs text-gray-400 tabular-nums w-12 text-right">
+                  {/* Count + totals */}
+                  <span className="ml-auto font-mono text-[11px] text-muted-2">{rows.length} position{rows.length !== 1 ? 's' : ''}</span>
+                  <span className="font-mono text-[12px] font-medium text-brand-ink tabular-nums">{fmtUsd(total)}</span>
+                  <span className="font-mono text-[10.5px] text-faint tabular-nums w-11 text-right">
                     {pct.toFixed(1)}%
                   </span>
-
-                  {/* Chevron */}
-                  <span className="text-gray-400 ml-1 inline-flex">{isOpen ? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}</span>
 
                   {/* Clear button — stop propagation so it doesn't toggle collapse */}
                   <span
@@ -755,9 +764,9 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
                 {/* Position rows — hidden when collapsed */}
                 {isOpen && (
                   <div className="overflow-x-auto"><table className="w-full text-sm">
-                    <tbody className="divide-y divide-gray-100">
+                    <tbody className="divide-y divide-line-3">
                       {rows.map(({ pos: p, posIdx }) => (
-                        <tr key={posIdx} className={`hover:bg-gray-50 ${p.locked ? 'opacity-60' : ''}`}>
+                        <tr key={posIdx} className={`hover:bg-paper ${p.locked ? 'opacity-60' : ''}`}>
                           {/* Edited indicator */}
                           <td className="pl-3 pr-0 py-2 w-4 text-warn">
                             {p.edited && <span className="inline-flex" title="Manually edited" aria-label="Manually edited"><IconPencil size={13} /></span>}
@@ -879,7 +888,9 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
               </div>
             );
           })}
-        </div>
+            </div>
+          </Card>
+        </>
       )}
     </div>
   );
