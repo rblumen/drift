@@ -54,15 +54,15 @@ describe('ImportPanel source segmented control', () => {
     expect(container!.querySelector('input[type="file"]')).not.toBeNull();
     // The three segments are present with the file one selected.
     expect(segment('Import from file').getAttribute('aria-selected')).toBe('true');
-    expect(segment('Empower totals').getAttribute('aria-selected')).toBe('false');
+    expect(segment('Class totals').getAttribute('aria-selected')).toBe('false');
     expect(segment('Manual entry').getAttribute('aria-selected')).toBe('false');
   });
 
-  it('switches to the Empower-totals method when its segment is clicked', async () => {
+  it('switches to the class-totals method when its segment is clicked', async () => {
     await render();
-    await act(async () => { segment('Empower totals').click(); });
-    expect(segment('Empower totals').getAttribute('aria-selected')).toBe('true');
-    // Empower body shows its instructions + Load totals button; the drop zone is gone.
+    await act(async () => { segment('Class totals').click(); });
+    expect(segment('Class totals').getAttribute('aria-selected')).toBe('true');
+    // Class-totals body shows its instructions + Load totals button; the drop zone is gone.
     expect(container!.textContent).toContain('Load totals');
     expect(container!.textContent).not.toContain('Drop a broker CSV here');
   });

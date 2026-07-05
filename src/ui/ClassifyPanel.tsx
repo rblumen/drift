@@ -190,8 +190,9 @@ export function ClassifyPanel({
 }: Props) {
   const [editState, setEditState] = useState<EditState | null>(null);
 
-  // Total market value held under each unique ticker (design 3c Value column +
-  // the "$ at stake" header meta = sum of unclassified value).
+  // Total market value held under each unique ticker — feeds the "$ at stake"
+  // header meta (sum of unclassified value). Per-row Value display was removed
+  // by owner decision on PR #197; the rollup is all this step needs.
   const valueByTicker = new Map<string, number>();
   for (const p of positions) {
     const t = p.ticker.toUpperCase();
@@ -406,7 +407,6 @@ export function ClassifyPanel({
                     <span className="text-muted-1 text-[12px] truncate flex-1 max-w-[220px]">
                       {row.description ?? <span className="text-faint">—</span>}
                     </span>
-                    <span className="font-mono text-[12px] text-brand-ink tabular-nums">{fmtUsd(tickerValue(row.ticker))}</span>
                     <div className="flex items-center gap-2 ml-auto">
                       {/* Confidence survives on the chip: "estimated" vs "known blend"
                           (was the old pill's "Known blend (estimated)" distinction). */}
@@ -551,7 +551,7 @@ export function ClassifyPanel({
             </table>
           </div>
           <p className="px-4 pb-3 font-mono text-[10px] text-muted-3">
-            Blended funds count toward allocation totals but are excluded from trade suggestions — their sub-components can't be traded individually.
+            Blended funds count toward allocation totals. The engine may recommend selling a blended fund, but never buying one — buys go to single-class funds (their sub-components can't be bought individually).
           </p>
         </Card>
       )}
@@ -563,13 +563,12 @@ export function ClassifyPanel({
           meta={unmapped.length > 0 ? `Untagged first · ${fmtUsd(unclassifiedValue)} unclassified` : 'Click a class to override'}
         >
           <div className="px-4 pt-1 pb-2 overflow-x-auto">
-            <table className="w-full text-sm min-w-[640px]">
+            <table className="w-full text-sm min-w-[560px]">
               <thead className="font-mono text-[10px] tracking-[.06em] uppercase text-muted-3">
                 <tr className="border-b border-line-2">
                   <th className="text-left font-normal py-1.5">Ticker</th>
                   <th className="text-left font-normal py-1.5">Description</th>
                   <th className="text-left font-normal py-1.5">Asset class</th>
-                  <th className="text-right font-normal py-1.5">Value</th>
                   <th className="text-right font-normal py-1.5">Source</th>
                   <th className="py-1.5" />
                 </tr>
@@ -597,9 +596,6 @@ export function ClassifyPanel({
                               <ClassOptions />
                             </select>
                           )}
-                        </td>
-                        <td className="py-2 text-right font-mono text-[12px] text-brand-ink tabular-nums">
-                          {fmtUsd(tickerValue(row.ticker))}
                         </td>
                         <td className="py-2 text-right whitespace-nowrap">
                           {row.source === 'override' ? (
@@ -639,7 +635,7 @@ export function ClassifyPanel({
                       </tr>
                       {isEditing && (
                         <tr className="bg-rail-active">
-                          <td colSpan={6} className="pb-3">
+                          <td colSpan={5} className="pb-3">
                             <DecompEditor
                               initial={row.effective ? { [row.effective]: 1.0 } : {}}
                               onApply={d => applyDecomp(row.ticker, d)}

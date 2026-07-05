@@ -20,8 +20,9 @@ import { segmentedTrackStyle, segmentStyle } from './segmented';
 // (detectFormat) and can also be picked manually from the Format dropdown.
 type FileFormat = 'schwab' | 'fidelity' | 'vanguard' | 'etrade' | 'merrill' | 'empower';
 
-// How the user supplies positions: a broker file (the common path), Empower
-// asset-class totals, or typing rows by hand. Chosen via the Source radio.
+// How the user supplies positions: a broker file (the common path), per-class
+// dollar totals ("Class totals", the Empower-derived synthetic-ticker path),
+// or typing rows by hand. Chosen via the Source segmented control.
 type InputMethod = 'file' | 'empower-totals' | 'manual';
 
 interface Props {
@@ -41,7 +42,7 @@ const FORMAT_META: { id: FileFormat; label: string; hint: string }[] = [
 
 const METHOD_META: { id: InputMethod; label: string }[] = [
   { id: 'file',           label: 'Import from file' },
-  { id: 'empower-totals', label: 'Empower totals' },
+  { id: 'empower-totals', label: 'Class totals' },
   { id: 'manual',         label: 'Manual entry' },
 ];
 
@@ -314,7 +315,7 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
     }
   }
 
-  // Switch input method (file / Empower totals / manual), clearing any
+  // Switch input method (file / class totals / manual), clearing any
   // in-progress file import.
   function changeMethod(m: InputMethod) {
     setMethod(m);
@@ -436,7 +437,7 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
           <HelpDef term="Auto-detect">Choose <strong>Import from file</strong> and pick your broker's CSV export — the app reads the file and selects the matching format automatically. If it can't tell, set the format yourself from the dropdown below the file picker. Supported: Schwab, Fidelity, Vanguard, E*TRADE, Merrill Edge, and Empower.</HelpDef>
           <HelpDef term="Multiple accounts in one file">Schwab, Fidelity, Vanguard, and Merrill exports may contain several accounts. The app detects each one and lets you map it to a registered account. (Vanguard's file has no account-name column, so its accounts appear by number.) E*TRADE and Empower export one account per file.</HelpDef>
           <HelpDef term="Where to export">Schwab: Accounts → Positions → Export. Fidelity: Accounts &amp; Trade → Portfolio → Download. Vanguard: My Accounts → Transaction History → Download (use the brokerage holdings CSV, which includes tickers). E*TRADE: Portfolios → Positions → Download (Collapsed View, All Positions). Merrill: Accounts → Holdings → expand lot detail → Export as .CSV.</HelpDef>
-          <HelpDef term="Empower totals">If you only have asset-class totals (not individual funds), choose <strong>Empower totals</strong> and enter dollar amounts per class. Trade recommendations will be at the asset-class level only.</HelpDef>
+          <HelpDef term="Class totals">If you only have asset-class totals (not individual funds — e.g. from Empower's allocation view), choose <strong>Class totals</strong> and enter dollar amounts per class. Trade recommendations will be at the asset-class level only.</HelpDef>
           <HelpDef term="Manual entry">Choose <strong>Manual entry</strong> to type ticker + market value directly — for any position a CSV doesn't cover, or a one-off holding.</HelpDef>
         </HelpSection>
 
@@ -625,9 +626,9 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
       )}
 
       {method === 'empower-totals' && (
-        <Card title="Empower totals">
+        <Card title="Class totals">
           <div className="px-4 py-3 space-y-3">
-            <p className="text-sm text-muted-1">Enter dollar totals per asset class from Empower's Investments → Holdings → Allocation view.</p>
+            <p className="text-sm text-muted-1">Enter dollar totals per asset class from your provider's allocation view — e.g. Empower's Investments → Holdings → Allocation.</p>
             <div className="grid grid-cols-2 gap-3">
               {SUPPORTED_EMPOWER_CLASSES.map(ac => (
                 <div key={ac}>
