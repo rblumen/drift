@@ -4,13 +4,14 @@ import { ALL_ASSET_CLASSES } from '../engine/types';
 import { BUILTIN_CLASS_MAP, makeClassifier } from '../engine/classify';
 import { isChildClass, isParentClass, childrenOf } from '../engine/hierarchy';
 import { accountBucket } from '../engine/placement';
-import { AC_COLOR, AC_LABEL, BUCKET_COLOR, BUCKET_LABEL } from './fmt';
+import { AC_COLOR, AC_LABEL, ALLOCATION_FAMILIES, BUCKET_COLOR, BUCKET_LABEL, FAMILY_COLOR, FAMILY_OF, fmtUsd } from './fmt';
 import { PieChart } from './PieChart';
 import { StackedBars } from './StackedBars';
 import type { StackedRow, LegendEntry } from './StackedBars';
 import { detectTargetDateFund } from '../data/targetDateFunds';
 import { HelpBox, HelpDef, HelpSection } from './HelpBox';
-import { IconX, IconCheck } from './icons';
+import { IconX, IconCheck, IconPencil } from './icons';
+import { Card, StatusChip } from './card';
 
 const PLACEMENT_BUCKETS: PlacementBucket[] = ['TAX_ADVANTAGED', 'TAXABLE', 'EDUCATION'];
 
@@ -66,16 +67,28 @@ interface EditState {
   draft: Partial<Record<AssetClass, string>>; // string so we can have partial % inputs
 }
 
+// Decomposition weight bar. Segments roll up to the five brand FAMILIES and use
+// the family data-viz ramp (design 3c: "decomposition weight bars use the brand
+// data-viz ramp instead of the Tailwind rainbow"). The per-class breakdown still
+// shows AC_COLOR swatches inside DecompEditor — this bar is the family summary.
 function DecompWeightBars({ decomp }: { decomp: FundDecomposition }) {
-  const total = Object.values(decomp).reduce((s, v) => s + (v ?? 0), 0);
+  const fam: Record<string, number> = {};
+  let total = 0;
+  for (const [ac, w] of Object.entries(decomp) as [AssetClass, number][]) {
+    if (!w) continue;
+    const f = FAMILY_OF[ac] ?? 'ALTS';
+    fam[f] = (fam[f] ?? 0) + w;
+    total += w;
+  }
   if (total === 0) return null;
+  // Canonical spoke order (fmt.ts) so bars read consistently with the charts.
   return (
-    <div className="flex h-3 rounded overflow-hidden w-40">
-      {(Object.entries(decomp) as [AssetClass, number][]).map(([ac, w]) => (
+    <div className="flex h-[5px] rounded-[3px] overflow-hidden w-[170px]">
+      {ALLOCATION_FAMILIES.filter(f => fam[f] > 0).map(f => (
         <div
-          key={ac}
-          title={`${AC_LABEL[ac] ?? ac}: ${Math.round(w * 100)}%`}
-          style={{ width: `${(w / total) * 100}%`, background: AC_COLOR[ac] ?? '#ccc' }}
+          key={f}
+          title={`${f}: ${Math.round((fam[f] / total) * 100)}%`}
+          style={{ width: `${(fam[f] / total) * 100}%`, background: FAMILY_COLOR[f] ?? '#ccc' }}
         />
       ))}
     </div>
@@ -176,6 +189,16 @@ export function ClassifyPanel({
   decompositions, setDecompositions,
 }: Props) {
   const [editState, setEditState] = useState<EditState | null>(null);
+
+  // Total market value held under each unique ticker — feeds the "$ at stake"
+  // header meta (sum of unclassified value). Per-row Value display was removed
+  // by owner decision on PR #197; the rollup is all this step needs.
+  const valueByTicker = new Map<string, number>();
+  for (const p of positions) {
+    const t = p.ticker.toUpperCase();
+    valueByTicker.set(t, (valueByTicker.get(t) ?? 0) + p.marketValue);
+  }
+  const tickerValue = (t: string) => valueByTicker.get(t.toUpperCase()) ?? 0;
 
   // Build one row per unique ticker across all positions.
   const seen = new Set<string>();
@@ -290,21 +313,19 @@ export function ClassifyPanel({
 
   if (rows.length === 0) {
     return (
-      <div className="space-y-4">
-        <h2 className="text-lg font-semibold text-gray-800">Classify Holdings</h2>
-        <p className="text-sm text-gray-500 py-8 text-center border border-dashed rounded-lg">
+      <div className="flex flex-col gap-4">
+        <p className="text-sm text-muted-1 py-8 text-center border border-dashed border-line rounded-xl">
           No positions loaded yet. Import positions to see their classifications here.
         </p>
       </div>
     );
   }
 
+  // $ at stake = market value of everything still unclassified (design 3c meta).
+  const unclassifiedValue = unmapped.reduce((s, r) => s + tickerValue(r.ticker), 0);
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-baseline justify-between">
-        <h2 className="text-lg font-semibold text-gray-800">Classify Holdings</h2>
-        <span className="text-sm text-gray-500">{rows.length} ticker{rows.length !== 1 ? 's' : ''}</span>
-      </div>
+    <div className="flex flex-col gap-4">
 
       <HelpBox label="About classifying holdings">
         <p>
@@ -351,12 +372,12 @@ export function ClassifyPanel({
       {acSlices.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-[auto_1fr] gap-4 items-start">
           {/* Asset-class pie */}
-          <div className="border border-gray-200 rounded-lg p-4">
+          <div className="border border-line rounded-xl bg-white p-4 shadow-[0_1px_2px_rgba(8,40,85,.04)]">
             <PieChart title="By asset class" slices={acSlices} />
           </div>
 
           {/* Placement stacked bars */}
-          <div className="border border-gray-200 rounded-lg p-4">
+          <div className="border border-line rounded-xl bg-white p-4 shadow-[0_1px_2px_rgba(8,40,85,.04)]">
             <StackedBars
               title="Placement by asset class"
               rows={placementRows}
@@ -368,50 +389,72 @@ export function ClassifyPanel({
 
       {/* ── Unclassified — needs attention ─────────────────────────────────── */}
       {unmapped.length > 0 && (
-        <div className="rounded-lg border border-warn-banner-border overflow-hidden">
-          <div className="bg-warn-bg px-4 py-2 flex items-center gap-2 border-b border-warn-banner-border">
-            <span className="text-warn text-sm font-semibold">
-              ⚠ {unmapped.length} unclassified {unmapped.length === 1 ? 'holding' : 'holdings'}
-            </span>
-            <span className="text-warn text-xs">
-              — excluded from the rebalance until assigned
-            </span>
-          </div>
-          <div className="bg-warn-row-tint">
-            {unmapped.map(row => {
+        <Card
+          title={`Unclassified · ${unmapped.length}`}
+          meta={`${fmtUsd(unclassifiedValue)} at stake · excluded until assigned`}
+        >
+          <div>
+            {unmapped.map((row, i) => {
               const tdfDetect = detectTargetDateFund(row.ticker, row.description);
               const isEditing = editState?.ticker === row.ticker;
               return (
-                <div key={row.ticker} className="border-b border-warn-banner-border last:border-b-0 px-4 py-3">
+                <div
+                  key={row.ticker}
+                  className={`px-4 py-3 bg-warn-row-tint ${i < unmapped.length - 1 ? 'border-b border-line-3' : ''}`}
+                >
                   <div className="flex items-center gap-3">
-                    <span className="font-mono font-semibold text-warn-banner-text w-24 flex-shrink-0">{row.ticker}</span>
-                    <span className="text-warn text-sm truncate flex-1 max-w-[220px]">
+                    <span className="font-mono font-semibold text-brand-ink w-20 flex-shrink-0">{row.ticker}</span>
+                    <span className="text-muted-1 text-[12px] truncate flex-1 max-w-[220px]">
                       {row.description ?? <span className="text-faint">—</span>}
                     </span>
                     <div className="flex items-center gap-2 ml-auto">
+                      {/* Confidence survives on the chip: "estimated" vs "known blend"
+                          (was the old pill's "Known blend (estimated)" distinction). */}
                       {tdfDetect && (
-                        <span className="text-xs text-brand-600 bg-brand-50 px-2 py-0.5 rounded-full">
-                          Known blend{tdfDetect.confidence === 'estimated' ? ' (estimated)' : ''}
-                        </span>
+                        <StatusChip tone="info">
+                          Target-date fund · {tdfDetect.confidence === 'estimated' ? 'estimated' : 'known blend'}
+                        </StatusChip>
                       )}
                       {!isEditing && (
-                        <>
-                          <button
-                            onClick={() => setEditState({ ticker: row.ticker, draft: {} })}
-                            className="text-xs border border-brand-300 text-brand-600 rounded px-2 py-0.5 hover:bg-brand-50"
-                          >
-                            Set as blended fund
-                          </button>
-                          <select
-                            value=""
-                            onChange={e => { if (e.target.value) assign(row.ticker, e.target.value as AssetClass); }}
-                            aria-label={`Assign asset class to ${row.ticker}`}
-                            className={`text-xs border rounded px-1.5 py-0.5 bg-white ${tdfDetect ? 'border-gray-200 text-gray-500' : 'border-warn text-gray-700'}`}
-                          >
-                            <option value="">{tdfDetect ? 'or single class…' : '— select class —'}</option>
-                            <ClassOptions />
-                          </select>
-                        </>
+                        tdfDetect ? (
+                          <>
+                            {/* Info-chip + link (design 3c): the link opens the detected
+                                decomposition in the editor, same action as the old button. */}
+                            <button
+                              onClick={() => setEditState({ ticker: row.ticker, draft: {} })}
+                              className="text-[12px] font-semibold text-brand-600 underline underline-offset-2 hover:text-brand-ink"
+                            >
+                              {tdfDetect.confidence === 'estimated' ? 'Use estimated decomposition' : 'Use known decomposition'}
+                            </button>
+                            <select
+                              value=""
+                              onChange={e => { if (e.target.value) assign(row.ticker, e.target.value as AssetClass); }}
+                              aria-label={`Assign asset class to ${row.ticker}`}
+                              className="text-xs border border-line rounded px-1.5 py-0.5 bg-white text-muted-1"
+                            >
+                              <option value="">or single class…</option>
+                              <ClassOptions />
+                            </select>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => setEditState({ ticker: row.ticker, draft: {} })}
+                              className="text-xs border border-brand-300 text-brand-600 rounded px-2 py-0.5 hover:bg-brand-50"
+                            >
+                              Set as blended fund
+                            </button>
+                            <select
+                              value=""
+                              onChange={e => { if (e.target.value) assign(row.ticker, e.target.value as AssetClass); }}
+                              aria-label={`Assign asset class to ${row.ticker}`}
+                              className="text-xs border border-warn rounded px-1.5 py-0.5 bg-white text-warn"
+                            >
+                              <option value="">— select class —</option>
+                              <ClassOptions />
+                            </select>
+                          </>
+                        )
                       )}
                     </div>
                   </div>
@@ -424,47 +467,46 @@ export function ClassifyPanel({
                     />
                   )}
                   {tdfDetect && !isEditing && (
-                    <div className="mt-1 ml-24 flex items-center gap-2">
+                    <div className="mt-1 ml-20 flex items-center gap-2">
                       <DecompWeightBars decomp={tdfDetect.composition} />
-                      <span className="text-xs text-gray-400">{tdfDetect.label}</span>
+                      <span className="font-mono text-[10.5px] text-muted-3">{tdfDetect.label}</span>
                     </div>
                   )}
                 </div>
               );
             })}
           </div>
-        </div>
+        </Card>
       )}
 
       {/* ── Blended funds (decomposed) ─────────────────────────────────────── */}
       {decomposed.length > 0 && (
-        <div className="space-y-2">
-          <h3 className="text-sm font-medium text-gray-600">Blended funds</h3>
-          <div className="overflow-hidden border border-brand-200 rounded-lg">
-            <div className="overflow-x-auto"><table className="w-full text-sm">
-              <thead className="bg-brand-50 text-xs text-brand-600 uppercase tracking-wide border-b border-brand-200">
-                <tr>
-                  <th className="px-4 py-2 text-left">Ticker</th>
-                  <th className="px-4 py-2 text-left">Description</th>
-                  <th className="px-4 py-2 text-left">Composition</th>
-                  <th className="px-4 py-2 text-left"></th>
+        <Card title={`Blended funds · ${decomposed.length}`}>
+          <div className="px-4 pt-1 pb-2 overflow-x-auto">
+            <table className="w-full text-sm min-w-[560px]">
+              <thead className="font-mono text-[10px] tracking-[.06em] uppercase text-muted-3">
+                <tr className="border-b border-line-2">
+                  <th className="text-left font-normal py-1.5">Ticker</th>
+                  <th className="text-left font-normal py-1.5">Description</th>
+                  <th className="text-left font-normal py-1.5">Composition</th>
+                  <th className="py-1.5"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-brand-50">
+              <tbody>
                 {decomposed.map(row => {
                   const decomp = decompositions[row.ticker]!;
                   const isEditing = editState?.ticker === row.ticker;
                   return (
-                    <tr key={row.ticker} className="hover:bg-brand-50/40">
-                      <td className="px-4 py-2.5 font-mono font-medium text-brand-900">{row.ticker}</td>
-                      <td className="px-4 py-2.5 text-gray-500 truncate max-w-[180px]">
-                        {row.description ?? <span className="text-gray-300">—</span>}
+                    <tr key={row.ticker} className="border-b border-line-3 last:border-b-0 hover:bg-paper">
+                      <td className="py-2 font-mono font-semibold text-brand-ink">{row.ticker}</td>
+                      <td className="py-2 text-muted-1 text-[12px] truncate max-w-[180px]">
+                        {row.description ?? <span className="text-faint">—</span>}
                       </td>
-                      <td className="px-4 py-2.5">
+                      <td className="py-2">
                         {isEditing ? null : (
                           <div className="flex items-center gap-2">
                             <DecompWeightBars decomp={decomp} />
-                            <span className="text-xs text-gray-400">
+                            <span className="font-mono text-[10.5px] text-muted-3">
                               {(Object.entries(decomp) as [AssetClass, number][])
                                 .map(([ac, w]) => `${AC_LABEL[ac] ?? ac} ${Math.round(w * 100)}%`)
                                 .join(' · ')}
@@ -480,22 +522,24 @@ export function ClassifyPanel({
                           />
                         )}
                       </td>
-                      <td className="px-4 py-2.5 whitespace-nowrap">
+                      <td className="py-2 whitespace-nowrap text-right">
                         {!isEditing && (
-                          <div className="flex gap-2">
+                          <div className="flex gap-2 justify-end items-center">
                             <button
                               onClick={() => setEditState({ ticker: row.ticker, draft: {} })}
-                              className="text-xs text-brand-600 border border-brand-200 rounded px-2 py-0.5 hover:bg-brand-50"
+                              title="Edit decomposition"
+                              aria-label={`Edit decomposition for ${row.ticker}`}
+                              className="inline-flex text-muted-2 hover:text-brand-600 transition-colors"
                             >
-                              Edit
+                              <IconPencil size={14} />
                             </button>
                             <button
                               onClick={() => removeDecomp(row.ticker)}
-                              className="inline-flex items-center text-muted-2 hover:text-danger border border-line hover:border-danger-hover-border rounded px-2 py-0.5"
+                              className="inline-flex text-faint-2 hover:text-danger transition-colors"
                               title="Remove decomposition"
                               aria-label={`Remove decomposition for ${row.ticker}`}
                             >
-                              <IconX size={13} />
+                              <IconX size={14} />
                             </button>
                           </div>
                         )}
@@ -504,42 +548,42 @@ export function ClassifyPanel({
                   );
                 })}
               </tbody>
-            </table></div>
+            </table>
           </div>
-          <p className="text-xs text-gray-400">
-            Blended funds count toward allocation totals but are excluded from trade suggestions — their sub-components can't be traded individually.
+          <p className="px-4 pb-3 font-mono text-[10px] text-muted-3">
+            Blended funds count toward allocation totals. The engine may recommend selling a blended fund, but never buying one — buys go to single-class funds (their sub-components can't be bought individually).
           </p>
-        </div>
+        </Card>
       )}
 
       {/* ── All classified holdings ─────────────────────────────────────────── */}
       {classified.length > 0 && (
-        <div className="space-y-2">
-          {(unmapped.length > 0 || decomposed.length > 0) && (
-            <h3 className="text-sm font-medium text-gray-600">Classified holdings</h3>
-          )}
-          <div className="overflow-hidden border border-gray-200 rounded-lg">
-            <div className="overflow-x-auto"><table className="w-full text-sm">
-              <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
-                <tr>
-                  <th className="px-4 py-2 text-left">Ticker</th>
-                  <th className="px-4 py-2 text-left">Description</th>
-                  <th className="px-4 py-2 text-left">Asset class</th>
-                  <th className="px-4 py-2 text-left">Source</th>
-                  <th className="px-4 py-2" />
+        <Card
+          title={`Ticker classifications · ${classified.length} classified`}
+          meta={unmapped.length > 0 ? `Untagged first · ${fmtUsd(unclassifiedValue)} unclassified` : 'Click a class to override'}
+        >
+          <div className="px-4 pt-1 pb-2 overflow-x-auto">
+            <table className="w-full text-sm min-w-[560px]">
+              <thead className="font-mono text-[10px] tracking-[.06em] uppercase text-muted-3">
+                <tr className="border-b border-line-2">
+                  <th className="text-left font-normal py-1.5">Ticker</th>
+                  <th className="text-left font-normal py-1.5">Description</th>
+                  <th className="text-left font-normal py-1.5">Asset class</th>
+                  <th className="text-right font-normal py-1.5">Source</th>
+                  <th className="py-1.5" />
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody>
                 {classified.map(row => {
                   const isEditing = editState?.ticker === row.ticker;
                   return (
                     <Fragment key={row.ticker}>
-                      <tr className={`hover:bg-gray-50 ${isEditing ? 'bg-brand-50/60' : ''}`}>
-                        <td className="px-4 py-2 font-mono font-medium">{row.ticker}</td>
-                        <td className="px-4 py-2 text-gray-500 truncate max-w-[200px]">
-                          {row.description ?? <span className="text-gray-300">—</span>}
+                      <tr className={`border-b border-line-3 last:border-b-0 hover:bg-paper ${isEditing ? 'bg-rail-active' : ''}`}>
+                        <td className="py-2 font-mono font-semibold text-brand-ink">{row.ticker}</td>
+                        <td className="py-2 text-muted-1 text-[12px] truncate max-w-[200px]">
+                          {row.description ?? <span className="text-faint">—</span>}
                         </td>
-                        <td className="px-4 py-2">
+                        <td className="py-2">
                           {isEditing ? (
                             <span className="text-xs text-brand-500 italic">Setting blend…</span>
                           ) : (
@@ -547,30 +591,30 @@ export function ClassifyPanel({
                               value={row.effective ?? ''}
                               onChange={e => assign(row.ticker, e.target.value as AssetClass | '')}
                               aria-label={`Asset class for ${row.ticker}`}
-                              className="border border-gray-200 rounded px-2 py-1 text-sm bg-transparent"
+                              className="border border-line rounded-lg px-2.5 py-1 text-[12px] text-brand-ink bg-paper"
                             >
                               <ClassOptions />
                             </select>
                           )}
                         </td>
-                        <td className="px-4 py-2">
+                        <td className="py-2 text-right whitespace-nowrap">
                           {row.source === 'override' ? (
-                            <span className="inline-flex items-center gap-1.5 text-xs text-brand-600 bg-brand-50 px-2 py-0.5 rounded-full">
-                              Your override
+                            <span className="inline-flex items-center gap-1.5">
+                              <StatusChip tone="info">Override</StatusChip>
                               {!isEditing && (
                                 <button
                                   onClick={() => assign(row.ticker, '')}
-                                  className="inline-flex hover:text-danger"
+                                  className="inline-flex text-muted-2 hover:text-danger"
                                   title="Revert to built-in"
                                   aria-label={`Revert ${row.ticker} to the built-in classification`}
                                 ><IconX size={12} /></button>
                               )}
                             </span>
                           ) : (
-                            <span className="text-xs text-gray-400">Built-in</span>
+                            <StatusChip tone="idle">Built-in</StatusChip>
                           )}
                         </td>
-                        <td className="px-4 py-2 text-right whitespace-nowrap">
+                        <td className="py-2 text-right whitespace-nowrap">
                           {isEditing ? (
                             <button
                               onClick={() => setEditState(null)}
@@ -581,7 +625,7 @@ export function ClassifyPanel({
                           ) : (
                             <button
                               onClick={() => setEditState({ ticker: row.ticker, draft: {} })}
-                              className="text-xs text-gray-400 hover:text-brand-600 hover:underline"
+                              className="text-xs text-muted-3 hover:text-brand-600 hover:underline"
                               title="Define this as a blended fund with multiple asset-class components"
                             >
                               Set as blended
@@ -590,8 +634,8 @@ export function ClassifyPanel({
                         </td>
                       </tr>
                       {isEditing && (
-                        <tr className="bg-brand-50/30">
-                          <td colSpan={5} className="px-4 pb-3">
+                        <tr className="bg-rail-active">
+                          <td colSpan={5} className="pb-3">
                             <DecompEditor
                               initial={row.effective ? { [row.effective]: 1.0 } : {}}
                               onApply={d => applyDecomp(row.ticker, d)}
@@ -605,14 +649,14 @@ export function ClassifyPanel({
                   );
                 })}
               </tbody>
-            </table></div>
+            </table>
           </div>
-          <p className="text-xs text-gray-400">
+          <p className="px-4 pb-3 font-mono text-[10px] text-muted-3">
             Changing the class dropdown overrides the built-in map; removing an override
             {' '}(<IconX size={11} className="inline align-[-1px]" />){' '}reverts it.
             Use "Set as blended" to define a fund-of-funds or balanced fund with multiple asset-class components.
           </p>
-        </div>
+        </Card>
       )}
     </div>
   );
