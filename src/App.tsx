@@ -351,11 +351,12 @@ export default function App() {
         </div>
       )}
 
-      {/* Demo mode banner — info colors (#194 kit). */}
+      {/* Demo mode banner — neutral strip, info tag (#194 kit: the bold
+          tracking tag carries the semantic color, not a tinted box). */}
       {isDemoMode && (
-        <div className="flex items-center justify-between gap-3 px-6 py-1.5 border-b border-line-2 bg-info-bg font-mono text-[11px] text-info">
+        <div className="flex items-center justify-between gap-3 px-6 py-1.5 border-b border-line-2 bg-paper font-mono text-[11px] text-muted-1">
           <span className="flex items-center gap-2.5 min-w-0">
-            <span className="font-semibold tracking-[0.1em] shrink-0">DEMO</span>
+            <span className="font-semibold tracking-[0.1em] text-info shrink-0">DEMO</span>
             <span>Synthetic 5-account sample portfolio. Your saved data is untouched.</span>
           </span>
           <div className="ml-3 flex items-center gap-3 flex-shrink-0">
@@ -368,7 +369,7 @@ export default function App() {
             <button
               onClick={handleExitDemo}
               aria-label="Exit demo and restore your saved portfolio"
-              className="text-brand-300 hover:text-info"
+              className="text-muted-3 hover:text-ink"
             >
               <IconX size={11} />
             </button>
@@ -376,44 +377,49 @@ export default function App() {
         </div>
       )}
 
-      {/* Restored-from-backup banner — warn colors (#194 kit). */}
+      {/* Restored-from-backup banner — neutral strip, warn tag; the "recent
+          changes may be missing" caution keeps the warn tone. */}
       {restoredFromBackup !== null && (
-        <div className="flex items-center justify-between gap-3 px-6 py-1.5 border-b border-line-2 bg-warn-banner-bg font-mono text-[11px] text-warn-banner-text">
+        <div className="flex items-center justify-between gap-3 px-6 py-1.5 border-b border-line-2 bg-paper font-mono text-[11px] text-muted-1">
           <span className="flex items-center gap-2.5 min-w-0">
-            <span className="font-semibold tracking-[0.1em] shrink-0">RESTORED</span>
+            <span className="font-semibold tracking-[0.1em] text-warn shrink-0">RESTORED</span>
             <span>
               Last save couldn't be read — restored from a backup taken{' '}
               {new Date(restoredFromBackup).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
               {', '}
               {new Date(restoredFromBackup).toLocaleDateString([], { month: 'short', day: 'numeric' })}.
-              {' '}Recent changes may be missing. Save a copy to preserve what's here.
+              {' '}<span className="text-warn">Recent changes may be missing.</span> Save a copy to preserve what's here.
             </span>
           </span>
           <button
             onClick={() => setRestoredFromBackup(null)}
             aria-label="Dismiss"
-            className="text-warn hover:text-warn-banner-text flex-shrink-0"
+            className="text-muted-3 hover:text-ink flex-shrink-0"
           >
             <IconX size={11} />
           </button>
         </div>
       )}
 
-      {/* Load error — danger colors (#194 kit). */}
+      {/* Load error — neutral strip, danger tag. */}
       {loadError && (
-        <div className="flex items-center justify-between gap-3 px-6 py-1.5 border-b border-line-2 bg-danger-bg font-mono text-[11px] text-danger">
+        <div className="flex items-center justify-between gap-3 px-6 py-1.5 border-b border-line-2 bg-paper font-mono text-[11px] text-muted-1">
           <span className="flex items-center gap-2.5 min-w-0">
-            <span className="font-semibold tracking-[0.1em] shrink-0">ERROR</span>
+            <span className="font-semibold tracking-[0.1em] text-danger shrink-0">ERROR</span>
             <span>{loadError}</span>
           </span>
-          <button onClick={() => setLoadError(null)} aria-label="Dismiss" className="text-danger hover:text-danger-solid-hover flex-shrink-0"><IconX size={11} /></button>
+          <button onClick={() => setLoadError(null)} aria-label="Dismiss" className="text-muted-3 hover:text-ink flex-shrink-0"><IconX size={11} /></button>
         </div>
       )}
     </>
   );
 
   return (
-    <div className="min-h-screen bg-paper flex flex-col md:flex-row">
+    // Desktop (md+): the app fills the viewport (h-screen) and the CONTENT
+    // COLUMN scrolls, not the page — so the rail (and its footer actions) stay
+    // fully visible on long tabs like Results/Strategy. Mobile keeps normal
+    // page scroll (no fixed height, no inner scroll region).
+    <div className="min-h-screen md:min-h-0 md:h-screen md:overflow-hidden bg-paper flex flex-col md:flex-row">
       {/* Hidden file input for the Load action (shared by rail + mobile). */}
       <input
         ref={loadFileRef}
@@ -437,8 +443,11 @@ export default function App() {
         onHowItWorks={() => setHowItWorksOpen(true)}
       />
 
-      {/* ── Content column ─────────────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col min-w-0 min-h-screen">
+      {/* ── Content column ─────────────────────────────────────────────────────
+          Desktop: the only scroll region (overflow-y-auto inside the h-screen
+          shell) — context bar, banners, panel, and app footer scroll together
+          while the rail stays put. Mobile: plain block flow, page scrolls. */}
+      <div className="flex-1 flex flex-col min-w-0 min-h-screen md:min-h-0 md:h-full md:overflow-y-auto">
 
         {/* Mobile top header (< md): compact wordmark + the four actions, so
             the rail's affordances stay reachable on phones (#142). */}

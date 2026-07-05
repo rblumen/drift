@@ -50,9 +50,13 @@ export function WorkflowRail({
   onSave, onLoad, onReset, onHowItWorks,
 }: Props) {
   return (
-    <div className="hidden md:flex flex-none w-[218px] bg-white border-r border-line flex-col">
+    // Full height inside the h-screen desktop shell (App.tsx): wordmark header
+    // top, footer pinned to the rail's bottom via flex. If the nav ever exceeds
+    // the viewport height, the NAV region alone scrolls internally (min-h-0 +
+    // overflow-y-auto) — the header and the footer actions never scroll away.
+    <div className="hidden md:flex flex-none w-[218px] h-full bg-white border-r border-line flex-col">
       {/* Header — wordmark, keeps the back-to-landing click + title. */}
-      <div className="px-[18px] pt-4 pb-3.5 border-b border-line-2">
+      <div className="px-[18px] pt-4 pb-3.5 border-b border-line-2 flex-none">
         <button
           onClick={onBackHome}
           className="p-0 border-0 bg-transparent cursor-pointer flex items-center"
@@ -67,7 +71,7 @@ export function WorkflowRail({
         role="tablist"
         aria-label="Workflow sections"
         aria-orientation="vertical"
-        className="flex-1 flex flex-col gap-0.5 py-3.5"
+        className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-0.5 py-3.5"
       >
         <span className="font-mono text-[9.5px] tracking-[.14em] uppercase text-faint px-5 pb-2">
           Workflow
@@ -122,8 +126,9 @@ export function WorkflowRail({
         })}
       </nav>
 
-      {/* Footer — four global actions + privacy line. */}
-      <div className="px-[18px] pt-3 pb-3.5 border-t border-line-2 flex flex-col gap-2.5">
+      {/* Footer — four global actions + privacy line. Pinned to the rail's
+          bottom; never scrolls (flex-none, nav absorbs overflow). */}
+      <div className="px-[18px] pt-3 pb-3.5 border-t border-line-2 flex flex-col gap-2.5 flex-none">
         <div className="flex gap-1.5">
           <button
             onClick={onSave}
