@@ -661,8 +661,14 @@ export default function App() {
               Share feedback
             </a>
             <span>Not investment advice</span>
-            {(__APP_VERSION__ && __APP_VERSION__ !== '0.0.0') && (
-              <span>v{__APP_VERSION__}{__COMMIT_SHA__ && __COMMIT_SHA__ !== 'unknown' ? ` (${__COMMIT_SHA__})` : ''}</span>
+            {__IS_RELEASE__ ? (
+              (__APP_VERSION__ && __APP_VERSION__ !== '0.0.0') && (
+                <span>v{__APP_VERSION__}{__COMMIT_SHA__ && __COMMIT_SHA__ !== 'unknown' ? ` (${__COMMIT_SHA__})` : ''}</span>
+              )
+            ) : (
+              // #200: non-release builds (local dev, PR previews, `main`) must
+              // never claim a release version — show the SHA only, tagged "dev".
+              <span>dev{__COMMIT_SHA__ && __COMMIT_SHA__ !== 'unknown' ? ` (${__COMMIT_SHA__})` : ''}</span>
             )}
           </span>
         </footer>
