@@ -290,11 +290,28 @@ export interface RebalanceResult {
   };
 }
 
+/** One thing occupying a spillover flag's preferred bucket (issue #199) — the
+ *  frozen or already-claimed value that left no room for the spilled class.
+ *  LOCKED_POSITION amounts come from the per-class locked value; `tickers` is a
+ *  best-effort label of which holdings that is. HELD_IN_BAND is a within-tolerance
+ *  class whose whole current value is frozen (CASH renders as plain "cash").
+ *  PLACED_CLASS is another class the greedy fill already placed there. */
+export type SpilloverOccupant =
+  | { kind: 'LOCKED_ACCOUNT'; accountId: string; amountUsd: number }
+  | { kind: 'LOCKED_POSITION'; assetClass: AssetClass; tickers: string[]; amountUsd: number }
+  | { kind: 'HELD_IN_BAND'; assetClass: AssetClass; amountUsd: number }
+  | { kind: 'PLACED_CLASS'; assetClass: AssetClass; amountUsd: number };
+
 export type Flag =
   | { kind: 'WITHIN_TOLERANCE'; assetClass: AssetClass }
   | { kind: 'TAXABLE_SALE'; accountId: string; assetClass: AssetClass; amountUsd: number }
   | { kind: 'UNMAPPED_HOLDING'; ticker: string }
-  | { kind: 'PLACEMENT_SPILLOVER'; assetClass: AssetClass; bucket: PlacementTarget; amountUsd: number }
+  /** preferredBucket/occupiedBy (issue #199): the higher-priority home that
+   *  overflowed and what fills it, so the UI can explain *why* the class spilled.
+   *  Absent when the placement ran without occupancy context or nothing but the
+   *  class's own placement occupies the preferred bucket. */
+  | { kind: 'PLACEMENT_SPILLOVER'; assetClass: AssetClass; bucket: PlacementTarget; amountUsd: number;
+      preferredBucket?: PlacementTarget; occupiedBy?: SpilloverOccupant[] }
   | { kind: 'REVISIT_PLACEMENT'; taxableShare: number; fixedIncomeTarget: number }
   | { kind: 'NO_ELIGIBLE_ACCOUNT'; assetClass: AssetClass; amountUsd: number }
   | { kind: 'EXCESS_CASH'; amountUsd: number }

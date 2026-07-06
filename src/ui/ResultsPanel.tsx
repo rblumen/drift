@@ -25,6 +25,7 @@ import type { RadarDatum } from './RadarChart';
 import type { BulletDatum } from './BulletBars';
 import { AllocationPlot } from './AllocationPlot';
 import { downloadReport } from './exportReport';
+import { spilloverReason } from './spilloverCopy';
 import { HelpBox, HelpDef, HelpSection, HelpTip } from './HelpBox';
 import { Card, Stat } from './card';
 import type { Reminder } from '../ingest/schema';
@@ -191,11 +192,15 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
     );
   }
   if (flag.kind === 'PLACEMENT_SPILLOVER') {
+    // #199: name what occupies the preferred bucket when the engine says so;
+    // otherwise fall back to the bare one-liner.
+    const reason = spilloverReason(flag, accounts);
     return (
       <div className="bg-brand-50 border border-brand-200 rounded-lg px-4 py-3 text-sm text-brand-700">
         <strong>Placement spillover:</strong>{' '}
         {fmtUsd(flag.amountUsd)} of {AC_LABEL[flag.assetClass]} placed in a{' '}
-        {flag.bucket.toLowerCase().replace('_', '-')} account (preferred bucket full).
+        {flag.bucket.toLowerCase().replace('_', '-')} account
+        {reason ? <> — {reason}.</> : <> (preferred bucket full).</>}
       </div>
     );
   }
