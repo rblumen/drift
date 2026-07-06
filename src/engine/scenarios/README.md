@@ -117,7 +117,7 @@ as fixtures land.
 | 7. Minimize taxable sells | ✅ | ✅ | `07-minimize-taxable-sells/equity-sell-redirected-to-tax-advantaged`, `…/forced-taxable-sell-when-no-alternative` |
 | 8. Distribute by remaining capacity | ✅ | ✅ | `08-capacity-distribution/sleeve-splits-largest-account-first`, `…/capacity-tie-resolved-deterministically` |
 | 9. `concentrateClasses` first | ✅ | ✅ | `09-concentrate-classes/concentrate-account-filled-first`, `…/concentrate-account-too-small-spills` |
-| 10. Minimize trades | ⬜ | ⬜ | — |
+| 10. Minimize trades | ✅ | ✅ | `10-minimize-trades/composite-buy-collapses-contribution`, `…/composite-buy-respects-target-band` (composite buys, #49; Step 8.6 consolidation still unfixtured) |
 | 11. Minimize accounts touched | ⬜ | ⬜ | — |
 
 ### Regression vault

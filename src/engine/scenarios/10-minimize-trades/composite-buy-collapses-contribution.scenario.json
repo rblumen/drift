@@ -1,0 +1,38 @@
+{
+  "name": "composite-buy-collapses-contribution",
+  "description": "Goal 10 (issue #49): a contribution whose buy direction matches a held blended fund's composition collapses into one composite purchase of the fund instead of three per-class buys",
+  "principle": 10,
+  "accounts": [
+    { "id": "k401", "name": "Empower 401k", "institution": "Empower", "type": "FOUR_OH_ONE_K", "newCash": 10000 }
+  ],
+  "holdings": [
+    { "accountId": "k401", "ticker": "FDKLX", "marketValue": 100000 }
+  ],
+  "strategy": {
+    "targets": {
+      "US_TOTAL_MARKET": 0.0, "US_LARGE_CAP": 0.6, "US_MID_CAP": 0.0, "US_SMALL_CAP": 0.0,
+      "DEVELOPED_INTL": 0.3, "DEVELOPED_EUROPE": 0.0, "DEVELOPED_PACIFIC": 0.0, "EMERGING_INTL": 0.0,
+      "FIXED_INCOME": 0.1, "US_TREASURY": 0.0, "US_CORP_BOND": 0.0, "MUNI_BOND": 0.0, "TIPS": 0.0, "INTL_BOND": 0.0,
+      "REAL_ESTATE": 0.0, "ALTERNATIVES": 0.0, "CRYPTO": 0.0, "PRECIOUS_METALS": 0.0, "CASH": 0.0
+    },
+    "placement": {},
+    "toleranceAbs": 0.0,
+    "toleranceRel": 0.25,
+    "minTradeUsd": 250
+  },
+  "decompositions": {
+    "FDKLX": { "US_LARGE_CAP": 0.6, "DEVELOPED_INTL": 0.3, "FIXED_INCOME": 0.1 }
+  },
+  "expected": {
+    "requiredTrades": [
+      { "accountId": "k401", "assetClass": "US_LARGE_CAP",   "deltaUsd": 6000 },
+      { "accountId": "k401", "assetClass": "DEVELOPED_INTL", "deltaUsd": 3000 },
+      { "accountId": "k401", "assetClass": "FIXED_INCOME",   "deltaUsd": 1000 }
+    ],
+    "flags": [
+      { "kind": "BLENDED_FUND_BOUGHT", "accountId": "k401", "ticker": "FDKLX" }
+    ],
+    "netByAccount": { "k401": 10000 },
+    "tradeCountByAccount": { "k401": 3 }
+  }
+}

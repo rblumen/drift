@@ -112,6 +112,7 @@ export const FLAG_META: Record<Flag['kind'], { tag: string; severity: FlagSeveri
   EXCESS_CASH:                     { tag: 'CASH',        severity: 'warn'   },
   WITHDRAWAL_SHORTFALL:            { tag: 'SHORTFALL',   severity: 'warn'   },
   BLENDED_FUND_SOLD:               { tag: 'BLEND SOLD',  severity: 'info'   },
+  BLENDED_FUND_BOUGHT:             { tag: 'BLEND BUY',   severity: 'info'   },
   BLENDED_FUND_OVERSELL:           { tag: 'OVERSELL',    severity: 'danger' },
   MISSING_COST_BASIS:              { tag: 'COST BASIS',  severity: 'warn'   },
   FIVE_TWENTY_NINE_REBALANCE_LIMIT:{ tag: '529',         severity: 'warn'   },
@@ -255,6 +256,16 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
         <strong>Blended fund sold:</strong>{' '}
         {fmtUsd(flag.amountUsd)} of <code className="font-mono">{flag.ticker}</code> in{' '}
         <em>{acctName(flag.accountId)}</em> sold proportionally. Lock the position to preserve it.
+      </div>
+    );
+  }
+  if (flag.kind === 'BLENDED_FUND_BOUGHT') {
+    return (
+      <div className="bg-brand-50 border border-brand-200 rounded-lg px-4 py-3 text-sm text-brand-700">
+        <strong>Blended fund bought:</strong>{' '}
+        {fmtUsd(flag.amountUsd)} of <code className="font-mono">{flag.ticker}</code> in{' '}
+        <em>{acctName(flag.accountId)}</em> — one composite purchase covering several
+        asset-class buys that match the fund's composition.
       </div>
     );
   }
@@ -830,6 +841,7 @@ export function ResultsPanel({
     ...flags.filter(f => f.kind === 'TAXABLE_SALE'),
     ...flags.filter(f => f.kind === 'BLENDED_FUND_OVERSELL'),
     ...flags.filter(f => f.kind === 'BLENDED_FUND_SOLD'),
+    ...flags.filter(f => f.kind === 'BLENDED_FUND_BOUGHT'),
     ...flags.filter(f => f.kind === 'PLACEMENT_SPILLOVER'),
     ...flags.filter(f => f.kind === 'MISSING_COST_BASIS'),
   ];

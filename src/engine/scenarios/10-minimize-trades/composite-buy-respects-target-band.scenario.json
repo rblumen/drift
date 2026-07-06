@@ -1,0 +1,36 @@
+{
+  "name": "composite-buy-respects-target-band",
+  "description": "Goal 10 (issue #49, edge): a composite buy that would force a material over-buy of a 0%-target class (the fund's cash sleeve) is rejected — the contribution deploys as individual per-class buys instead",
+  "principle": 10,
+  "accounts": [
+    { "id": "k401", "name": "Empower 401k", "institution": "Empower", "type": "FOUR_OH_ONE_K", "newCash": 50000 }
+  ],
+  "holdings": [
+    { "accountId": "k401", "ticker": "FDKC",  "marketValue": 5000 },
+    { "accountId": "k401", "ticker": "FXAIX", "marketValue": 15100 },
+    { "accountId": "k401", "ticker": "VXUS",  "marketValue": 7550 },
+    { "accountId": "k401", "ticker": "BND",   "marketValue": 2500 }
+  ],
+  "strategy": {
+    "targets": {
+      "US_TOTAL_MARKET": 0.0, "US_LARGE_CAP": 0.6, "US_MID_CAP": 0.0, "US_SMALL_CAP": 0.0,
+      "DEVELOPED_INTL": 0.3, "DEVELOPED_EUROPE": 0.0, "DEVELOPED_PACIFIC": 0.0, "EMERGING_INTL": 0.0,
+      "FIXED_INCOME": 0.1, "US_TREASURY": 0.0, "US_CORP_BOND": 0.0, "MUNI_BOND": 0.0, "TIPS": 0.0, "INTL_BOND": 0.0,
+      "REAL_ESTATE": 0.0, "ALTERNATIVES": 0.0, "CRYPTO": 0.0, "PRECIOUS_METALS": 0.0, "CASH": 0.0
+    },
+    "placement": {},
+    "toleranceAbs": 0.0,
+    "toleranceRel": 0.25,
+    "minTradeUsd": 250
+  },
+  "decompositions": {
+    "FDKC": { "US_LARGE_CAP": 0.58, "DEVELOPED_INTL": 0.29, "FIXED_INCOME": 0.10, "CASH": 0.03 }
+  },
+  "expected": {
+    "absentFlags": [
+      { "kind": "BLENDED_FUND_BOUGHT" }
+    ],
+    "netByAccount": { "k401": 50000 },
+    "tradeCountByAccount": { "k401": 3 }
+  }
+}

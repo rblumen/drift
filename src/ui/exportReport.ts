@@ -274,6 +274,7 @@ export function buildHtml(result: RebalanceResult, accounts: Account[], resolved
     ...flags.filter(f => f.kind === 'TAXABLE_SALE'),
     ...flags.filter(f => f.kind === 'BLENDED_FUND_OVERSELL'),
     ...flags.filter(f => f.kind === 'BLENDED_FUND_SOLD'),
+    ...flags.filter(f => f.kind === 'BLENDED_FUND_BOUGHT'),
     ...flags.filter(f => f.kind === 'PLACEMENT_SPILLOVER'),
     ...flags.filter(f => f.kind === 'NO_ELIGIBLE_ACCOUNT'),
   ];
@@ -294,7 +295,9 @@ export function buildHtml(result: RebalanceResult, accounts: Account[], resolved
     if (f.kind === 'TAXABLE_SALE')
       return `<div class="flag flag-warn"><strong>Taxable sale:</strong> Selling ${fmtUsd(f.amountUsd)} of ${esc(AC_LABEL[f.assetClass])} in <em>${esc(acctName(f.accountId))}</em> may trigger a capital gain. Review before executing.</div>`;
     if (f.kind === 'BLENDED_FUND_SOLD')
-      return `<div class="flag flag-blue"><strong>Blended fund sold:</strong> ${fmtUsd(f.amountUsd)} of <code>${esc(f.ticker)}</code> in <em>${esc(acctName(f.accountId))}</em> sold proportionally to fix the household allocation. The engine sells blended funds when drift demands but does not buy them back, so repeated rebalances will trend your allocation away from this position.</div>`;
+      return `<div class="flag flag-blue"><strong>Blended fund sold:</strong> ${fmtUsd(f.amountUsd)} of <code>${esc(f.ticker)}</code> in <em>${esc(acctName(f.accountId))}</em> sold proportionally to fix the household allocation. Lock the position to preserve it.</div>`;
+    if (f.kind === 'BLENDED_FUND_BOUGHT')
+      return `<div class="flag flag-blue"><strong>Blended fund bought:</strong> ${fmtUsd(f.amountUsd)} of <code>${esc(f.ticker)}</code> in <em>${esc(acctName(f.accountId))}</em> — one composite purchase covering several asset-class buys that match the fund's composition.</div>`;
     if (f.kind === 'BLENDED_FUND_OVERSELL')
       return `<div class="flag flag-red"><strong>Blended fund over-sell:</strong> Selling <code>${esc(f.ticker)}</code> in <em>${esc(acctName(f.accountId))}</em> forced an extra ${fmtUsd(f.amountUsd)} of ${esc(AC_LABEL[f.assetClass])} to be sold, with no non-blended ticker available to buy it back.</div>`;
     if (f.kind === 'PLACEMENT_SPILLOVER')

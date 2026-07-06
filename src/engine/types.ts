@@ -173,6 +173,13 @@ export interface Strategy {
    *  recommending any taxable-account sale. Set false to disable the redirect and
    *  surface TAXABLE_REBALANCE_AVOIDABLE flags showing the gains that could be saved. */
   preferTaxAdvantagedRebalance?: boolean;
+  /** When true (default), Step 8.8 may collapse several per-class buys in an account
+   *  into a single purchase of a blended fund (TDF, balanced fund) the account
+   *  already holds, when the fund's known composition covers the buy direction
+   *  (issue #49). Only funds currently held in the account with a decomposition are
+   *  candidates — the engine never invents a fund the user doesn't own. Set false
+   *  to always emit per-class individual buys. */
+  preferCompositeBuys?: boolean;
   /** Tax-adjusted allocation mode (issue #7). When enabled, account balances are
    *  scaled to their after-tax values before drift detection and target sizing,
    *  so a "60/40" allocation refers to 60/40 of *after-tax* wealth rather than
@@ -202,7 +209,8 @@ export interface Trade {
   inTaxableAccount: boolean;
   /** Blended-fund routing hint (issue #40). When set, the resolver routes this
    *  trade to the named ticker unconditionally. Used by Step 8.7 to bind sub-class
-   *  sells to the specific blended fund being proportionally liquidated. */
+   *  sells to the specific blended fund being proportionally liquidated, and by
+   *  Step 8.8 (issue #49) to bind composite-buy legs to the blended fund bought. */
   forceTicker?: string;
   /** Tickers the resolver must NOT consider for this trade. Set by Step 8.7 on
    *  compensating buys so the buy-back of an over-sold sub-class can't get routed
@@ -308,11 +316,16 @@ export type Flag =
    *  allocation drifts. amountUsd is the uncompensated over-sell. */
   | { kind: 'BLENDED_FUND_OVERSELL'; accountId: string; ticker: string; assetClass: AssetClass; amountUsd: number }
   /** Blended funds (#40): informational disclosure that the engine sold part of
-   *  a blended fund this run. The engine has no symmetric buy mechanism for
-   *  blended funds, so repeated rebalances will trend the allocation away from
-   *  this position over time. Use position-level locking if you want a specific
-   *  blended-fund holding preserved. amountUsd is the fund-level sale total. */
+   *  a blended fund this run. Composite buys (#49, Step 8.8) provide the symmetric
+   *  buy mechanism, so a fund the household's buy direction still fits will be
+   *  replenished on later rebalances rather than trending toward depletion. Use
+   *  position-level locking if you want a specific blended-fund holding
+   *  preserved unconditionally. amountUsd is the fund-level sale total. */
   | { kind: 'BLENDED_FUND_SOLD'; accountId: string; ticker: string; amountUsd: number }
+  /** Blended funds (#49): informational — Step 8.8 routed a multi-class buy through
+   *  a blended fund already held in the account, collapsing several per-class buys
+   *  into one composite purchase. amountUsd is the fund-level buy total. */
+  | { kind: 'BLENDED_FUND_BOUGHT'; accountId: string; ticker: string; amountUsd: number }
   /** Tax adjustment (#7): a taxable-account position is missing costBasis while
    *  tax-adjusted allocation is enabled. The engine fell back to B = V (no
    *  haircut, conservative) for this position. Filling in basis will produce a
