@@ -9,7 +9,7 @@ import { WeightPie } from './WeightPie';
 import type { WeightSlice } from './WeightPie';
 import { HelpBox, HelpDef, HelpSection, HelpTip } from './HelpBox';
 import { Card } from './card';
-import { IconChevronDown, IconChevronRight, IconCheck } from './icons';
+import { IconChevronDown, IconChevronRight, IconCheck, IconLockSplit, IconLockSplitOpen } from './icons';
 
 // One selectable placement option: a value plus its display label and nesting depth.
 // depth 1 rows are specific-account leaves shown indented under their tax tier (#89 Phase 2).
@@ -711,9 +711,10 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
 
         <HelpSection title="Target allocation">
           <HelpDef term="US equity (57.5% default)">
-            Set via a single "US Total Market" handle (linked mode) or per cap-class. Unlink to set
-            custom Large/Mid/Small proportions; re-linking locks those proportions and scales them
-            together as you adjust the total. A "reset" link restores Russell index weights
+            Set via a single "US Total Market" handle (split locked) or per cap-class. Unlock the
+            split (the lock-over-pie button) to set custom Large/Mid/Small proportions; locking it
+            again freezes those proportions and scales them together as you adjust the total.
+            A "reset" link restores Russell index weights
             (Large Cap 67%, Mid Cap 25%, Small Cap 8%) if you want to return to the standard split.
           </HelpDef>
           <HelpDef term="Fixed Income (20% default)">
@@ -892,15 +893,20 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
                                 type="button"
                                 onClick={() => handleToggleLinked(ac)}
                                 title={isLinked
-                                  ? `Release: edit ${subs.map(s => AC_LABEL[s]).join(' / ')} independently`
-                                  : 'Link: drive the sub-classes from a single total'}
-                                className={`text-xs px-1.5 py-0.5 rounded border transition-colors ${
+                                  ? `Unlock split: edit ${subs.map(s => AC_LABEL[s]).join(' / ')} independently`
+                                  : 'Lock split: drive the sub-classes from a single total, keeping these proportions'}
+                                aria-label={isLinked
+                                  ? `Unlock split: edit ${subs.map(s => AC_LABEL[s]).join(' / ')} independently`
+                                  : 'Lock split: drive the sub-classes from a single total, keeping these proportions'}
+                                className={`inline-flex items-center px-1.5 py-0.5 rounded border transition-colors ${
                                   isLinked
-                                    ? 'border-brand-300 text-brand-600 bg-brand-50 hover:bg-brand-100'
-                                    : 'border-line text-muted-2 hover:border-brand-300 hover:text-brand-600 hover:bg-brand-50'
+                                    ? 'border-brand-300 text-brand-600 bg-brand-50 hover:bg-brand-100 [--knock:#e8f0f9] hover:[--knock:#ccdcf0]'
+                                    : 'border-line text-muted-2 hover:border-brand-300 hover:text-brand-600 hover:bg-brand-50 [--knock:#ffffff] hover:[--knock:#e8f0f9]'
                                 }`}
                               >
-                                {isLinked ? 'linked' : 'link'}
+                                {isLinked
+                                  ? <IconLockSplit knockout="var(--knock)" />
+                                  : <IconLockSplitOpen knockout="var(--knock)" />}
                               </button>
                               {isLinked && !isDefaultSplit(ac, splits[ac]) && (
                                 <span className="text-[10px] text-muted-3">
