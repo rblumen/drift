@@ -8,7 +8,7 @@ import { parseEtradeCsv } from '../ingest/adapters/etrade';
 import { detectFormat } from '../ingest/detect';
 import type { CsvParseResult, MultiAccountResult } from '../ingest/csv';
 import { parseEmpowerCsv, parseEmpowerTotals, SUPPORTED_EMPOWER_CLASSES } from '../ingest/adapters/empower';
-import { AC_LABEL, ACCT_TYPE_COLOR, ACCT_TYPE_LABEL, ACCT_TYPE_TAG_LABEL, fmtUsd } from './fmt';
+import { AC_LABEL, ACCT_TYPE_COLOR, ACCT_TYPE_LABEL, ACCT_TYPE_TAG_LABEL, ACCOUNT_SERIES_COLORS, fmtUsd } from './fmt';
 import { PieChart } from './PieChart';
 import { HelpBox, HelpDef, HelpSection } from './HelpBox';
 import { IconLock, IconLockOpen, IconX, IconPencil, IconChevronDown, IconChevronRight, IconUpload } from './icons';
@@ -61,17 +61,9 @@ const SINGLE_PARSERS: Partial<Record<FileFormat, (text: string, accountId: strin
   empower: parseEmpowerCsv,
 };
 
-// Colours assigned round-robin to accounts in the order they appear.
-const ACCOUNT_COLORS = [
-  '#2e72b4', // brand-400
-  '#38bdf8', // sky-400
-  '#34d399', // emerald-400
-  '#fbbf24', // amber-400
-  '#f87171', // red-400
-  '#a78bfa', // violet-400
-  '#fb923c', // orange-400
-  '#2dd4bf', // teal-400
-];
+// Colours assigned round-robin to accounts in the order they appear — the
+// brand-derived series palette (#194 kit), not bright Tailwind defaults.
+const ACCOUNT_COLORS = ACCOUNT_SERIES_COLORS;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

@@ -8,6 +8,7 @@ import { AC_COLOR, AC_LABEL, BUCKET_LABEL, fmtPct } from './fmt';
 import { WeightPie } from './WeightPie';
 import type { WeightSlice } from './WeightPie';
 import { HelpBox, HelpDef, HelpSection, HelpTip } from './HelpBox';
+import { Card } from './card';
 import { IconChevronDown, IconChevronRight, IconCheck } from './icons';
 
 // One selectable placement option: a value plus its display label and nesting depth.
@@ -123,46 +124,31 @@ function splitComposite(parent: AssetClass, totalPct: number, split: Split): Rec
   return out;
 }
 
+/**
+ * Proportionally rescale a set of percent weights so the given leaf keys sum to
+ * exactly 100. Pure and exported for unit testing (#194 "Normalize to 100%").
+ * Returns a new map with each leaf's value scaled by 100/total and formatted to
+ * one decimal; non-leaf keys are passed through untouched. A total of 0 (nothing
+ * to scale) returns the input unchanged.
+ */
+export function normalizeToHundredWeights(
+  weights: Record<string, string>,
+  leaves: string[],
+): Record<string, string> {
+  const total = leaves.reduce((s, ac) => s + (parseFloat(weights[ac]) || 0), 0);
+  if (total <= 0) return { ...weights };
+  const factor = 100 / total;
+  const out = { ...weights };
+  for (const ac of leaves) out[ac] = ((parseFloat(weights[ac]) || 0) * factor).toFixed(1);
+  return out;
+}
+
 /** True when the split matches the parent's declared default weights (within rounding). */
 function isDefaultSplit(parent: AssetClass, split: Split): boolean {
   const def = CLASS_HIERARCHY[parent]!.defaultWeights;
   return childrenOf(parent).every(c => Math.abs((split[c] ?? 0) - (def[c] ?? 0)) < 0.005);
 }
 
-/**
- * A section with a collapsible body. The heading row toggles open/closed;
- * the title (and optional subtitle) stay visible while collapsed.
- */
-function CollapsibleSection({
-  title,
-  subtitle,
-  defaultOpen = true,
-  children,
-}: {
-  title: string;
-  subtitle?: React.ReactNode;
-  defaultOpen?: boolean;
-  children: React.ReactNode;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div className="space-y-3">
-      <button
-        type="button"
-        onClick={() => setOpen(o => !o)}
-        aria-expanded={open}
-        className="flex w-full items-start gap-2 text-left"
-      >
-        <span className="text-gray-400 leading-5 mt-0.5 inline-flex select-none">{open ? <IconChevronDown size={13} /> : <IconChevronRight size={13} />}</span>
-        <span>
-          <span className="block text-sm font-medium text-gray-700">{title}</span>
-          {subtitle && <span className="block text-xs text-gray-400 mt-0.5">{subtitle}</span>}
-        </span>
-      </button>
-      {open && children}
-    </div>
-  );
-}
 
 interface Props {
   strategy: Strategy;
@@ -575,6 +561,13 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
     setStrategy({ ...strategy, placement: { ...DEFAULT_STRATEGY.placement } });
   }
 
+  // Restore the built-in default target allocation (the #194 "Reset to defaults"
+  // footer control). The useEffect on `strategy` re-seeds weights/splits/composites
+  // from the new targets, so this commits the defaults and lets local state follow.
+  function resetTargetsToDefaults() {
+    setStrategy({ ...strategy, targets: { ...DEFAULT_STRATEGY.targets } });
+  }
+
   // Pie slices reflect the live (uncommitted) weight inputs so the chart updates as you type.
   const targetPieSlices: WeightSlice[] = ALL_ASSET_CLASSES.map(ac => ({
     label:  AC_LABEL[ac],
@@ -594,7 +587,7 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
 
   const { label: riskLabel, color: riskColor } = ((): { label: string; color: string } => {
     if (growthPct < 25) return { label: 'Very Conservative',     color: 'text-info'       };
-    if (growthPct < 45) return { label: 'Conservative',          color: 'text-brand-400'  };
+    if (growthPct < 45) return { label: 'Conservative',          color: 'text-brand-500'  };
     if (growthPct < 65) return { label: 'Moderate',              color: 'text-ok'         };
     if (growthPct < 80) return { label: 'Moderately Aggressive', color: 'text-warn'       };
     if (growthPct < 95) return { label: 'Aggressive',            color: 'text-accent-ink' };
@@ -628,9 +621,79 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
   const subTotalOf = (parent: AssetClass) =>
     childrenOf(parent).reduce((s, c) => s + (parseFloat(weights[c]) || 0), 0);
 
+  // Current household weight (%) for a class or a parent's family. Parents show
+  // their subtotal when expanded (children carry the weight); a standalone/
+  // collapsed class shows its own current weight.
+  const currentPctOf = (ac: AssetClass): number => {
+    if (isParentClass(ac) && expanded[ac]) {
+      return childrenOf(ac).reduce((s, c) => s + (currentWeights[c] ?? 0), 0) * 100;
+    }
+    // A collapsed parent's "current" also folds in any child holdings so the
+    // compare bar reflects the whole family, never an empty parent-only slice.
+    if (isParentClass(ac)) {
+      const own = (currentWeights[ac] ?? 0) * 100;
+      const kids = childrenOf(ac).reduce((s, c) => s + (currentWeights[c] ?? 0), 0) * 100;
+      return own + kids;
+    }
+    return (currentWeights[ac] ?? 0) * 100;
+  };
+
+  // Drift-toned color for the current% readout, matching the Results drift
+  // palette: over target → accent orange, under → brand-500 steel, on → muted.
+  const currentToneStyle = (currentPct: number, targetPct: number): React.CSSProperties => {
+    const drift = currentPct - targetPct;
+    if (drift > 0.05) return { color: '#e8600a' };   // over → accent
+    if (drift < -0.05) return { color: '#1a5fa0' };   // under → brand-500
+    return { color: '#8792a0' };                      // on target → muted-2
+  };
+
+  // The committed target% for a row (what the compare-bar tick sits at). Mirrors
+  // the input value the user sees, so bar and box never disagree.
+  const targetPctOf = (ac: AssetClass): number => {
+    if (isParentClass(ac) && expanded[ac]) return subTotalOf(ac);
+    return parseFloat(weights[ac]) || 0;
+  };
+
+  // Compare-bar cell: track #f1f3f6, a 6px navy current fill, and a 2×12px
+  // #2a3441 target tick. Widths are scaled so the busiest class (~45%) reads
+  // near full — a 50% ceiling keeps small sleeves visible.
+  function CompareBar({ currentPct, targetPct }: { currentPct: number; targetPct: number }) {
+    const SCALE = 50; // % that maps to full bar width
+    const cur = Math.min(currentPct / SCALE, 1) * 100;
+    const tgt = Math.min(targetPct / SCALE, 1) * 100;
+    return (
+      <span className="relative block h-3.5" aria-hidden="true">
+        <span className="absolute left-0 right-0 top-1 h-1.5 rounded-[3px]" style={{ background: '#f1f3f6' }} />
+        <span className="absolute left-0 top-1 h-1.5 rounded-[3px]" style={{ width: `${cur}%`, background: '#0d3e7a' }} />
+        <span className="absolute top-0 h-3 w-0.5" style={{ left: `calc(${tgt}% - 1px)`, background: '#2a3441' }} />
+      </span>
+    );
+  }
+
+  // Normalize to 100% — proportionally rescale every effective-leaf weight so
+  // the targets sum to exactly 100%. A NEW control from the #194 design. Uses
+  // the same commit path as manual edits (skips write only if it can't reach
+  // ~1.0, which normalization guarantees). No-op when everything is already
+  // zero (nothing to scale).
+  function normalizeToHundred() {
+    const total = effectiveLeaves.reduce((s, ac) => s + (parseFloat(weights[ac]) || 0), 0);
+    if (total <= 0) return;
+    const next = normalizeToHundredWeights(weights, effectiveLeaves) as Record<AssetClass, string>;
+    // Keep any linked parent's composite handle in step with its rescaled children.
+    const nextComposites = { ...composites };
+    for (const p of PARENT_CLASSES) {
+      if (expanded[p]) {
+        nextComposites[p] = childrenOf(p)
+          .reduce((s, c) => s + (parseFloat(next[c]) || 0), 0).toFixed(1);
+      }
+    }
+    setWeights(next);
+    setComposites(nextComposites);
+    commitFrom(next, expanded);
+  }
+
   return (
-    <div className="space-y-6">
-      <h2 className="text-lg font-semibold text-gray-800">Strategy</h2>
+    <div className="flex flex-col gap-4">
 
       <HelpBox label="About the strategy">
         <p>
@@ -711,34 +774,48 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
       </HelpBox>
 
       {/* ── Target allocation ────────────────────────────────────────────────── */}
-      <CollapsibleSection title="Target allocation">
+      <Card
+        title="Target allocation"
+        action={
+          <span className="flex items-center gap-3 font-mono text-[10px] text-muted-3">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-sm" style={{ background: '#0d3e7a' }} />Current
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="inline-block w-3 h-0 border-t-2 border-dashed" style={{ borderColor: '#8792a0' }} />Target
+            </span>
+          </span>
+        }
+      >
+        <div className="flex items-stretch">
 
-        {/* Single card: table on the left, pie on the right */}
-        <div className="overflow-hidden border border-gray-200 rounded-lg flex items-stretch">
-
-          {/* ── Allocation table — centred in its half of the card ── */}
-          <div className="flex-1 flex justify-center">
-            <div className="overflow-x-auto"><table className="text-sm">
-              <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
-                <tr>
-                  <th className="px-4 py-2 text-left whitespace-nowrap">Asset class</th>
-                  <th className="px-4 py-2 text-right whitespace-nowrap">Target %</th>
+          {/* ── Allocation table with inline compare bars ── */}
+          <div className="flex-[1.15] min-w-0">
+            <div className="overflow-x-auto px-4 py-1.5"><table className="w-full text-sm">
+              <thead>
+                <tr className="font-mono text-[10px] tracking-[.06em] uppercase text-muted-3 border-b border-line-2">
+                  <th className="py-1.5 text-left whitespace-nowrap font-normal">Asset class</th>
+                  <th className="py-1.5 text-left whitespace-nowrap font-normal">Target %</th>
+                  <th className="py-1.5 pl-3.5 text-left whitespace-nowrap font-normal">Current vs target</th>
+                  <th className="py-1.5 text-right whitespace-nowrap font-normal">Current</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody>
                 {TOP_LEVEL_CLASSES.flatMap(ac => {
                   // ── Standalone class — a single editable row ──
                   if (!isParentClass(ac)) {
+                    const curPct = currentPctOf(ac);
+                    const tgtPct = targetPctOf(ac);
                     return [(
-                      <tr key={ac} className="hover:bg-gray-50">
-                        <td className="px-4 py-1.5">
+                      <tr key={ac} className="border-b border-line-3 hover:bg-paper">
+                        <td className="py-1.5">
                           <div className="flex items-center gap-2 whitespace-nowrap">
                             <span className="w-2 h-2 rounded-sm shrink-0" style={{ backgroundColor: AC_COLOR[ac] }} />
-                            <span className="text-gray-700">{AC_LABEL[ac]}</span>
+                            <span className="font-medium text-brand-ink">{AC_LABEL[ac]}</span>
                           </div>
                         </td>
-                        <td className="px-4 py-1.5 text-right">
-                          <div className="flex items-center justify-end gap-1">
+                        <td className="py-1.5">
+                          <div className="flex items-center gap-1">
                             <input
                               type="number"
                               value={weights[ac]}
@@ -748,10 +825,14 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
                               onChange={e => setWeights({ ...weights, [ac]: e.target.value })}
                               onBlur={commitWeights}
                               aria-label={`${AC_LABEL[ac]} target weight (%)`}
-                              className="w-16 border rounded px-2 py-1 text-right text-sm"
+                              className="w-14 border border-line rounded-[7px] bg-paper px-2 py-1 text-right font-mono text-[12px] text-brand-ink"
                             />
-                            <span className="text-gray-400 text-xs">%</span>
+                            <span className="text-muted-3 text-xs">%</span>
                           </div>
+                        </td>
+                        <td className="py-1.5 pl-3.5 pr-4"><CompareBar currentPct={curPct} targetPct={tgtPct} /></td>
+                        <td className="py-1.5 text-right font-mono text-[12px]" style={currentToneStyle(curPct, tgtPct)}>
+                          {curPct.toFixed(1)}
                         </td>
                       </tr>
                     )];
@@ -771,13 +852,18 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
                   const defaultLabel = ac === 'US_TOTAL_MARKET'
                     ? 'Reset to Russell index weights (Large 67%, Mid 25%, Small 8%)'
                     : 'Reset to default split';
+                  const curPct = currentPctOf(ac);
+                  const tgtPct = targetPctOf(ac);
 
                   const parentRow = (
-                    <tr key={ac} className="hover:bg-gray-50">
-                      <td className="px-4 py-1.5">
+                    <tr key={ac} className="border-b border-line-3 hover:bg-paper">
+                      <td className="py-1.5">
                         <div className="flex items-center gap-2 whitespace-nowrap">
+                          <span className="text-muted-2 inline-flex select-none">
+                            {isExpanded ? <IconChevronDown size={10} /> : <IconChevronRight size={10} />}
+                          </span>
                           <span className="w-2 h-2 rounded-sm shrink-0" style={{ backgroundColor: AC_COLOR[ac] }} />
-                          <span className="text-gray-700">{AC_LABEL[ac]}</span>
+                          <span className="font-medium text-brand-ink">{AC_LABEL[ac]}</span>
                           {isExpanded ? (
                             <>
                               <button
@@ -789,13 +875,13 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
                                 className={`text-xs px-1.5 py-0.5 rounded border transition-colors ${
                                   isLinked
                                     ? 'border-brand-300 text-brand-600 bg-brand-50 hover:bg-brand-100'
-                                    : 'border-gray-200 text-gray-400 hover:border-brand-300 hover:text-brand-600 hover:bg-brand-50'
+                                    : 'border-line text-muted-2 hover:border-brand-300 hover:text-brand-600 hover:bg-brand-50'
                                 }`}
                               >
                                 {isLinked ? 'linked' : 'link'}
                               </button>
                               {isLinked && !isDefaultSplit(ac, splits[ac]) && (
-                                <span className="text-[10px] text-gray-400">
+                                <span className="text-[10px] text-muted-3">
                                   custom ·{' '}
                                   <button
                                     type="button"
@@ -812,7 +898,7 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
                                   type="button"
                                   onClick={() => handleCollapse(ac)}
                                   title="Collapse: fold the sub-classes back into a single target"
-                                  className="text-[10px] text-gray-400 underline hover:text-brand-600"
+                                  className="text-[10px] text-muted-3 underline hover:text-brand-600"
                                 >
                                   merge
                                 </button>
@@ -823,15 +909,15 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
                               type="button"
                               onClick={() => handleExpand(ac)}
                               title={`Split into ${subs.map(s => AC_LABEL[s]).join(' / ')}`}
-                              className="text-xs px-1.5 py-0.5 rounded border border-gray-200 text-gray-400 hover:border-brand-300 hover:text-brand-600 hover:bg-brand-50 transition-colors"
+                              className="text-xs px-1.5 py-0.5 rounded border border-line text-muted-2 hover:border-brand-300 hover:text-brand-600 hover:bg-brand-50 transition-colors"
                             >
                               split
                             </button>
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-1.5 text-right">
-                        <div className="flex items-center justify-end gap-1">
+                      <td className="py-1.5">
+                        <div className="flex items-center gap-1">
                           {isExpanded && isLinked ? (
                             <input
                               type="number"
@@ -842,7 +928,7 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
                               onChange={e => handleCompositeChange(ac, e.target.value)}
                               onBlur={commitWeights}
                               aria-label={`${AC_LABEL[ac]} combined target weight (%)`}
-                              className="w-16 border rounded px-2 py-1 text-right text-sm"
+                              className="w-14 border border-line rounded-[7px] bg-paper px-2 py-1 text-right font-mono text-[12px] text-brand-ink"
                             />
                           ) : isExpanded ? (
                             <input
@@ -852,7 +938,7 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
                               disabled
                               title={`Sum of ${subs.map(s => AC_LABEL[s]).join(' + ')} targets`}
                               aria-label={`${AC_LABEL[ac]} target weight, sum of sub-classes (%)`}
-                              className="w-16 border border-gray-100 rounded px-2 py-1 text-right text-sm text-gray-400 bg-transparent cursor-not-allowed"
+                              className="w-14 border border-line-2 rounded-[7px] px-2 py-1 text-right font-mono text-[12px] text-muted-3 bg-transparent cursor-not-allowed"
                             />
                           ) : (
                             <input
@@ -864,11 +950,15 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
                               onChange={e => setWeights({ ...weights, [ac]: e.target.value })}
                               onBlur={commitWeights}
                               aria-label={`${AC_LABEL[ac]} target weight (%)`}
-                              className="w-16 border rounded px-2 py-1 text-right text-sm"
+                              className="w-14 border border-line rounded-[7px] bg-paper px-2 py-1 text-right font-mono text-[12px] text-brand-ink"
                             />
                           )}
-                          <span className="text-gray-400 text-xs">%</span>
+                          <span className="text-muted-3 text-xs">%</span>
                         </div>
+                      </td>
+                      <td className="py-1.5 pl-3.5 pr-4"><CompareBar currentPct={curPct} targetPct={tgtPct} /></td>
+                      <td className="py-1.5 text-right font-mono text-[12px]" style={currentToneStyle(curPct, tgtPct)}>
+                        {curPct.toFixed(1)}
                       </td>
                     </tr>
                   );
@@ -876,16 +966,21 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
                   if (!isExpanded) return [parentRow];
 
                   // ── Sub-class rows — indented; editable only when unlinked ──
-                  const subRows = subs.map(sub => (
-                    <tr key={sub} className="bg-gray-50/60">
-                      <td className="pl-10 pr-4 py-1">
+                  const subRows = subs.map(sub => {
+                    const subCur = (currentWeights[sub] ?? 0) * 100;
+                    const splitCaption = isLinked && sub === subs[0] && isDefaultSplit(ac, splits[ac])
+                      ? (ac === 'US_TOTAL_MARKET' ? 'split 67 / 25 / 8 · default' : 'default split')
+                      : null;
+                    return (
+                    <tr key={sub} className="border-b border-line-3">
+                      <td className="pl-6 py-1">
                         <span className="flex items-center gap-2 whitespace-nowrap">
                           <span className="w-1.5 h-1.5 rounded-sm shrink-0" style={{ backgroundColor: AC_COLOR[sub] }} />
-                          <span className={`text-xs ${isLinked ? 'text-gray-400' : 'text-gray-600'}`}>{AC_LABEL[sub]}</span>
+                          <span className={`text-xs ${isLinked ? 'text-muted-3' : 'text-muted-1'}`}>{AC_LABEL[sub]}</span>
                         </span>
                       </td>
-                      <td className="px-4 py-1 text-right">
-                        <div className="flex items-center justify-end gap-1">
+                      <td className="py-1">
+                        <div className="flex items-center gap-1">
                           {isLinked ? (
                             <input
                               type="number"
@@ -893,7 +988,7 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
                               readOnly
                               disabled
                               aria-label={`${AC_LABEL[sub]} target weight (%)`}
-                              className="w-16 border border-gray-100 rounded px-2 py-0.5 text-right text-xs text-gray-400 bg-transparent cursor-not-allowed"
+                              className="w-14 border border-line-2 rounded-[7px] px-2 py-0.5 text-right font-mono text-[11.5px] text-muted-3 bg-transparent cursor-not-allowed"
                             />
                           ) : (
                             <input
@@ -905,28 +1000,51 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
                               onChange={e => setWeights({ ...weights, [sub]: e.target.value })}
                               onBlur={commitWeights}
                               aria-label={`${AC_LABEL[sub]} target weight (%)`}
-                              className="w-16 border rounded px-2 py-0.5 text-right text-xs"
+                              className="w-14 border border-line rounded-[7px] bg-paper px-2 py-0.5 text-right font-mono text-[11.5px]"
                             />
                           )}
-                          <span className={`text-xs ${isLinked ? 'text-gray-300' : 'text-gray-400'}`}>%</span>
+                          <span className={`text-xs ${isLinked ? 'text-faint' : 'text-muted-3'}`}>%</span>
                         </div>
                       </td>
+                      <td className="py-1 pl-3.5 pr-4 font-mono text-[10px] text-faint">
+                        {splitCaption}
+                      </td>
+                      <td className="py-1 text-right font-mono text-[11.5px] text-muted-2">
+                        {subCur.toFixed(1)}
+                      </td>
                     </tr>
-                  ));
+                    );
+                  });
 
                   return [parentRow, ...subRows];
                 })}
               </tbody>
               <tfoot>
-                <tr className="border-t border-gray-200">
-                  <td className="px-4 py-2 text-xs font-medium text-gray-500">
-                    Total
-                    {sumOk && (
-                      <span className="ml-2 inline-flex items-center gap-1 font-normal text-ok"><IconCheck size={12} /> sums to 100%</span>
-                    )}
-                  </td>
-                  <td className={`px-4 py-2 text-right text-sm font-semibold ${sumOk ? 'text-ok' : 'text-danger'}`}>
-                    {sum.toFixed(1)}%
+                <tr>
+                  <td colSpan={4} className="pt-2.5">
+                    <div className="flex items-center justify-between border-t border-line-2 pt-2.5">
+                      <span className={`font-mono text-[11px] inline-flex items-center gap-1 ${sumOk ? 'text-ok' : 'text-danger'}`}>
+                        Sum {sum.toFixed(1)}% {sumOk ? <IconCheck size={12} /> : '⚠'}
+                      </span>
+                      <span className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={resetTargetsToDefaults}
+                          title="Restore the built-in default target allocation"
+                          className="font-sans text-[12px] font-medium text-muted-1 bg-white border border-line rounded-[7px] px-2.5 py-1 hover:border-muted-2 transition-colors whitespace-nowrap"
+                        >
+                          Reset to defaults
+                        </button>
+                        <button
+                          type="button"
+                          onClick={normalizeToHundred}
+                          title="Proportionally rescale every target so they sum to exactly 100%"
+                          className="font-sans text-[12px] font-semibold text-white bg-brand-600 border-none rounded-[7px] px-3 py-1 hover:bg-brand-700 transition-colors whitespace-nowrap"
+                        >
+                          Normalize to 100%
+                        </button>
+                      </span>
+                    </div>
                   </td>
                 </tr>
               </tfoot>
@@ -934,14 +1052,14 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
           </div>
 
           {/* ── Vertical divider ── */}
-          <div className="w-px self-stretch bg-gray-100" />
+          <div className="w-px self-stretch bg-line-2" />
 
           {/* ── Pie chart + risk profile — fills remaining space, vertically centred ── */}
-          <div className="flex-1 flex flex-col items-center justify-center gap-5 py-6 px-8">
+          <div className="flex-[0.85] flex flex-col items-center justify-center gap-5 py-6 px-8">
 
             {/* Pie */}
             <div className="flex flex-col items-center gap-2">
-              <span className="text-xs font-medium text-gray-500">Target allocation</span>
+              <span className="font-mono text-[10px] tracking-[.08em] uppercase text-muted-3">Target allocation</span>
               <WeightPie slices={targetPieSlices} size={200} />
             </div>
 
@@ -949,18 +1067,20 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
             <div className="w-full max-w-[200px] space-y-1.5 pt-4 border-t border-gray-100">
               <p className={`text-center text-xs font-semibold ${riskColor}`}>{riskLabel}</p>
               <div className="relative h-2 rounded-full overflow-visible" style={{
-                background: 'linear-gradient(to right, #7dd3fc, #86efac, #fde68a, #fb923c, #f87171)',
+                // Kit tones, conservative → aggressive (#194 color fix): steel →
+                // ok-green → gold → accent → danger.
+                background: 'linear-gradient(to right, #7ba7c2, #1f8a5b, #c9a63f, #e8600a, #b3403a)',
               }}>
                 <div
-                  className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-white border-2 border-gray-500 shadow-sm transition-all"
+                  className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-white border-2 border-muted-1 shadow-sm transition-all"
                   style={{ left: `${Math.min(Math.max(growthPct, 2), 98)}%` }}
                 />
               </div>
-              <div className="flex justify-between text-[10px] text-gray-300 leading-none">
+              <div className="flex justify-between font-mono text-[10px] text-faint leading-none">
                 <span>Conservative</span>
                 <span>Aggressive</span>
               </div>
-              <p className="text-center text-[10px] text-gray-400 leading-none pt-0.5">
+              <p className="text-center font-mono text-[10px] text-muted-3 leading-none pt-0.5">
                 {growthPct.toFixed(0)}% growth · {defensivePct.toFixed(0)}% defensive
               </p>
             </div>
@@ -969,18 +1089,20 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
             <div className="w-full max-w-[200px] space-y-1.5 pt-4 border-t border-gray-100">
               <p className={`text-center text-xs font-semibold ${diversColor}`}>{diversLabel}</p>
               <div className="relative h-2 rounded-full overflow-visible" style={{
-                background: 'linear-gradient(to right, #f87171, #fb923c, #fde68a, #86efac)',
+                // Kit tones, concentrated → diversified (#194 color fix): the risk
+                // ramp reversed — danger → accent → gold → ok-green → steel.
+                background: 'linear-gradient(to right, #b3403a, #e8600a, #c9a63f, #1f8a5b, #7ba7c2)',
               }}>
                 <div
-                  className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-white border-2 border-gray-500 shadow-sm transition-all"
+                  className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-white border-2 border-muted-1 shadow-sm transition-all"
                   style={{ left: `${Math.min(Math.max(100 - concentrationScore, 2), 98)}%` }}
                 />
               </div>
-              <div className="flex justify-between text-[10px] text-gray-300 leading-none">
+              <div className="flex justify-between font-mono text-[10px] text-faint leading-none">
                 <span>Concentrated</span>
                 <span>Diversified</span>
               </div>
-              <p className="text-center text-[10px] text-gray-400 leading-none pt-0.5">
+              <p className="text-center font-mono text-[10px] text-muted-3 leading-none pt-0.5">
                 {activeClasses} of {nLeaves} classes · {maxWeight.toFixed(0)}% largest
               </p>
             </div>
@@ -989,30 +1111,33 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
         </div>
 
         {!sumOk && (
-          <p className="text-xs text-danger">
-            Weights must sum to 100% (±0.1%). Adjust the values above, then click outside to apply.
+          <p className="px-4 pb-3 -mt-1 text-xs text-danger">
+            Weights must sum to 100% (±0.1%). Adjust the values above, then click outside to apply — or use Normalize to 100%.
           </p>
         )}
-      </CollapsibleSection>
+      </Card>
 
       {/* ── Placement rules (editable) ───────────────────────────────────────── */}
-      <CollapsibleSection
+      <Card
         title="Placement rules"
-        subtitle="Preferred account home for each asset class. The engine fills the 1st choice first, then spills into 2nd. Tax-Advantaged can be left broad or drilled into Tax-Deferred (Traditional/401k) vs Tax-Free (Roth/HSA)."
+        meta="Where each class prefers to live"
       >
-        <div className="mb-3 flex justify-end">
+        <div className="px-4 pt-3 flex items-center justify-between gap-3">
+          <p className="text-xs text-muted-1 max-w-xl">
+            Preferred account home for each asset class. The engine fills the 1st choice first, then spills into 2nd. Tax-Advantaged can be left broad or drilled into Tax-Deferred (Traditional/401k) vs Tax-Free (Roth/HSA).
+          </p>
           <button
             type="button"
             onClick={resetPlacementToRecommended}
-            className="text-xs text-brand-600 hover:text-brand-800 hover:underline"
+            className="text-xs text-brand-600 hover:text-brand-800 hover:underline whitespace-nowrap shrink-0"
             title="Overwrite every placement rule with the recommended asset-location defaults (growth → Roth, taxable-coupon bonds → Traditional). Your current selections will be replaced."
           >
             Reset to recommended placement
           </button>
         </div>
-        <div className="overflow-hidden border border-gray-200 rounded-lg">
+        <div className="px-4 py-3">
           <div className="overflow-x-auto"><table className="w-full text-sm">
-            <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
+            <thead className="text-xs text-gray-500 uppercase tracking-wide">
               <tr>
                 <th className="px-4 py-2 text-left">Asset class</th>
                 <th className="px-4 py-2 text-left">
@@ -1099,11 +1224,17 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
             </tbody>
           </table></div>
         </div>
-      </CollapsibleSection>
+      </Card>
 
-      {/* ── Rebalance parameters ─────────────────────────────────────────────── */}
-      <div className="space-y-3">
-        <h3 className="text-sm font-medium text-gray-700">Rebalance parameters</h3>
+      {/* ── Rebalance bands (numeric params + toggles + tax-adjustment) ───────── */}
+      <Card title="Rebalance bands" meta="Bogleheads 5/25">
+      <div className="px-4 py-4 space-y-3">
+        <p className="text-[12.5px] leading-relaxed text-muted-1 max-w-2xl">
+          A class trades only when it drifts more than{' '}
+          <span className="font-mono text-brand-ink">±5pp absolute</span> or{' '}
+          <span className="font-mono text-brand-ink">±25% relative</span> from target. Classes inside
+          their band are left alone — no churn, no dust trades.
+        </p>
         <div className="grid grid-cols-3 gap-4 max-w-2xl">
           <div>
             <label className="block text-xs text-gray-500 mb-1">
@@ -1255,6 +1386,7 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
           taxAdjustedTargetWeights={taxAdjustedTargetWeights}
         />
       </div>
+      </Card>
     </div>
   );
 }

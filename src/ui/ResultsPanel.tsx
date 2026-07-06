@@ -26,10 +26,11 @@ import type { BulletDatum } from './BulletBars';
 import { AllocationPlot } from './AllocationPlot';
 import { downloadReport } from './exportReport';
 import { HelpBox, HelpDef, HelpSection, HelpTip } from './HelpBox';
+import { Card, Stat } from './card';
 import type { Reminder } from '../ingest/schema';
 import { ReminderPanel, daysUntil } from './ReminderPanel';
 import { DRIFT_URL as SHARE_URL } from './site';
-import { IconDownload, IconClock, IconLock, IconChevronDown, IconChevronRight } from './icons';
+import { IconDownload, IconReport, IconClock, IconLock, IconChevronDown, IconChevronRight } from './icons';
 
 // ── Brand palette helpers ─────────────────────────────────────────────────────
 // Using CSS custom props where possible so they respect any overrides in
@@ -57,6 +58,18 @@ const BUY_BG     = '#eaf5ef';
 const SELL_TEXT  = '#b3403a';
 const SELL_BG    = '#fbeeee';
 
+// Turnover for the summary strip (#194 3e): the fraction of household value
+// churned by the rebalance — total absolute trade dollars ÷ household value.
+// Pure and exported so the strip math is unit-testable. Returns { usd, pct };
+// pct is 0 when household value is 0 (avoids divide-by-zero).
+export function computeTurnover(
+  trades: { deltaUsd: number }[],
+  householdValue: number,
+): { usd: number; pct: number } {
+  const usd = trades.reduce((s, t) => s + Math.abs(t.deltaUsd), 0);
+  return { usd, pct: householdValue > 0 ? usd / householdValue : 0 };
+}
+
 interface Props {
   result: RebalanceResult;
   accounts: Account[];
@@ -68,8 +81,75 @@ interface Props {
   onSave?: () => void;
 }
 
-// ── Flag banners ──────────────────────────────────────────────────────────────
+// ── Flag strips + banners ───────────────────────────────────────────────────
 // Semantic alert colors are intentional — they communicate severity, not brand.
+//
+// #194 design 3e: each advisory flag renders as a one-line mono strip with a
+// bold tracking TAG on the left. The tag color carries severity (danger vs
+// warn vs info). "See reasoning" expands the full explanatory message — the same
+// text FlagBanner has always rendered — so no information is lost.
+
+type FlagSeverity = 'danger' | 'warn' | 'info';
+
+// Short tracking tag + severity per flag kind. The tag is a terse label; the
+// FULL message stays reachable via FlagBanner (rendered on expand). WASH_SALE /
+// WITHIN_TOLERANCE aren't surfaced through this list (wash-sale has its own
+// banner; within-tolerance isn't shown), but are mapped for completeness.
+export const FLAG_META: Record<Flag['kind'], { tag: string; severity: FlagSeverity }> = {
+  REVISIT_PLACEMENT:               { tag: 'PLACEMENT',   severity: 'warn'   },
+  TAXABLE_SALE:                    { tag: 'GAIN',        severity: 'warn'   },
+  TAXABLE_REBALANCE_AVOIDABLE:     { tag: 'AVOIDABLE',   severity: 'warn'   },
+  PLACEMENT_SPILLOVER:             { tag: 'SPILLOVER',   severity: 'info'   },
+  UNMAPPED_HOLDING:                { tag: 'UNMAPPED',    severity: 'warn'   },
+  NO_ELIGIBLE_ACCOUNT:             { tag: 'NO ACCOUNT',  severity: 'danger' },
+  PROJECTED_OFF_TARGET:            { tag: 'OFF TARGET',  severity: 'danger' },
+  EXCESS_CASH:                     { tag: 'CASH',        severity: 'warn'   },
+  WITHDRAWAL_SHORTFALL:            { tag: 'SHORTFALL',   severity: 'warn'   },
+  BLENDED_FUND_SOLD:               { tag: 'BLEND SOLD',  severity: 'info'   },
+  BLENDED_FUND_OVERSELL:           { tag: 'OVERSELL',    severity: 'danger' },
+  MISSING_COST_BASIS:              { tag: 'COST BASIS',  severity: 'warn'   },
+  FIVE_TWENTY_NINE_REBALANCE_LIMIT:{ tag: '529',         severity: 'warn'   },
+  WASH_SALE_RISK:                  { tag: 'WASH SALE',   severity: 'danger' },
+  WITHIN_TOLERANCE:                { tag: 'IN BAND',     severity: 'info'   },
+};
+
+// Strip color scheme per severity (mono-strip variant of the kit banner tones).
+const STRIP_STYLE: Record<FlagSeverity, { border: string; bg: string; text: string; tag: string }> = {
+  danger: { border: '#e8b4b4', bg: '#fbeeee', text: '#b3403a', tag: '#b3403a' },
+  warn:   { border: '#f3ddb0', bg: '#fdf6e7', text: '#8a5a04', tag: '#b26205' },
+  info:   { border: '#ccdcf0', bg: '#e8f0f9', text: '#0d3e7a', tag: '#0d3e7a' },
+};
+
+// One advisory flag as a mono strip. Collapsed: tag + "See reasoning". Expanded:
+// reveals the full FlagBanner message (never truncated — the full text remains
+// reachable, satisfying the "no information lost" constraint). Exported for
+// render-testing (#194 stage 4).
+export function FlagStrip({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
+  const [open, setOpen] = useState(false);
+  const meta = FLAG_META[flag.kind];
+  const s = STRIP_STYLE[meta.severity];
+  return (
+    <div className="rounded-[9px] border" style={{ borderColor: s.border, background: s.bg }}>
+      <div className="flex items-center gap-2.5 px-3.5 py-1.5 font-mono text-[11px]" style={{ color: s.text }}>
+        <span className="font-semibold tracking-[.1em] shrink-0" style={{ color: s.tag }}>{meta.tag}</span>
+        <button
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          aria-expanded={open}
+          className="ml-auto underline underline-offset-2 shrink-0"
+          style={{ color: '#0d3e7a' }}
+        >
+          {open ? 'Hide reasoning' : 'See reasoning'}
+        </button>
+      </div>
+      {open && (
+        <div className="px-1.5 pb-1.5">
+          <FlagBanner flag={flag} accounts={accounts} />
+        </div>
+      )}
+    </div>
+  );
+}
 
 function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
   const acctName = (id: string) => accounts.find(a => a.id === id)?.name ?? id;
@@ -643,30 +723,30 @@ function NextStepsSection({
   result, accounts, resolvedTrades, freeCash, plannedWithdrawal,
   reminder, setReminder, onSave,
 }: NextStepsSectionProps) {
-  const card = 'bg-white border border-gray-200 rounded-xl p-5 flex flex-col gap-3';
-  const num  = 'font-mono text-[10.5px] text-brand-400 uppercase tracking-[.08em] mb-1.5';
+  const card = 'bg-white border border-line rounded-xl p-5 flex flex-col gap-3 shadow-[0_1px_2px_rgba(8,40,85,.04)]';
+  const num  = 'font-mono text-[9.5px] text-accent uppercase tracking-[.12em] mb-1.5';
   return (
-    <div className="mt-10 space-y-4">
-      <div className="font-mono text-[11px] text-gray-400 uppercase tracking-[.09em]">Next steps</div>
+    <div className="mt-6 space-y-4">
+      <div className="font-mono text-[11px] text-muted-3 uppercase tracking-[.09em]">Next steps</div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {/* 01 Download */}
         <div className={card}>
           <div>
-            <div className={num}>01</div>
-            <div className="font-semibold text-[14px] text-gray-900">Download your files</div>
+            <div className={num}>01 · Download</div>
+            <div className="font-semibold text-[14px] text-brand-ink">Download your files</div>
           </div>
-          <p className="text-[13px] text-gray-500 leading-relaxed flex-1">
+          <p className="text-[13px] text-muted-1 leading-relaxed flex-1">
             Your trade list as an interactive checklist. Save your portfolio file as a backup before making changes at your broker.
           </p>
           <div className="flex gap-2 flex-wrap">
             <button
               onClick={() => downloadReport(result, accounts, resolvedTrades, freeCash, plannedWithdrawal)}
               className="inline-flex items-center gap-1.5 bg-brand text-white text-[12.5px] font-semibold px-3.5 py-1.5 rounded-lg hover:bg-brand-ink transition-colors">
-              <IconDownload size={14} /> Trade report
+              <IconReport size={14} /> Trade report
             </button>
             {onSave && (
               <button onClick={onSave}
-                className="inline-flex items-center gap-1.5 border border-gray-200 text-gray-600 text-[12.5px] font-medium px-3.5 py-1.5 rounded-lg hover:border-gray-400 transition-colors">
+                className="inline-flex items-center gap-1.5 border border-line text-muted-1 text-[12.5px] font-medium px-3.5 py-1.5 rounded-lg hover:border-muted-2 transition-colors">
                 <IconDownload size={14} /> Portfolio file
               </button>
             )}
@@ -675,22 +755,22 @@ function NextStepsSection({
         {/* 02 Execute */}
         <div className={card}>
           <div>
-            <div className={num}>02</div>
-            <div className="font-semibold text-[14px] text-gray-900">Execute your trades</div>
+            <div className={num}>02 · Execute</div>
+            <div className="font-semibold text-[14px] text-brand-ink">Execute your trades</div>
           </div>
-          <p className="text-[13px] text-gray-500 leading-relaxed flex-1">
+          <p className="text-[13px] text-muted-1 leading-relaxed flex-1">
             Log into each broker account and work through the trades above. Start with sells to free up cash, then place buys.
           </p>
           <div className="flex items-center gap-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-gray-200 flex-none"></span>
-            <span className="font-mono text-[11px] text-gray-400">Happens at your broker — nothing to do here.</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-line flex-none"></span>
+            <span className="font-mono text-[11px] text-muted-3">Happens at your broker — nothing to do here.</span>
           </div>
         </div>
         {/* 03 Schedule */}
         <div className={card}>
           <div>
-            <div className={num}>03</div>
-            <div className="font-semibold text-[14px] text-gray-900">Schedule your next run</div>
+            <div className={num}>03 · Schedule</div>
+            <div className="font-semibold text-[14px] text-brand-ink">Schedule your next run</div>
           </div>
           <ReminderPanel reminder={reminder} setReminder={setReminder} />
         </div>
@@ -767,6 +847,33 @@ export function ResultsPanel({
     })
     .filter(g => g.trades.length > 0 || g.before.length > 0);
 
+  // ── Summary strip metrics (#194 3e) ─────────────────────────────────────────
+  // Turnover: total absolute trade dollars ÷ household value — the fraction of
+  // the portfolio churned by this rebalance. Drift today/after: the largest
+  // |weight − target| across leaf classes, before and after trades. "Out of
+  // band" counts leaf classes NOT flagged WITHIN_TOLERANCE (the engine's own
+  // in-band determination), so the caption matches the engine, not a re-derived
+  // threshold here.
+  const tradeCount   = resolvedTrades.length;
+  const acctsTraded  = new Set(resolvedTrades.map(t => t.accountId)).size;
+  const { usd: turnoverUsd, pct: turnoverPct } = computeTurnover(resolvedTrades, householdValue);
+
+  const inBandClasses = new Set(
+    flags.filter((f): f is Extract<Flag, { kind: 'WITHIN_TOLERANCE' }> => f.kind === 'WITHIN_TOLERANCE')
+      .map(f => f.assetClass),
+  );
+  const leafDrift = (weights: Record<AssetClass, number>) =>
+    ALL_ASSET_CLASSES
+      .filter(ac => !isParentClass(ac))
+      .filter(ac => (weights[ac] ?? 0) > 5e-4 || (targetWeights[ac] ?? 0) > 5e-4)
+      .map(ac => ({ ac, drift: Math.abs((weights[ac] ?? 0) - (targetWeights[ac] ?? 0)) }));
+  const curDrift  = leafDrift(currentWeights);
+  const projDrift = leafDrift(projectedWeights);
+  const driftTodayMax = curDrift.reduce((m, d) => Math.max(m, d.drift), 0);
+  const driftAfterMax = projDrift.reduce((m, d) => Math.max(m, d.drift), 0);
+  const outOfBandToday = curDrift.filter(d => !inBandClasses.has(d.ac) && d.drift > 5e-4).length;
+  const stillOffTarget = flags.some(f => f.kind === 'PROJECTED_OFF_TARGET');
+
   if (householdValue === 0) {
     return (
       <div className="space-y-4">
@@ -823,7 +930,7 @@ export function ResultsPanel({
   const hasBoth = beforeSlices.length > 0 && afterSlices.length > 0;
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-4">
 
       {/* Reminder banner */}
       {showReminderBanner && reminder.nextDueAt !== undefined && (
@@ -852,22 +959,38 @@ export function ResultsPanel({
         </div>
       )}
 
-      {/* Header */}
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-baseline gap-4">
-          <h2 className="text-lg font-semibold text-gray-800">Results</h2>
-          <span className="text-sm text-gray-500">
-            Household value:{' '}
-            <strong className="font-mono text-gray-800 tabular-nums">{fmtUsd(householdValue)}</strong>
-            {result.taxAdjusted && (
-              <span className="ml-3 font-mono tabular-nums" style={{ color: BRAND_2 }}>
-                After tax: <strong>{fmtUsd(result.taxAdjusted.householdValue)}</strong>
-              </span>
-            )}
-          </span>
+      {/* Summary strip — Trades · Turnover · Drift today · Drift after (#194 3e) */}
+      <Card title="Rebalance summary" meta={result.taxAdjusted
+        ? `${fmtUsd(householdValue)} · after tax ${fmtUsd(result.taxAdjusted.householdValue)}`
+        : `Household value ${fmtUsd(householdValue)}`}>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-tint-cell">
+          <Stat
+            label="Trades"
+            value={tradeCount}
+            tone="accent"
+            caption={tradeCount > 0 ? `Across ${acctsTraded} account${acctsTraded === 1 ? '' : 's'}` : 'No trades needed'}
+          />
+          <Stat
+            label="Turnover"
+            value={fmtUsd(turnoverUsd)}
+            caption={`${fmtPct(turnoverPct)} of household`}
+          />
+          <Stat
+            label="Drift today"
+            value={fmtPct(driftTodayMax)}
+            tone="accent"
+            caption={outOfBandToday > 0
+              ? `${outOfBandToday} class${outOfBandToday === 1 ? '' : 'es'} out of band`
+              : 'All classes in band'}
+          />
+          <Stat
+            label="Drift after trades"
+            value={fmtPct(driftAfterMax)}
+            tone={stillOffTarget ? 'warn' : 'ok'}
+            caption={stillOffTarget ? 'Some classes still off' : 'All classes in band'}
+          />
         </div>
-
-      </div>
+      </Card>
 
       <HelpBox label="About these results">
         <p>
@@ -892,11 +1015,11 @@ export function ResultsPanel({
       {/* Wash-sale banner */}
       <WashSaleBanner flags={flags} accounts={accounts} />
 
-      {/* Priority flags */}
+      {/* Priority flags — one-line mono strips with tracking tags (#194 3e) */}
       {importantFlags.length > 0 && (
         <div className="space-y-2">
           {importantFlags.map((f, i) => (
-            <FlagBanner key={i} flag={f} accounts={accounts} />
+            <FlagStrip key={i} flag={f} accounts={accounts} />
           ))}
         </div>
       )}
@@ -1022,13 +1145,18 @@ export function ResultsPanel({
       {/* Funding breakdown */}
       <ContributionSummary summary={contributionSummary} />
 
-      {/* Household allocation */}
+      {/* Household allocation — kit card anatomy; the radar/bar/donut toggle
+          stays inside AllocationViews (do not rebuild), in the card body. */}
       <div className="space-y-2">
-        <div className="overflow-hidden border border-gray-200 rounded-lg">
+        <div className="overflow-hidden border border-line rounded-xl shadow-[0_1px_2px_rgba(8,40,85,.04)]">
+          <div className="flex items-center justify-between gap-3 px-4 py-2 border-b border-line bg-tint">
+            <span className="font-mono text-[10px] tracking-[.12em] uppercase text-[#6b7685]">Household allocation</span>
+            <span className="font-mono text-[10px] text-muted-3">Current vs target · after trades</span>
+          </div>
 
           {/* Visualization: radar/bar/donut toggle + companion drift table (#98),
               with the AllocationPlot below it. */}
-          <div className="p-4 border-b border-gray-100 space-y-4">
+          <div className="p-4 border-b border-line-2 space-y-4">
             {hasAllocation && (
               <AllocationViews
                 view={chartView}
@@ -1147,26 +1275,42 @@ export function ResultsPanel({
             const hasBothPies = before.length > 0 && after.length > 0;
             const locked  = account.locked;
 
+            // Header meta: order count + sell / buy totals (#194 3e).
+            const sellsUsd = acctTrades.filter(t => t.deltaUsd < 0).reduce((s, t) => s + Math.abs(t.deltaUsd), 0);
+            const buysUsd  = acctTrades.filter(t => t.deltaUsd > 0).reduce((s, t) => s + t.deltaUsd, 0);
+            const orderMeta = acctTrades.length > 0
+              ? `${acctTrades.length} order${acctTrades.length === 1 ? '' : 's'} · ${fmtUsd(sellsUsd)} sells / ${fmtUsd(buysUsd)} buys`
+              : hasTransfer ? 'Transfer only' : 'No trades';
+
+            // Placement reasoning as a mono `// comment` inside the card, echoing
+            // the landing "reasoning" block. Derived from the account's most
+            // constrained traded class + its preferred home tag.
+            const primaryTrade = [...acctTrades].sort((a, b) => Math.abs(b.deltaUsd) - Math.abs(a.deltaUsd))[0];
+            const reasoning = primaryTrade
+              ? `// ${AC_LABEL[primaryTrade.assetClass]} ${primaryTrade.deltaUsd > 0 ? 'bought' : 'sold'} here — ${ACCT_TYPE_LABEL[account.type]} is a preferred home for this class`
+              : null;
+
             return (
-              <div key={account.id} className="overflow-hidden border border-gray-200 rounded-lg">
+              <div key={account.id} className="overflow-hidden border border-line rounded-xl shadow-[0_1px_2px_rgba(8,40,85,.04)]">
                 <button
-                  className="w-full px-4 py-2.5 bg-gray-50 flex items-center gap-3 hover:bg-gray-100 transition-colors text-left"
+                  className="w-full px-4 py-2 bg-tint flex items-center gap-3 hover:bg-tint-cell transition-colors text-left border-b border-line"
                   onClick={() => toggleCollapsed(account.id)}
                 >
+                  <span className="text-muted-2 inline-flex shrink-0">{isOpen ? <IconChevronDown size={12} /> : <IconChevronRight size={12} />}</span>
                   <span className="flex-1 flex items-center gap-2 min-w-0">
-                    <span className="text-sm font-medium text-gray-700">{account.name}</span>
-                    <span className="text-xs text-gray-400">{account.institution} · {ACCT_TYPE_LABEL[account.type]}</span>
+                    <span className="font-mono text-[10px] tracking-[.12em] uppercase text-[#6b7685] truncate">{account.name} · {ACCT_TYPE_LABEL[account.type]}</span>
                     {locked && (
-                      <span className="inline-flex items-center gap-1 text-xs text-warn bg-warn-bg border border-warn-banner-border px-1.5 py-0.5 rounded-full">
-                        <IconLock size={12} /> locked
+                      <span className="inline-flex items-center gap-1 font-mono text-[9.5px] uppercase tracking-[.08em] text-warn bg-warn-bg px-1.5 py-0.5 rounded-full">
+                        <IconLock size={11} /> locked
                       </span>
                     )}
                   </span>
+                  <span className="font-mono text-[10px] text-muted-3 shrink-0 tabular-nums hidden sm:inline">{orderMeta}</span>
                   {(acctTrades.length > 0 || hasTransfer) && (
-                    <span className="text-xs text-gray-500 shrink-0 font-mono tabular-nums">
-                      Net:{' '}
+                    <span className="text-[10px] text-muted-3 shrink-0 font-mono tabular-nums">
+                      Net{' '}
                       <span className={
-                        Math.abs(netUsd) < 0.5 ? 'text-gray-500 font-medium'
+                        Math.abs(netUsd) < 0.5 ? 'text-muted-2 font-medium'
                           : netUsd > 0 ? 'text-ok font-medium'
                           : 'font-medium'
                       }
@@ -1175,7 +1319,6 @@ export function ResultsPanel({
                       </span>
                     </span>
                   )}
-                  <span className="text-gray-400 ml-1 inline-flex">{isOpen ? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}</span>
                 </button>
 
                 {isOpen && (
@@ -1213,6 +1356,12 @@ export function ResultsPanel({
                           {withdrawal > 0.5 && <TransferRow kind="withdrawal" amountUsd={withdrawal} />}
                         </tbody>
                       </table></div>
+                    )}
+
+                    {reasoning && (
+                      <p className="px-4 py-2 border-t border-line-2 font-mono text-[10.5px] text-muted-2">
+                        {reasoning}
+                      </p>
                     )}
 
                     {acctTrades.length === 0 && !hasTransfer && (
