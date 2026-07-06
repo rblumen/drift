@@ -74,6 +74,43 @@ export function IconLockOpen(props: IconProps) {
   );
 }
 
+// ── Lock-split toggles — lock over pie (issue #43) ────────────────────────────
+//
+// The Strategy tab's sub-class proportion toggle: a lock superimposed on a
+// pie chart. Geometry is verbatim from the #43 design handoff (final glyph 3c).
+// The lock sits over the pie with a knockout halo — the hasp re-stroked at 3.2
+// and a padded body rect, both painted in the host chip's background color —
+// so the pie reads through the gap. `knockout` is required: pass the chip's
+// current background (a CSS var like 'var(--knock)' lets hover tints track).
+
+export function IconLockSplit({ knockout, ...props }: IconProps & { knockout: string }) {
+  return (
+    <svg {...svgProps(props)}>
+      <circle cx="5.4" cy="5.4" r="4.4" stroke="currentColor" strokeWidth={1.3} />
+      <path d="M5.4 5.4 L5.4 1 A4.4 4.4 0 0 0 1.59 3.2 Z" fill="currentColor" />
+      <path d="M8.95 8.6 V7.7 a1.35 1.35 0 0 1 2.7 0 V8.6" stroke={knockout} strokeWidth={3.2} strokeLinecap="round" fill="none" />
+      <rect x="6.25" y="7.65" width="8.1" height="6.7" rx="1.95" fill={knockout} />
+      <rect x="7.2" y="8.6" width="6.2" height="4.8" rx="1" fill="currentColor" />
+      <path d="M8.95 8.6 V7.7 a1.35 1.35 0 0 1 2.7 0 V8.6" stroke="currentColor" strokeWidth={1.3} strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function IconLockSplitOpen({ knockout, ...props }: IconProps & { knockout: string }) {
+  // Hasp pivots up with exaggerated daylight under the right leg. Butt caps are
+  // intentional — round caps (0.6 unit overhang each end) swallow the open gap.
+  return (
+    <svg {...svgProps(props)}>
+      <circle cx="5.4" cy="5.4" r="4.4" stroke="currentColor" strokeWidth={1.3} />
+      <path d="M5.4 5.4 L5.4 1 A4.4 4.4 0 0 0 1.59 3.2 Z" fill="currentColor" />
+      <path d="M8.95 8.6 V6.7 a1.35 1.35 0 0 1 2.7 0 V6.9" stroke={knockout} strokeWidth={3.2} strokeLinecap="butt" fill="none" />
+      <rect x="6.25" y="7.65" width="8.1" height="6.7" rx="1.95" fill={knockout} />
+      <rect x="7.2" y="8.6" width="6.2" height="4.8" rx="1" fill="currentColor" />
+      <path d="M8.95 8.6 V6.7 a1.35 1.35 0 0 1 2.7 0 V6.9" stroke="currentColor" strokeWidth={1.3} strokeLinecap="butt" />
+    </svg>
+  );
+}
+
 // ── File actions (↓ Save / ↑ Load / ↓ report / ↓ file) ────────────────────────
 
 export function IconDownload(props: IconProps) {
