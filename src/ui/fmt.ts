@@ -151,6 +151,24 @@ export const AC_COLOR: Record<string, string> = {
   CASH:             '#8a8175', // warm gray
 };
 
+// Per-account series palette for the Import "By account" composition pie
+// (#194 owner-queued color fix #2). Replaces the old bright-Tailwind defaults
+// (sky-400/emerald-400/amber-400/red-400/violet-400/…) with a brand-derived
+// ramp: the navy steps, the accent, plus the steel/slate/teal/gold tones drawn
+// from AC_COLOR's established family anchors. Assigned round-robin to accounts,
+// so consecutive entries are ordered to stay perceptually distinct at
+// pie-slice size (navy → accent → teal → gold → steel → rust → olive → slate).
+export const ACCOUNT_SERIES_COLORS = [
+  '#0d3e7a', // brand 600 (navy)
+  '#e8600a', // accent (burnt orange)
+  '#2c8c85', // desaturated teal (EM anchor)
+  '#c9a63f', // gold (bond family)
+  '#3a6b8c', // steel blue (developed-intl anchor)
+  '#9c3408', // deep rust (crypto)
+  '#5f7a54', // olive (real-estate)
+  '#5b96cc', // brand 300 (light slate-blue)
+];
+
 // FAMILY-level chart colours (issue #150). Distinct from the per-class AC_COLOR
 // map above: this is the strict landing-page CLS ramp (see src/ui/LandingPage.tsx),
 // the official family-level dataviz palette for family-rollup charts. It mirrors

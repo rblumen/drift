@@ -19,17 +19,18 @@ import {
 } from './fmt';
 import { PieChart } from './PieChart';
 import type { PieSlice } from './PieChart';
-import { AllocationViews } from './AllocationViews';
+import { AllocationViews, ChartToggle } from './AllocationViews';
 import type { ChartView } from './AllocationViews';
 import type { RadarDatum } from './RadarChart';
 import type { BulletDatum } from './BulletBars';
 import { AllocationPlot } from './AllocationPlot';
 import { downloadReport } from './exportReport';
 import { HelpBox, HelpDef, HelpSection, HelpTip } from './HelpBox';
+import { Card, Stat } from './card';
 import type { Reminder } from '../ingest/schema';
 import { ReminderPanel, daysUntil } from './ReminderPanel';
 import { DRIFT_URL as SHARE_URL } from './site';
-import { IconDownload, IconClock, IconLock, IconChevronDown, IconChevronRight } from './icons';
+import { IconDownload, IconReport, IconClock, IconLock, IconChevronDown, IconChevronRight } from './icons';
 
 // ── Brand palette helpers ─────────────────────────────────────────────────────
 // Using CSS custom props where possible so they respect any overrides in
@@ -46,6 +47,12 @@ function loadChartView(): ChartView {
   return 'radar';
 }
 
+// #194 stage 4 — AllocationPlot (the aggressiveness × diversification scatter)
+// deactivated by owner decision (vertical space vs value); the component
+// (src/ui/AllocationPlot.tsx) and its tests are retained intact for possible
+// revival. Flip to true to restore the render site below.
+const SHOW_ALLOCATION_PLOT = false as boolean;
+
 const BRAND      = 'var(--brand, #0d3e7a)';
 const BRAND_2    = 'var(--brand-2, #1a5fa0)';
 const BRAND_50   = 'var(--brand-50, #e8f0f8)';
@@ -56,6 +63,18 @@ const BUY_TEXT   = '#1f8a5b';
 const BUY_BG     = '#eaf5ef';
 const SELL_TEXT  = '#b3403a';
 const SELL_BG    = '#fbeeee';
+
+// Turnover for the summary strip (#194 3e): the fraction of household value
+// churned by the rebalance — total absolute trade dollars ÷ household value.
+// Pure and exported so the strip math is unit-testable. Returns { usd, pct };
+// pct is 0 when household value is 0 (avoids divide-by-zero).
+export function computeTurnover(
+  trades: { deltaUsd: number }[],
+  householdValue: number,
+): { usd: number; pct: number } {
+  const usd = trades.reduce((s, t) => s + Math.abs(t.deltaUsd), 0);
+  return { usd, pct: householdValue > 0 ? usd / householdValue : 0 };
+}
 
 interface Props {
   result: RebalanceResult;
@@ -68,8 +87,75 @@ interface Props {
   onSave?: () => void;
 }
 
-// ── Flag banners ──────────────────────────────────────────────────────────────
+// ── Flag strips + banners ───────────────────────────────────────────────────
 // Semantic alert colors are intentional — they communicate severity, not brand.
+//
+// #194 design 3e: each advisory flag renders as a one-line mono strip with a
+// bold tracking TAG on the left. The tag color carries severity (danger vs
+// warn vs info). "See reasoning" expands the full explanatory message — the same
+// text FlagBanner has always rendered — so no information is lost.
+
+type FlagSeverity = 'danger' | 'warn' | 'info';
+
+// Short tracking tag + severity per flag kind. The tag is a terse label; the
+// FULL message stays reachable via FlagBanner (rendered on expand). WASH_SALE /
+// WITHIN_TOLERANCE aren't surfaced through this list (wash-sale has its own
+// banner; within-tolerance isn't shown), but are mapped for completeness.
+export const FLAG_META: Record<Flag['kind'], { tag: string; severity: FlagSeverity }> = {
+  REVISIT_PLACEMENT:               { tag: 'PLACEMENT',   severity: 'warn'   },
+  TAXABLE_SALE:                    { tag: 'GAIN',        severity: 'warn'   },
+  TAXABLE_REBALANCE_AVOIDABLE:     { tag: 'AVOIDABLE',   severity: 'warn'   },
+  PLACEMENT_SPILLOVER:             { tag: 'SPILLOVER',   severity: 'info'   },
+  UNMAPPED_HOLDING:                { tag: 'UNMAPPED',    severity: 'warn'   },
+  NO_ELIGIBLE_ACCOUNT:             { tag: 'NO ACCOUNT',  severity: 'danger' },
+  PROJECTED_OFF_TARGET:            { tag: 'OFF TARGET',  severity: 'danger' },
+  EXCESS_CASH:                     { tag: 'CASH',        severity: 'warn'   },
+  WITHDRAWAL_SHORTFALL:            { tag: 'SHORTFALL',   severity: 'warn'   },
+  BLENDED_FUND_SOLD:               { tag: 'BLEND SOLD',  severity: 'info'   },
+  BLENDED_FUND_OVERSELL:           { tag: 'OVERSELL',    severity: 'danger' },
+  MISSING_COST_BASIS:              { tag: 'COST BASIS',  severity: 'warn'   },
+  FIVE_TWENTY_NINE_REBALANCE_LIMIT:{ tag: '529',         severity: 'warn'   },
+  WASH_SALE_RISK:                  { tag: 'WASH SALE',   severity: 'danger' },
+  WITHIN_TOLERANCE:                { tag: 'IN BAND',     severity: 'info'   },
+};
+
+// Strip color scheme per severity (mono-strip variant of the kit banner tones).
+const STRIP_STYLE: Record<FlagSeverity, { border: string; bg: string; text: string; tag: string }> = {
+  danger: { border: '#e8b4b4', bg: '#fbeeee', text: '#b3403a', tag: '#b3403a' },
+  warn:   { border: '#f3ddb0', bg: '#fdf6e7', text: '#8a5a04', tag: '#b26205' },
+  info:   { border: '#ccdcf0', bg: '#e8f0f9', text: '#0d3e7a', tag: '#0d3e7a' },
+};
+
+// One advisory flag as a mono strip. Collapsed: tag + "See reasoning". Expanded:
+// reveals the full FlagBanner message (never truncated — the full text remains
+// reachable, satisfying the "no information lost" constraint). Exported for
+// render-testing (#194 stage 4).
+export function FlagStrip({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
+  const [open, setOpen] = useState(false);
+  const meta = FLAG_META[flag.kind];
+  const s = STRIP_STYLE[meta.severity];
+  return (
+    <div className="rounded-[9px] border" style={{ borderColor: s.border, background: s.bg }}>
+      <div className="flex items-center gap-2.5 px-3.5 py-1.5 font-mono text-[11px]" style={{ color: s.text }}>
+        <span className="font-semibold tracking-[.1em] shrink-0" style={{ color: s.tag }}>{meta.tag}</span>
+        <button
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          aria-expanded={open}
+          className="ml-auto underline underline-offset-2 shrink-0"
+          style={{ color: '#0d3e7a' }}
+        >
+          {open ? 'Hide reasoning' : 'See reasoning'}
+        </button>
+      </div>
+      {open && (
+        <div className="px-1.5 pb-1.5">
+          <FlagBanner flag={flag} accounts={accounts} />
+        </div>
+      )}
+    </div>
+  );
+}
 
 function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
   const acctName = (id: string) => accounts.find(a => a.id === id)?.name ?? id;
@@ -249,13 +335,13 @@ export function AllocationRow({
   const driftTextColor = drift > 0.001 ? ORANGE_2 : drift < -0.001 ? BRAND_2 : undefined;
 
   return (
-    <tr className={`border-t border-gray-100 ${isChild ? 'bg-gray-50/40' : ''}`}>
-      <td className={`py-3 ${isChild ? 'pl-10 pr-4 text-gray-500 font-normal text-xs' : 'px-4 text-gray-700 font-medium'}`}>
+    <tr className={`border-t border-line-3 hover:bg-paper ${isChild ? 'bg-gray-50/40' : ''}`}>
+      <td className={`py-1.5 ${isChild ? 'pl-10 pr-4 text-gray-500 font-normal text-xs' : 'px-4 text-gray-700 font-medium text-[12.5px]'}`}>
         {AC_LABEL[ac]}
       </td>
-      <td className="px-4 py-3 text-right font-mono tabular-nums text-[13px]">{fmtPct(current)}</td>
-      <td className="px-4 py-3 text-right font-mono tabular-nums text-[13px] text-gray-500">{fmtPct(target)}</td>
-      <td className="px-4 py-3">
+      <td className="px-4 py-1.5 text-right font-mono tabular-nums text-[12.5px]">{fmtPct(current)}</td>
+      <td className="px-4 py-1.5 text-right font-mono tabular-nums text-[12.5px] text-gray-500">{fmtPct(target)}</td>
+      <td className="px-4 py-1.5">
         <div className="flex items-center justify-end gap-2">
           <span
             className="font-mono tabular-nums text-[12.5px] text-right"
@@ -270,14 +356,14 @@ export function AllocationRow({
           )}
         </div>
       </td>
-      <td className="px-4 py-3 text-right font-mono tabular-nums text-[13px] text-gray-500">{fmtPct(projected)}</td>
+      <td className="px-4 py-1.5 text-right font-mono tabular-nums text-[12.5px] text-gray-500">{fmtPct(projected)}</td>
       {showTA && (
         <>
-          <td className="px-4 py-3 text-right font-mono tabular-nums text-[13px] border-l border-gray-100"
+          <td className="px-4 py-1.5 text-right font-mono tabular-nums text-[12.5px] border-l border-gray-100"
             style={{ color: BRAND }}>
             {fmtPct(taCurrent!)}
           </td>
-          <td className="px-4 py-3 text-right font-mono tabular-nums text-[13px]"
+          <td className="px-4 py-1.5 text-right font-mono tabular-nums text-[12.5px]"
             style={{ color: BRAND_2 }}>
             {fmtPct(taProjected!)}
           </td>
@@ -292,20 +378,20 @@ export function AllocationRow({
 function TradeRow({ trade }: { trade: ResolvedTrade }) {
   const isBuy = trade.deltaUsd > 0;
   return (
-    <tr className="border-t border-gray-100 hover:bg-gray-50">
-      <td className="px-4 py-2">
+    <tr className="border-t border-line-3 hover:bg-paper">
+      <td className="px-4 py-1.5">
         {trade.ticker ? (
-          <div>
-            <span className="font-mono font-semibold text-gray-800">{trade.ticker}</span>
-            <div className="text-xs text-gray-400">{AC_LABEL[trade.assetClass]}</div>
+          <div className="flex items-baseline gap-2 min-w-0">
+            <span className="font-mono font-semibold text-[12.5px] text-gray-800">{trade.ticker}</span>
+            <span className="text-[11.5px] text-gray-400 truncate">{AC_LABEL[trade.assetClass]}</span>
           </div>
         ) : (
-          <span className="text-gray-600">{AC_LABEL[trade.assetClass]}</span>
+          <span className="text-[12.5px] text-gray-600">{AC_LABEL[trade.assetClass]}</span>
         )}
       </td>
-      <td className="px-4 py-2">
+      <td className="px-4 py-1.5">
         <span
-          className="text-xs font-mono font-semibold px-2 py-0.5 rounded-full tracking-wide"
+          className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full tracking-wide"
           style={{
             background: isBuy ? BUY_BG   : SELL_BG,
             color:      isBuy ? BUY_TEXT : SELL_TEXT,
@@ -314,14 +400,14 @@ function TradeRow({ trade }: { trade: ResolvedTrade }) {
           {isBuy ? 'BUY' : 'SELL'}
         </span>
       </td>
-      <td className="px-4 py-2 text-right font-mono tabular-nums font-semibold text-[14px]">
+      <td className="px-4 py-1.5 text-right font-mono tabular-nums font-semibold text-[12.5px]">
         <span style={{ color: isBuy ? BUY_TEXT : SELL_TEXT }}>
           {fmtDelta(trade.deltaUsd)}
         </span>
       </td>
       {isTaxableSale(trade)
-        ? <td className="px-4 py-2 text-xs text-warn">⚠ taxable sale</td>
-        : <td className="px-4 py-2" />}
+        ? <td className="px-4 py-1.5 text-xs text-warn">⚠ taxable sale</td>
+        : <td className="px-4 py-1.5" />}
     </tr>
   );
 }
@@ -331,30 +417,32 @@ function TradeRow({ trade }: { trade: ResolvedTrade }) {
 function TransferRow({ kind, amountUsd }: { kind: 'deposit' | 'withdrawal'; amountUsd: number }) {
   const isDeposit = kind === 'deposit';
   return (
-    <tr className="border-t border-gray-100" style={{ background: isDeposit ? '#f0f5fb' : '#fffbeb' }}>
-      <td className="px-4 py-2">
-        <span className="text-gray-700">{isDeposit ? 'Transfer in' : 'Transfer out'}</span>
-        <div className="text-xs text-gray-400">
-          {isDeposit ? 'Deposit from household free cash' : 'Withdrawal'}
+    <tr className="border-t border-line-3" style={{ background: isDeposit ? '#f0f5fb' : '#fdf9f0' }}>
+      <td className="px-4 py-1.5">
+        <div className="flex items-baseline gap-2 min-w-0">
+          <span className="text-[12.5px] text-gray-700">{isDeposit ? 'Transfer in' : 'Transfer out'}</span>
+          <span className="text-[11.5px] text-gray-400 truncate">
+            {isDeposit ? 'Deposit from household free cash' : 'Withdrawal'}
+          </span>
         </div>
       </td>
-      <td className="px-4 py-2">
+      <td className="px-4 py-1.5">
         <span
-          className="text-xs font-mono font-semibold px-2 py-0.5 rounded-full tracking-wide"
+          className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full tracking-wide"
           style={{
-            background: isDeposit ? BRAND_50        : '#fef3c7',
-            color:      isDeposit ? BRAND           : '#92400e',
+            background: isDeposit ? BRAND_50  : '#fdf3e2',
+            color:      isDeposit ? BRAND     : '#b26205',
           }}
         >
           {isDeposit ? 'DEPOSIT' : 'WITHDRAW'}
         </span>
       </td>
-      <td className="px-4 py-2 text-right font-mono tabular-nums font-semibold text-[14px]">
-        <span style={{ color: isDeposit ? BRAND : '#d97706' }}>
+      <td className="px-4 py-1.5 text-right font-mono tabular-nums font-semibold text-[12.5px]">
+        <span style={{ color: isDeposit ? BRAND : '#b26205' }}>
           {isDeposit ? '+' : '−'}{fmtUsd(amountUsd)}
         </span>
       </td>
-      <td className="px-4 py-2 text-xs text-gray-400">transfer</td>
+      <td className="px-4 py-1.5 text-xs text-gray-400">transfer</td>
     </tr>
   );
 }
@@ -643,30 +731,30 @@ function NextStepsSection({
   result, accounts, resolvedTrades, freeCash, plannedWithdrawal,
   reminder, setReminder, onSave,
 }: NextStepsSectionProps) {
-  const card = 'bg-white border border-gray-200 rounded-xl p-5 flex flex-col gap-3';
-  const num  = 'font-mono text-[10.5px] text-brand-400 uppercase tracking-[.08em] mb-1.5';
+  const card = 'bg-white border border-line rounded-xl p-5 flex flex-col gap-3 shadow-[0_1px_2px_rgba(8,40,85,.04)]';
+  const num  = 'font-mono text-[9.5px] text-accent uppercase tracking-[.12em] mb-1.5';
   return (
-    <div className="mt-10 space-y-4">
-      <div className="font-mono text-[11px] text-gray-400 uppercase tracking-[.09em]">Next steps</div>
+    <div className="mt-6 space-y-4">
+      <div className="font-mono text-[11px] text-muted-3 uppercase tracking-[.09em]">Next steps</div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {/* 01 Download */}
         <div className={card}>
           <div>
-            <div className={num}>01</div>
-            <div className="font-semibold text-[14px] text-gray-900">Download your files</div>
+            <div className={num}>01 · Download</div>
+            <div className="font-semibold text-[14px] text-brand-ink">Download your files</div>
           </div>
-          <p className="text-[13px] text-gray-500 leading-relaxed flex-1">
+          <p className="text-[13px] text-muted-1 leading-relaxed flex-1">
             Your trade list as an interactive checklist. Save your portfolio file as a backup before making changes at your broker.
           </p>
           <div className="flex gap-2 flex-wrap">
             <button
               onClick={() => downloadReport(result, accounts, resolvedTrades, freeCash, plannedWithdrawal)}
               className="inline-flex items-center gap-1.5 bg-brand text-white text-[12.5px] font-semibold px-3.5 py-1.5 rounded-lg hover:bg-brand-ink transition-colors">
-              <IconDownload size={14} /> Trade report
+              <IconReport size={14} /> Trade report
             </button>
             {onSave && (
               <button onClick={onSave}
-                className="inline-flex items-center gap-1.5 border border-gray-200 text-gray-600 text-[12.5px] font-medium px-3.5 py-1.5 rounded-lg hover:border-gray-400 transition-colors">
+                className="inline-flex items-center gap-1.5 border border-line text-muted-1 text-[12.5px] font-medium px-3.5 py-1.5 rounded-lg hover:border-muted-2 transition-colors">
                 <IconDownload size={14} /> Portfolio file
               </button>
             )}
@@ -675,22 +763,22 @@ function NextStepsSection({
         {/* 02 Execute */}
         <div className={card}>
           <div>
-            <div className={num}>02</div>
-            <div className="font-semibold text-[14px] text-gray-900">Execute your trades</div>
+            <div className={num}>02 · Execute</div>
+            <div className="font-semibold text-[14px] text-brand-ink">Execute your trades</div>
           </div>
-          <p className="text-[13px] text-gray-500 leading-relaxed flex-1">
+          <p className="text-[13px] text-muted-1 leading-relaxed flex-1">
             Log into each broker account and work through the trades above. Start with sells to free up cash, then place buys.
           </p>
           <div className="flex items-center gap-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-gray-200 flex-none"></span>
-            <span className="font-mono text-[11px] text-gray-400">Happens at your broker — nothing to do here.</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-line flex-none"></span>
+            <span className="font-mono text-[11px] text-muted-3">Happens at your broker — nothing to do here.</span>
           </div>
         </div>
         {/* 03 Schedule */}
         <div className={card}>
           <div>
-            <div className={num}>03</div>
-            <div className="font-semibold text-[14px] text-gray-900">Schedule your next run</div>
+            <div className={num}>03 · Schedule</div>
+            <div className="font-semibold text-[14px] text-brand-ink">Schedule your next run</div>
           </div>
           <ReminderPanel reminder={reminder} setReminder={setReminder} />
         </div>
@@ -713,6 +801,9 @@ export function ResultsPanel({
 
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [chartView, setChartView] = useState<ChartView>(loadChartView);
+  // Household-allocation card collapse (#194 stage 4 revision). In-memory only,
+  // default open — same semantics as the per-account trade cards above.
+  const [allocCollapsed, setAllocCollapsed] = useState(false);
 
   function changeChartView(v: ChartView) {
     setChartView(v);
@@ -766,6 +857,33 @@ export function ResultsPanel({
       return { account, trades: acctTrades, before, after };
     })
     .filter(g => g.trades.length > 0 || g.before.length > 0);
+
+  // ── Summary strip metrics (#194 3e) ─────────────────────────────────────────
+  // Turnover: total absolute trade dollars ÷ household value — the fraction of
+  // the portfolio churned by this rebalance. Drift today/after: the largest
+  // |weight − target| across leaf classes, before and after trades. "Out of
+  // band" counts leaf classes NOT flagged WITHIN_TOLERANCE (the engine's own
+  // in-band determination), so the caption matches the engine, not a re-derived
+  // threshold here.
+  const tradeCount   = resolvedTrades.length;
+  const acctsTraded  = new Set(resolvedTrades.map(t => t.accountId)).size;
+  const { usd: turnoverUsd, pct: turnoverPct } = computeTurnover(resolvedTrades, householdValue);
+
+  const inBandClasses = new Set(
+    flags.filter((f): f is Extract<Flag, { kind: 'WITHIN_TOLERANCE' }> => f.kind === 'WITHIN_TOLERANCE')
+      .map(f => f.assetClass),
+  );
+  const leafDrift = (weights: Record<AssetClass, number>) =>
+    ALL_ASSET_CLASSES
+      .filter(ac => !isParentClass(ac))
+      .filter(ac => (weights[ac] ?? 0) > 5e-4 || (targetWeights[ac] ?? 0) > 5e-4)
+      .map(ac => ({ ac, drift: Math.abs((weights[ac] ?? 0) - (targetWeights[ac] ?? 0)) }));
+  const curDrift  = leafDrift(currentWeights);
+  const projDrift = leafDrift(projectedWeights);
+  const driftTodayMax = curDrift.reduce((m, d) => Math.max(m, d.drift), 0);
+  const driftAfterMax = projDrift.reduce((m, d) => Math.max(m, d.drift), 0);
+  const outOfBandToday = curDrift.filter(d => !inBandClasses.has(d.ac) && d.drift > 5e-4).length;
+  const stillOffTarget = flags.some(f => f.kind === 'PROJECTED_OFF_TARGET');
 
   if (householdValue === 0) {
     return (
@@ -823,7 +941,7 @@ export function ResultsPanel({
   const hasBoth = beforeSlices.length > 0 && afterSlices.length > 0;
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-4">
 
       {/* Reminder banner */}
       {showReminderBanner && reminder.nextDueAt !== undefined && (
@@ -852,22 +970,38 @@ export function ResultsPanel({
         </div>
       )}
 
-      {/* Header */}
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-baseline gap-4">
-          <h2 className="text-lg font-semibold text-gray-800">Results</h2>
-          <span className="text-sm text-gray-500">
-            Household value:{' '}
-            <strong className="font-mono text-gray-800 tabular-nums">{fmtUsd(householdValue)}</strong>
-            {result.taxAdjusted && (
-              <span className="ml-3 font-mono tabular-nums" style={{ color: BRAND_2 }}>
-                After tax: <strong>{fmtUsd(result.taxAdjusted.householdValue)}</strong>
-              </span>
-            )}
-          </span>
+      {/* Summary strip — Trades · Turnover · Drift today · Drift after (#194 3e) */}
+      <Card title="Rebalance summary" meta={result.taxAdjusted
+        ? `${fmtUsd(householdValue)} · after tax ${fmtUsd(result.taxAdjusted.householdValue)}`
+        : `Household value ${fmtUsd(householdValue)}`}>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-tint-cell">
+          <Stat
+            label="Trades"
+            value={tradeCount}
+            tone="accent"
+            caption={tradeCount > 0 ? `Across ${acctsTraded} account${acctsTraded === 1 ? '' : 's'}` : 'No trades needed'}
+          />
+          <Stat
+            label="Turnover"
+            value={fmtUsd(turnoverUsd)}
+            caption={`${fmtPct(turnoverPct)} of household`}
+          />
+          <Stat
+            label="Drift today"
+            value={fmtPct(driftTodayMax)}
+            tone="accent"
+            caption={outOfBandToday > 0
+              ? `${outOfBandToday} class${outOfBandToday === 1 ? '' : 'es'} out of band`
+              : 'All classes in band'}
+          />
+          <Stat
+            label="Drift after trades"
+            value={fmtPct(driftAfterMax)}
+            tone={stillOffTarget ? 'warn' : 'ok'}
+            caption={stillOffTarget ? 'Some classes still off' : 'All classes in band'}
+          />
         </div>
-
-      </div>
+      </Card>
 
       <HelpBox label="About these results">
         <p>
@@ -892,11 +1026,11 @@ export function ResultsPanel({
       {/* Wash-sale banner */}
       <WashSaleBanner flags={flags} accounts={accounts} />
 
-      {/* Priority flags */}
+      {/* Priority flags — one-line mono strips with tracking tags (#194 3e) */}
       {importantFlags.length > 0 && (
         <div className="space-y-2">
           {importantFlags.map((f, i) => (
-            <FlagBanner key={i} flag={f} accounts={accounts} />
+            <FlagStrip key={i} flag={f} accounts={accounts} />
           ))}
         </div>
       )}
@@ -912,17 +1046,17 @@ export function ResultsPanel({
               </span>
             )}
           </div>
-          <div className="overflow-x-auto"><table className="w-full text-sm">
-            <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
+          <div className="overflow-x-auto"><table className="w-full text-[12.5px]">
+            <thead className="font-mono text-[10px] text-muted-3 uppercase tracking-[.06em] border-b border-line-2">
               <tr>
-                <th className="px-4 py-2 text-left">Account</th>
-                <th className="px-4 py-2 text-right">In-account cash</th>
-                {freeCash > 0 && <th className="px-4 py-2 text-right">Free cash share</th>}
-                <th className="px-4 py-2 text-right">Net deployed</th>
-                <th className="px-4 py-2 text-right">Deposits</th>
+                <th className="px-4 py-1.5 text-left font-normal">Account</th>
+                <th className="px-4 py-1.5 text-right font-normal">In-account cash</th>
+                {freeCash > 0 && <th className="px-4 py-1.5 text-right font-normal">Free cash share</th>}
+                <th className="px-4 py-1.5 text-right font-normal">Net deployed</th>
+                <th className="px-4 py-1.5 text-right font-normal">Deposits</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-line-3">
               {accounts.filter(a => !a.locked).map(a => {
                 const ownCash = a.newCash ?? 0;
                 const netDeploy = trades
@@ -933,24 +1067,24 @@ export function ResultsPanel({
                 const freeCashShare = depositByAccount[a.id] ?? 0;
                 if (ownCash === 0 && freeCash === 0) return null;
                 return (
-                  <tr key={a.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-2 font-medium text-gray-800">{a.name}</td>
-                    <td className="px-4 py-2 text-right font-mono tabular-nums text-gray-600">
+                  <tr key={a.id} className="hover:bg-paper">
+                    <td className="px-4 py-1.5 font-medium text-gray-800">{a.name}</td>
+                    <td className="px-4 py-1.5 text-right font-mono tabular-nums text-gray-600">
                       {ownCash > 0 ? fmtUsd(ownCash) : '—'}
                     </td>
                     {freeCash > 0 && (
-                      <td className="px-4 py-2 text-right font-mono tabular-nums text-gray-600">
+                      <td className="px-4 py-1.5 text-right font-mono tabular-nums text-gray-600">
                         {depositsOpen && freeCashShare > 0.5
                           ? <span className="text-ok">{fmtUsd(freeCashShare)}</span>
                           : <span className="text-gray-400">—</span>}
                       </td>
                     )}
-                    <td className="px-4 py-2 text-right font-mono tabular-nums font-medium">
+                    <td className="px-4 py-1.5 text-right font-mono tabular-nums font-medium">
                       {netDeploy > 0.5
                         ? <span className="text-ok">+{fmtUsd(netDeploy)}</span>
                         : <span className="text-gray-400">—</span>}
                     </td>
-                    <td className="px-4 py-2 text-right">
+                    <td className="px-4 py-1.5 text-right">
                       <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
                         !depositsOpen ? 'bg-danger-bg text-danger'
                           : limited ? 'bg-warn-bg text-warn'
@@ -978,31 +1112,31 @@ export function ResultsPanel({
               {fmtUsd(totalRaised)} raised of {fmtUsd(totalWithdrawal)} planned
             </span>
           </div>
-          <div className="overflow-x-auto"><table className="w-full text-sm">
-            <thead className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wide">
+          <div className="overflow-x-auto"><table className="w-full text-[12.5px]">
+            <thead className="font-mono text-[10px] text-muted-3 uppercase tracking-[.06em] border-b border-line-2">
               <tr>
-                <th className="px-4 py-2 text-left">Account</th>
-                <th className="px-4 py-2 text-right">RMD due</th>
-                <th className="px-4 py-2 text-right">Withdrawn</th>
-                <th className="px-4 py-2 text-right">Withdrawals</th>
+                <th className="px-4 py-1.5 text-left font-normal">Account</th>
+                <th className="px-4 py-1.5 text-right font-normal">RMD due</th>
+                <th className="px-4 py-1.5 text-right font-normal">Withdrawn</th>
+                <th className="px-4 py-1.5 text-right font-normal">Withdrawals</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-line-3">
               {withdrawalRows.map(({ account: a, withdrawn, rmd }) => {
                 const required = rmd > 0;
                 const restricted = !required && !isWithdrawalEligible(a);
                 return (
-                  <tr key={a.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-2 font-medium text-gray-800">{a.name}</td>
-                    <td className="px-4 py-2 text-right font-mono tabular-nums text-gray-600">
+                  <tr key={a.id} className="hover:bg-paper">
+                    <td className="px-4 py-1.5 font-medium text-gray-800">{a.name}</td>
+                    <td className="px-4 py-1.5 text-right font-mono tabular-nums text-gray-600">
                       {rmd > 0 ? <span style={{ color: BRAND_2 }}>{fmtUsd(rmd)}</span> : '—'}
                     </td>
-                    <td className="px-4 py-2 text-right font-mono tabular-nums font-medium">
+                    <td className="px-4 py-1.5 text-right font-mono tabular-nums font-medium">
                       {withdrawn > 0.5
                         ? <span className="text-warn">−{fmtUsd(withdrawn)}</span>
                         : <span className="text-gray-400">—</span>}
                     </td>
-                    <td className="px-4 py-2 text-right">
+                    <td className="px-4 py-1.5 text-right">
                       <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
                         restricted ? 'bg-danger-bg text-danger'
                           : required ? 'bg-brand-100 text-brand-700'
@@ -1022,13 +1156,38 @@ export function ResultsPanel({
       {/* Funding breakdown */}
       <ContributionSummary summary={contributionSummary} />
 
-      {/* Household allocation */}
+      {/* Household allocation — collapsible kit card matching the per-account
+          trade cards (#194 stage 4 revision): chevron in the tinted header,
+          header click toggles, collapsed = one-line header card, default open,
+          in-memory state. The radar/bar/donut toggle lives in the header when
+          expanded, as a SIBLING of the toggle button so view clicks never
+          collapse the card. */}
       <div className="space-y-2">
-        <div className="overflow-hidden border border-gray-200 rounded-lg">
+        <div className="overflow-hidden border border-line rounded-xl shadow-[0_1px_2px_rgba(8,40,85,.04)]">
+          <div className={`flex items-center gap-3 bg-tint ${allocCollapsed ? '' : 'border-b border-line'}`}>
+            <button
+              className="flex-1 min-w-0 px-4 py-2 flex items-center gap-3 hover:bg-tint-cell transition-colors text-left"
+              onClick={() => setAllocCollapsed(c => !c)}
+              aria-expanded={!allocCollapsed}
+            >
+              <span className="text-muted-2 inline-flex shrink-0">{allocCollapsed ? <IconChevronRight size={12} /> : <IconChevronDown size={12} />}</span>
+              <span className="font-mono text-[10px] tracking-[.12em] uppercase text-[#6b7685] truncate">Household allocation</span>
+            </button>
+            {allocCollapsed || !hasAllocation ? (
+              <span className="font-mono text-[10px] text-muted-3 px-4 py-2 shrink-0">Current vs target · after trades</span>
+            ) : (
+              <span className="px-3 py-1 shrink-0" onClick={e => e.stopPropagation()}>
+                <ChartToggle view={chartView} onViewChange={changeChartView} />
+              </span>
+            )}
+          </div>
 
-          {/* Visualization: radar/bar/donut toggle + companion drift table (#98),
-              with the AllocationPlot below it. */}
-          <div className="p-4 border-b border-gray-100 space-y-4">
+          {!allocCollapsed && (
+            <>
+          {/* Visualization: radar/bar/donut chart + companion drift table (#98);
+              the view toggle is up in the card header. AllocationPlot's render
+              site is retained behind SHOW_ALLOCATION_PLOT (deactivated). */}
+          <div className="p-4 border-b border-line-2 space-y-4">
             {hasAllocation && (
               <AllocationViews
                 view={chartView}
@@ -1036,9 +1195,10 @@ export function ResultsPanel({
                 familyRows={familyRows}
                 subRows={subRows}
                 familyColors={familyColors}
+                showHeader={false}
               />
             )}
-            {hasBoth && (
+            {SHOW_ALLOCATION_PLOT && hasBoth && (
               <div className="min-w-[220px]">
                 <AllocationPlot
                   currentWeights={currentWeights}
@@ -1049,14 +1209,14 @@ export function ResultsPanel({
             )}
           </div>
 
-          {/* Allocation table */}
+          {/* Allocation table — kit dense spec */}
           <div className="overflow-x-auto"><table className="w-full text-sm">
-            <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
+            <thead className="font-mono text-[10px] text-muted-3 uppercase tracking-[.06em] border-b border-line-2">
               <tr>
-                <th className="px-4 py-3 text-left">Asset class</th>
-                <th className="px-4 py-3 text-right">Current</th>
-                <th className="px-4 py-3 text-right">Target</th>
-                <th className="px-4 py-3 text-right">
+                <th className="px-4 py-1.5 text-left font-normal">Asset class</th>
+                <th className="px-4 py-1.5 text-right font-normal">Current</th>
+                <th className="px-4 py-1.5 text-right font-normal">Target</th>
+                <th className="px-4 py-1.5 text-right font-normal">
                   <span className="inline-flex items-center justify-end gap-0.5">
                     Drift
                     <HelpTip dir="up">
@@ -1065,7 +1225,7 @@ export function ResultsPanel({
                     </HelpTip>
                   </span>
                 </th>
-                <th className="px-4 py-3 text-right">
+                <th className="px-4 py-1.5 text-right font-normal">
                   <span className="inline-flex items-center justify-end gap-0.5">
                     After trades
                     <HelpTip dir="left">
@@ -1075,11 +1235,11 @@ export function ResultsPanel({
                 </th>
                 {result.taxAdjusted && (
                   <>
-                    <th className="px-4 py-3 text-right border-l border-gray-200 font-mono text-[10px]"
+                    <th className="px-4 py-1.5 text-right border-l border-gray-200 font-normal"
                       style={{ color: BRAND }}>
                       After-tax current
                     </th>
-                    <th className="px-4 py-3 text-right font-mono text-[10px]" style={{ color: BRAND_2 }}>
+                    <th className="px-4 py-1.5 text-right font-normal" style={{ color: BRAND_2 }}>
                       After-tax projected
                     </th>
                   </>
@@ -1126,6 +1286,8 @@ export function ResultsPanel({
               })}
             </tbody>
           </table></div>
+            </>
+          )}
         </div>
       </div>
 
@@ -1147,26 +1309,43 @@ export function ResultsPanel({
             const hasBothPies = before.length > 0 && after.length > 0;
             const locked  = account.locked;
 
+            // Header meta: order count + sell / buy totals (#194 3e).
+            const sellsUsd = acctTrades.filter(t => t.deltaUsd < 0).reduce((s, t) => s + Math.abs(t.deltaUsd), 0);
+            const buysUsd  = acctTrades.filter(t => t.deltaUsd > 0).reduce((s, t) => s + t.deltaUsd, 0);
+            const orderMeta = acctTrades.length > 0
+              ? `${acctTrades.length} order${acctTrades.length === 1 ? '' : 's'} · ${fmtUsd(sellsUsd)} sells / ${fmtUsd(buysUsd)} buys`
+              : hasTransfer ? 'Transfer only' : 'No trades';
+
+            // Placement reasoning as a mono `// comment` inside the card, echoing
+            // the landing "reasoning" block. Derived from the account's most
+            // constrained traded class + its preferred home tag.
+            const primaryTrade = [...acctTrades].sort((a, b) => Math.abs(b.deltaUsd) - Math.abs(a.deltaUsd))[0];
+            const reasoning = primaryTrade
+              ? `// ${AC_LABEL[primaryTrade.assetClass]} ${primaryTrade.deltaUsd > 0 ? 'bought' : 'sold'} here — ${ACCT_TYPE_LABEL[account.type]} is a preferred home for this class`
+              : null;
+
             return (
-              <div key={account.id} className="overflow-hidden border border-gray-200 rounded-lg">
+              <div key={account.id} className="overflow-hidden border border-line rounded-xl shadow-[0_1px_2px_rgba(8,40,85,.04)]">
                 <button
-                  className="w-full px-4 py-2.5 bg-gray-50 flex items-center gap-3 hover:bg-gray-100 transition-colors text-left"
+                  className="w-full px-4 py-2 bg-tint flex items-center gap-3 hover:bg-tint-cell transition-colors text-left border-b border-line"
                   onClick={() => toggleCollapsed(account.id)}
+                  aria-expanded={isOpen}
                 >
+                  <span className="text-muted-2 inline-flex shrink-0">{isOpen ? <IconChevronDown size={12} /> : <IconChevronRight size={12} />}</span>
                   <span className="flex-1 flex items-center gap-2 min-w-0">
-                    <span className="text-sm font-medium text-gray-700">{account.name}</span>
-                    <span className="text-xs text-gray-400">{account.institution} · {ACCT_TYPE_LABEL[account.type]}</span>
+                    <span className="font-mono text-[10px] tracking-[.12em] uppercase text-[#6b7685] truncate">{account.name} · {ACCT_TYPE_LABEL[account.type]}</span>
                     {locked && (
-                      <span className="inline-flex items-center gap-1 text-xs text-warn bg-warn-bg border border-warn-banner-border px-1.5 py-0.5 rounded-full">
-                        <IconLock size={12} /> locked
+                      <span className="inline-flex items-center gap-1 font-mono text-[9.5px] uppercase tracking-[.08em] text-warn bg-warn-bg px-1.5 py-0.5 rounded-full">
+                        <IconLock size={11} /> locked
                       </span>
                     )}
                   </span>
+                  <span className="font-mono text-[10px] text-muted-3 shrink-0 tabular-nums hidden sm:inline">{orderMeta}</span>
                   {(acctTrades.length > 0 || hasTransfer) && (
-                    <span className="text-xs text-gray-500 shrink-0 font-mono tabular-nums">
-                      Net:{' '}
+                    <span className="text-[10px] text-muted-3 shrink-0 font-mono tabular-nums">
+                      Net{' '}
                       <span className={
-                        Math.abs(netUsd) < 0.5 ? 'text-gray-500 font-medium'
+                        Math.abs(netUsd) < 0.5 ? 'text-muted-2 font-medium'
                           : netUsd > 0 ? 'text-ok font-medium'
                           : 'font-medium'
                       }
@@ -1175,7 +1354,6 @@ export function ResultsPanel({
                       </span>
                     </span>
                   )}
-                  <span className="text-gray-400 ml-1 inline-flex">{isOpen ? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}</span>
                 </button>
 
                 {isOpen && (
@@ -1196,12 +1374,12 @@ export function ResultsPanel({
                     )}
 
                     {(acctTrades.length > 0 || hasTransfer) && (
-                      <div className="overflow-x-auto"><table className="w-full text-sm">
-                        <thead className="text-xs text-gray-500 uppercase tracking-wide border-b border-gray-100">
+                      <div className="overflow-x-auto"><table className="w-full text-[12.5px]">
+                        <thead className="font-mono text-[10px] text-muted-3 uppercase tracking-[.06em] border-b border-line-2">
                           <tr>
-                            <th className="px-4 py-1.5 text-left">Asset class</th>
-                            <th className="px-4 py-1.5 text-left">Action</th>
-                            <th className="px-4 py-1.5 text-right">Amount</th>
+                            <th className="px-4 py-1.5 text-left font-normal">Asset class</th>
+                            <th className="px-4 py-1.5 text-left font-normal">Action</th>
+                            <th className="px-4 py-1.5 text-right font-normal">Amount</th>
                             <th className="px-4 py-1.5" />
                           </tr>
                         </thead>
@@ -1213,6 +1391,12 @@ export function ResultsPanel({
                           {withdrawal > 0.5 && <TransferRow kind="withdrawal" amountUsd={withdrawal} />}
                         </tbody>
                       </table></div>
+                    )}
+
+                    {reasoning && (
+                      <p className="px-4 py-2 border-t border-line-2 font-mono text-[10.5px] text-muted-2">
+                        {reasoning}
+                      </p>
                     )}
 
                     {acctTrades.length === 0 && !hasTransfer && (

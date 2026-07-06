@@ -8,7 +8,7 @@ import { parseEtradeCsv } from '../ingest/adapters/etrade';
 import { detectFormat } from '../ingest/detect';
 import type { CsvParseResult, MultiAccountResult } from '../ingest/csv';
 import { parseEmpowerCsv, parseEmpowerTotals, SUPPORTED_EMPOWER_CLASSES } from '../ingest/adapters/empower';
-import { AC_LABEL, ACCT_TYPE_COLOR, ACCT_TYPE_LABEL, ACCT_TYPE_TAG_LABEL, fmtUsd } from './fmt';
+import { AC_LABEL, ACCT_TYPE_COLOR, ACCT_TYPE_LABEL, ACCT_TYPE_TAG_LABEL, ACCOUNT_SERIES_COLORS, fmtUsd } from './fmt';
 import { PieChart } from './PieChart';
 import { HelpBox, HelpDef, HelpSection } from './HelpBox';
 import { IconLock, IconLockOpen, IconX, IconPencil, IconChevronDown, IconChevronRight, IconUpload } from './icons';
@@ -61,17 +61,9 @@ const SINGLE_PARSERS: Partial<Record<FileFormat, (text: string, accountId: strin
   empower: parseEmpowerCsv,
 };
 
-// Colours assigned round-robin to accounts in the order they appear.
-const ACCOUNT_COLORS = [
-  '#2e72b4', // brand-400
-  '#38bdf8', // sky-400
-  '#34d399', // emerald-400
-  '#fbbf24', // amber-400
-  '#f87171', // red-400
-  '#a78bfa', // violet-400
-  '#fb923c', // orange-400
-  '#2dd4bf', // teal-400
-];
+// Colours assigned round-robin to accounts in the order they appear — the
+// brand-derived series palette (#194 kit), not bright Tailwind defaults.
+const ACCOUNT_COLORS = ACCOUNT_SERIES_COLORS;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -764,16 +756,16 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
 
                 {/* Position rows — hidden when collapsed */}
                 {isOpen && (
-                  <div className="overflow-x-auto"><table className="w-full text-sm">
+                  <div className="overflow-x-auto"><table className="w-full text-[12.5px]">
                     <tbody className="divide-y divide-line-3">
                       {rows.map(({ pos: p, posIdx }) => (
                         <tr key={posIdx} className={`hover:bg-paper ${p.locked ? 'opacity-60' : ''}`}>
                           {/* Edited indicator */}
-                          <td className="pl-3 pr-0 py-2 w-4 text-warn">
+                          <td className="pl-3 pr-0 py-1.5 w-4 text-warn">
                             {p.edited && <span className="inline-flex" title="Manually edited" aria-label="Manually edited"><IconPencil size={13} /></span>}
                           </td>
                           {/* Ticker */}
-                          <td className="px-2 py-2 font-mono font-medium w-28">
+                          <td className="px-2 py-1.5 font-mono font-medium w-28">
                             <EditableCell
                               value={p.ticker}
                               uppercase
@@ -785,7 +777,7 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
                             />
                           </td>
                           {/* Description */}
-                          <td className="px-2 py-2 text-gray-500 max-w-xs">
+                          <td className="px-2 py-1.5 text-gray-500 max-w-xs">
                             <EditableCell
                               value={p.description ?? ''}
                               onCommit={v => {
@@ -795,7 +787,7 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
                             />
                           </td>
                           {/* Market value */}
-                          <td className="px-2 py-2 text-right tabular-nums">
+                          <td className="px-2 py-1.5 text-right tabular-nums">
                             <EditableCell
                               value={String(p.marketValue)}
                               type="number"
@@ -812,7 +804,7 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
                             />
                           </td>
                           {/* Price (optional) */}
-                          <td className="px-2 py-2 text-right tabular-nums text-gray-500 w-24">
+                          <td className="px-2 py-1.5 text-right tabular-nums text-gray-500 w-24">
                             <EditableCell
                               value={p.price != null ? String(p.price) : ''}
                               type="number"
@@ -835,7 +827,7 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
                             />
                           </td>
                           {/* Cost basis (taxable accounts only — feeds tax-adjusted allocation, issue #7) */}
-                          <td className="px-2 py-2 text-right tabular-nums text-gray-500 w-28">
+                          <td className="px-2 py-1.5 text-right tabular-nums text-gray-500 w-28">
                             {account.type === 'TAXABLE' ? (
                               <EditableCell
                                 value={p.costBasis != null ? String(p.costBasis) : ''}
@@ -862,7 +854,7 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
                             )}
                           </td>
                           {/* Lock toggle */}
-                          <td className="px-2 py-2 text-center w-8">
+                          <td className="px-2 py-1.5 text-center w-8">
                             <button
                               onClick={() => updatePositionByIdx(posIdx, { locked: !p.locked }, false)}
                               title={p.locked ? 'Unlock position (allow trades)' : 'Lock position (exclude from trades)'}
@@ -873,7 +865,7 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
                             </button>
                           </td>
                           {/* Remove */}
-                          <td className="px-3 py-2 text-right w-8">
+                          <td className="px-3 py-1.5 text-right w-8">
                             <button
                               onClick={() => setPositions(positions.filter((_, idx) => idx !== posIdx))}
                               className="inline-flex text-muted-2 hover:text-danger"
