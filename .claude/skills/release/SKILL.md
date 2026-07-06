@@ -5,7 +5,7 @@ description: Cut a versioned release of the drift portfolio rebalancer. Use this
 
 # Release Skill — drift
 
-This skill walks through a complete, safe release process: preflight checks → version decision → changelog + package.json update → build & test verification → commit to a release branch → PR to `main` → merge → tag → GitHub Release.
+This skill walks through a complete, safe release process: preflight checks → version decision → changelog + version bump (package.json + package-lock.json) → build & test verification → commit to a release branch → PR to `main` → merge → tag → GitHub Release.
 
 There's a **mandatory human confirmation checkpoint** before the merge and tag. Everything before it is reversible; everything after it is permanent.
 
@@ -71,9 +71,17 @@ Follow the [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/) format
 
 ---
 
-## Phase 4: Update package.json
+## Phase 4: Update package.json and package-lock.json
 
-Set `"version"` to the new version string (e.g. `"0.2.0"`). Nothing else in `package.json` should change.
+Run:
+
+```
+npm version X.Y.Z --no-git-tag-version
+```
+
+This sets `"version"` in `package.json` **and** syncs the two copies in `package-lock.json` (top-level `version` and `packages[""].version`) in one step. Do not hand-edit `package.json` — a hand edit leaves the lockfile stale, and the next plain `npm install` then rewrites it as churn in whatever unrelated feature branch it happens on (issue #206).
+
+Verify with `git diff` that the only changes are the three version lines across the two files.
 
 ---
 
@@ -84,7 +92,7 @@ Before doing anything irreversible, present a summary to the user:
 ```
 Ready to release vX.Y.Z. Here's what will happen:
   • Create branch release/vX.Y.Z off main
-  • Commit CHANGELOG.md + package.json to it
+  • Commit CHANGELOG.md + package.json + package-lock.json to it
   • Open PR: release/vX.Y.Z → main
   • Merge PR (squash) and delete the branch
   • Push tag vX.Y.Z
@@ -100,11 +108,11 @@ Do not continue until the user explicitly confirms.
 
 ## Phase 6: Commit to the release branch
 
-Create the release branch off `main` and stage only `CHANGELOG.md` and `package.json`:
+Create the release branch off `main` and stage only `CHANGELOG.md`, `package.json`, and `package-lock.json`:
 
 ```
 git checkout -b release/vX.Y.Z
-git add CHANGELOG.md package.json
+git add CHANGELOG.md package.json package-lock.json
 git commit -m "chore(release): vX.Y.Z"
 git push -u origin release/vX.Y.Z
 ```
