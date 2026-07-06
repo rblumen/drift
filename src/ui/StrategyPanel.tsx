@@ -404,6 +404,12 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
   );
   const [minTrade,  setMinTrade]  = useState(String(strategy.minTradeUsd));
 
+  // Card-level collapse state for the Target allocation / Placement rules
+  // sections (#194 regression fix — restore-only, matches the Results
+  // household-allocation collapsible-card pattern: in-memory, default open).
+  const [targetAllocCollapsed, setTargetAllocCollapsed] = useState(false);
+  const [placementCollapsed, setPlacementCollapsed] = useState(false);
+
   // Sync local state if strategy prop changes externally (e.g. JSON import).
   // We re-derive weights/splits/composites every time, but only *force-expand*
   // parents (never collapse) and never clobber the user's link/unlink choice —
@@ -773,20 +779,36 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
         </HelpSection>
       </HelpBox>
 
-      {/* ── Target allocation ────────────────────────────────────────────────── */}
-      <Card
-        title="Target allocation"
-        action={
-          <span className="flex items-center gap-3 font-mono text-[10px] text-muted-3">
-            <span className="inline-flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-sm" style={{ background: '#0d3e7a' }} />Current
+      {/* ── Target allocation — collapsible kit card matching the Results
+          household-allocation card (#194 stage-4 restyle dropped this;
+          restored here): chevron in the tinted header, header-button
+          toggles, collapsed = one-line header card, default open,
+          in-memory state. The Current/Target legend lives in the header as
+          a SIBLING of the toggle button so legend clicks never collapse
+          the card. */}
+      <div className="space-y-2">
+        <div className="overflow-hidden border border-line rounded-xl shadow-[0_1px_2px_rgba(8,40,85,.04)]">
+          <div className={`flex items-center gap-3 bg-tint ${targetAllocCollapsed ? '' : 'border-b border-line'}`}>
+            <button
+              className="flex-1 min-w-0 px-4 py-2 flex items-center gap-3 hover:bg-tint-cell transition-colors text-left"
+              onClick={() => setTargetAllocCollapsed(c => !c)}
+              aria-expanded={!targetAllocCollapsed}
+            >
+              <span className="text-muted-2 inline-flex shrink-0">{targetAllocCollapsed ? <IconChevronRight size={12} /> : <IconChevronDown size={12} />}</span>
+              <span className="font-mono text-[10px] tracking-[.12em] uppercase text-[#6b7685] truncate">Target allocation</span>
+            </button>
+            <span className="flex items-center gap-3 font-mono text-[10px] text-muted-3 px-4 py-2 shrink-0" onClick={e => e.stopPropagation()}>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-sm" style={{ background: '#0d3e7a' }} />Current
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="inline-block w-3 h-0 border-t-2 border-dashed" style={{ borderColor: '#8792a0' }} />Target
+              </span>
             </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="inline-block w-3 h-0 border-t-2 border-dashed" style={{ borderColor: '#8792a0' }} />Target
-            </span>
-          </span>
-        }
-      >
+          </div>
+
+          {!targetAllocCollapsed && (
+            <>
         <div className="flex items-stretch">
 
           {/* ── Allocation table with inline compare bars ── */}
@@ -1115,13 +1137,29 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
             Weights must sum to 100% (±0.1%). Adjust the values above, then click outside to apply — or use Normalize to 100%.
           </p>
         )}
-      </Card>
+            </>
+          )}
+        </div>
+      </div>
 
-      {/* ── Placement rules (editable) ───────────────────────────────────────── */}
-      <Card
-        title="Placement rules"
-        meta="Where each class prefers to live"
-      >
+      {/* ── Placement rules (editable) — collapsible kit card, same pattern as
+          Target allocation above (#194 regression restore). ────────────── */}
+      <div className="space-y-2">
+        <div className="overflow-hidden border border-line rounded-xl shadow-[0_1px_2px_rgba(8,40,85,.04)]">
+          <div className={`flex items-center gap-3 bg-tint ${placementCollapsed ? '' : 'border-b border-line'}`}>
+            <button
+              className="flex-1 min-w-0 px-4 py-2 flex items-center gap-3 hover:bg-tint-cell transition-colors text-left"
+              onClick={() => setPlacementCollapsed(c => !c)}
+              aria-expanded={!placementCollapsed}
+            >
+              <span className="text-muted-2 inline-flex shrink-0">{placementCollapsed ? <IconChevronRight size={12} /> : <IconChevronDown size={12} />}</span>
+              <span className="font-mono text-[10px] tracking-[.12em] uppercase text-[#6b7685] truncate">Placement rules</span>
+            </button>
+            <span className="font-mono text-[10px] text-muted-3 px-4 py-2 shrink-0">Where each class prefers to live</span>
+          </div>
+
+          {!placementCollapsed && (
+            <>
         <div className="px-4 pt-3 flex items-center justify-between gap-3">
           <p className="text-xs text-muted-1 max-w-xl">
             Preferred account home for each asset class. The engine fills the 1st choice first, then spills into 2nd. Tax-Advantaged can be left broad or drilled into Tax-Deferred (Traditional/401k) vs Tax-Free (Roth/HSA).
@@ -1224,7 +1262,10 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
             </tbody>
           </table></div>
         </div>
-      </Card>
+            </>
+          )}
+        </div>
+      </div>
 
       {/* ── Rebalance bands (numeric params + toggles + tax-adjustment) ───────── */}
       <Card title="Rebalance bands" meta="Bogleheads 5/25">
