@@ -400,7 +400,7 @@ export function ClassifyPanel({
               return (
                 <div
                   key={row.ticker}
-                  className={`px-4 py-3 bg-warn-row-tint ${i < unmapped.length - 1 ? 'border-b border-line-3' : ''}`}
+                  className={`px-4 py-2 bg-warn-row-tint ${i < unmapped.length - 1 ? 'border-b border-line-3' : ''}`}
                 >
                   <div className="flex items-center gap-3">
                     <span className="font-mono font-semibold text-brand-ink w-20 flex-shrink-0">{row.ticker}</span>
@@ -498,11 +498,11 @@ export function ClassifyPanel({
                   const isEditing = editState?.ticker === row.ticker;
                   return (
                     <tr key={row.ticker} className="border-b border-line-3 last:border-b-0 hover:bg-paper">
-                      <td className="py-2 font-mono font-semibold text-brand-ink">{row.ticker}</td>
-                      <td className="py-2 text-muted-1 text-[12px] truncate max-w-[180px]">
+                      <td className="py-1.5 font-mono font-semibold text-brand-ink">{row.ticker}</td>
+                      <td className="py-1.5 text-muted-1 text-[12px] truncate max-w-[180px]">
                         {row.description ?? <span className="text-faint">—</span>}
                       </td>
-                      <td className="py-2">
+                      <td className="py-1.5">
                         {isEditing ? null : (
                           <div className="flex items-center gap-2">
                             <DecompWeightBars decomp={decomp} />
@@ -522,7 +522,7 @@ export function ClassifyPanel({
                           />
                         )}
                       </td>
-                      <td className="py-2 whitespace-nowrap text-right">
+                      <td className="py-1.5 whitespace-nowrap text-right">
                         {!isEditing && (
                           <div className="flex gap-2 justify-end items-center">
                             <button
@@ -579,11 +579,11 @@ export function ClassifyPanel({
                   return (
                     <Fragment key={row.ticker}>
                       <tr className={`border-b border-line-3 last:border-b-0 hover:bg-paper ${isEditing ? 'bg-rail-active' : ''}`}>
-                        <td className="py-2 font-mono font-semibold text-brand-ink">{row.ticker}</td>
-                        <td className="py-2 text-muted-1 text-[12px] truncate max-w-[200px]">
+                        <td className="py-1.5 font-mono font-semibold text-brand-ink">{row.ticker}</td>
+                        <td className="py-1.5 text-muted-1 text-[12px] truncate max-w-[200px]">
                           {row.description ?? <span className="text-faint">—</span>}
                         </td>
-                        <td className="py-2">
+                        <td className="py-1.5">
                           {isEditing ? (
                             <span className="text-xs text-brand-500 italic">Setting blend…</span>
                           ) : (
@@ -597,7 +597,7 @@ export function ClassifyPanel({
                             </select>
                           )}
                         </td>
-                        <td className="py-2 text-right whitespace-nowrap">
+                        <td className="py-1.5 text-right whitespace-nowrap">
                           {row.source === 'override' ? (
                             <span className="inline-flex items-center gap-1.5">
                               <StatusChip tone="info">Override</StatusChip>
@@ -614,7 +614,7 @@ export function ClassifyPanel({
                             <StatusChip tone="idle">Built-in</StatusChip>
                           )}
                         </td>
-                        <td className="py-2 text-right whitespace-nowrap">
+                        <td className="py-1.5 text-right whitespace-nowrap">
                           {isEditing ? (
                             <button
                               onClick={() => setEditState(null)}

@@ -198,16 +198,16 @@ export function HowItWorksDrawer({ open, onClose }: Props) {
             <div className="border border-gray-200 rounded-xl overflow-hidden bg-white">
               <div className="overflow-x-auto"><table className="w-full border-collapse">
                 <thead>
-                  <tr>
-                    <th className="bg-gray-50 font-mono text-[10.5px] tracking-[0.1em] uppercase text-gray-400 text-left px-4 py-3 font-medium">Flag</th>
-                    <th className="bg-gray-50 font-mono text-[10.5px] tracking-[0.1em] uppercase text-gray-400 text-left px-4 py-3 font-medium">Meaning</th>
+                  <tr className="border-b border-line-2">
+                    <th className="bg-tint font-mono text-[10px] tracking-[.06em] uppercase text-muted-3 text-left px-4 py-1.5 font-normal">Flag</th>
+                    <th className="bg-tint font-mono text-[10px] tracking-[.06em] uppercase text-muted-3 text-left px-4 py-1.5 font-normal">Meaning</th>
                   </tr>
                 </thead>
                 <tbody>
                   {FLAGS.map((f, i) => (
-                    <tr key={f.name + i} className="border-t border-gray-100">
-                      <td className={`px-4 py-3 font-mono text-xs font-semibold whitespace-nowrap align-top ${f.color}`}>{f.name}</td>
-                      <td className="px-4 py-3 text-[13px] text-gray-600 leading-relaxed align-top">{f.meaning}</td>
+                    <tr key={f.name + i} className="border-t border-line-3 hover:bg-paper">
+                      <td className={`px-4 py-2 font-mono text-xs font-semibold whitespace-nowrap align-top ${f.color}`}>{f.name}</td>
+                      <td className="px-4 py-2 text-[12.5px] text-gray-600 leading-relaxed align-top">{f.meaning}</td>
                     </tr>
                   ))}
                 </tbody>

@@ -38,6 +38,12 @@ interface Props {
   subRows: BulletDatum[];
   /** Family donut ramp — same order/keys as familyRows. */
   familyColors: string[];
+  /**
+   * Render the internal title + toggle row (default true). ResultsPanel passes
+   * false and hosts the ChartToggle in its collapsible card header instead
+   * (#194 stage 4 revision); standalone/test usage keeps the built-in header.
+   */
+  showHeader?: boolean;
 }
 
 // ── Segmented icon toggle ─────────────────────────────────────────────────────
@@ -79,7 +85,10 @@ function TabIcon({ view }: { view: ChartView }) {
   );
 }
 
-function ChartToggle({ view, onViewChange }: { view: ChartView; onViewChange: (v: ChartView) => void }) {
+// Exported so ResultsPanel can host the toggle in the collapsible card's tinted
+// header (#194 stage 4 revision) while this module stays the source of truth
+// for its markup/behaviour.
+export function ChartToggle({ view, onViewChange }: { view: ChartView; onViewChange: (v: ChartView) => void }) {
   // Arrow-key roving focus across the three tabs (nice-to-have per handoff).
   function onKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
@@ -219,7 +228,7 @@ function Caption({ view }: { view: ChartView }) {
 
 // ── Card body ─────────────────────────────────────────────────────────────────
 
-export function AllocationViews({ view, onViewChange, familyRows, subRows, familyColors }: Props) {
+export function AllocationViews({ view, onViewChange, familyRows, subRows, familyColors, showHeader = true }: Props) {
   const isBar = view === 'bar';
 
   const donutInner: DonutSlice[] = familyRows.map((r, i) => ({ label: r.label, weight: r.a, color: familyColors[i] }));
@@ -236,10 +245,12 @@ export function AllocationViews({ view, onViewChange, familyRows, subRows, famil
 
   return (
     <div>
-      <div className="flex items-center justify-between gap-4 flex-wrap mb-1.5">
-        <div className="text-sm font-medium text-gray-700">Household allocation</div>
-        <ChartToggle view={view} onViewChange={onViewChange} />
-      </div>
+      {showHeader && (
+        <div className="flex items-center justify-between gap-4 flex-wrap mb-1.5">
+          <div className="text-sm font-medium text-gray-700">Household allocation</div>
+          <ChartToggle view={view} onViewChange={onViewChange} />
+        </div>
+      )}
 
       <div className="flex items-start flex-wrap justify-center" style={{ columnGap: 48, rowGap: 16 }}>
         {/* chart pane — fixed min-height (= the tallest view, the 264px bar

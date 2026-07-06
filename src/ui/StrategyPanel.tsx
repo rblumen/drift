@@ -1137,17 +1137,17 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
         </div>
         <div className="px-4 py-3">
           <div className="overflow-x-auto"><table className="w-full text-sm">
-            <thead className="text-xs text-gray-500 uppercase tracking-wide">
+            <thead className="font-mono text-[10px] text-muted-3 uppercase tracking-[.06em] border-b border-line-2">
               <tr>
-                <th className="px-4 py-2 text-left">Asset class</th>
-                <th className="px-4 py-2 text-left">
+                <th className="px-4 py-1.5 text-left font-normal">Asset class</th>
+                <th className="px-4 py-1.5 text-left font-normal">
                   1st choice
                   <HelpTip>
                     The engine fills accounts in this bucket first. If the bucket has enough
                     capacity, the entire class lands here and no spillover occurs.
                   </HelpTip>
                 </th>
-                <th className="px-4 py-2 text-left">
+                <th className="px-4 py-1.5 text-left font-normal">
                   2nd choice
                   <HelpTip>
                     Used only when the 1st-choice bucket is full or has no eligible account.
@@ -1158,7 +1158,7 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-line-3 text-[12.5px]">
               {TOP_LEVEL_CLASSES.flatMap(ac => {
                 const renderRow = (cls: AssetClass, depth: 0 | 1) => {
                   const buckets = placementBuckets(cls);
@@ -1168,8 +1168,8 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
                   // A child with no explicit placement of its own inherits the parent's.
                   const inherits = isChild && !strategy.placement[cls];
                   return (
-                    <tr key={cls} className={`hover:bg-gray-50 ${isChild ? 'bg-gray-50/40' : ''}`}>
-                      <td className={`py-2 ${isChild ? 'pl-10 pr-4' : 'px-4'}`}>
+                    <tr key={cls} className={`hover:bg-paper ${isChild ? 'bg-gray-50/40' : ''}`}>
+                      <td className={`py-1.5 ${isChild ? 'pl-10 pr-4' : 'px-4'}`}>
                         <span className={isChild ? 'text-xs text-gray-500' : 'text-gray-700'}>
                           {AC_LABEL[cls]}
                         </span>
@@ -1179,12 +1179,12 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
                       </td>
 
                       {/* 1st choice — required; "No preference" relaxes placement entirely */}
-                      <td className="px-4 py-2">
+                      <td className="px-4 py-1.5">
                         <select
                           value={noPreference ? NO_PREF : (buckets[0] ?? 'TAX_ADVANTAGED')}
                           onChange={e => updatePlacement(cls, 0, e.target.value as PlacementTarget | typeof NO_PREF)}
                           aria-label={`${AC_LABEL[cls]} — 1st placement choice`}
-                          className="border border-gray-200 rounded px-2 py-1 text-sm bg-white hover:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
+                          className="border border-gray-200 rounded px-2 py-1 text-[12.5px] bg-white hover:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
                         >
                           <option value={NO_PREF}>No preference</option>
                           {renderPlacementOptions(placementGroups, buckets[0], accounts)}
@@ -1192,7 +1192,7 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
                       </td>
 
                       {/* 2nd choice — optional, empty = spill anywhere. Disabled when no preference. */}
-                      <td className="px-4 py-2">
+                      <td className="px-4 py-1.5">
                         {noPreference ? (
                           <span className="text-xs text-gray-400 italic">placed wherever capacity exists</span>
                         ) : (
@@ -1200,7 +1200,7 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
                             value={buckets[1] ?? ''}
                             onChange={e => updatePlacement(cls, 1, e.target.value as PlacementTarget | '')}
                             aria-label={`${AC_LABEL[cls]} — 2nd placement choice`}
-                            className="border border-gray-200 rounded px-2 py-1 text-sm bg-white hover:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400 text-gray-500"
+                            className="border border-gray-200 rounded px-2 py-1 text-[12.5px] bg-white hover:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400 text-gray-500"
                           >
                             <option value="">— none —</option>
                             {renderPlacementOptions(placementGroups, buckets[1], accounts)}
