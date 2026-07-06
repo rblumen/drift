@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-06
+
 ### Added
 
 - **"Normalize to 100%" control on the Strategy tab** ([#194](https://github.com/rblumen/drift/issues/194)) — the Target allocation card's footer gains a one-click **Normalize to 100%** button that proportionally rescales every target weight so they sum to exactly 100%, alongside the existing sum indicator and a "Reset to defaults" button. Handy after editing a few classes has left the total slightly off — no more nudging figures by hand to clear the "must sum to 100%" warning.
@@ -177,6 +179,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - All computation is client-side — no backend, no network calls, no telemetry.
 - Synthetic fixtures only; real financial data is git-ignored.
 
-[Unreleased]: https://github.com/rblumen/drift/compare/v0.1.0...HEAD
-[0.2.0]: https://github.com/rblumen/drift/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/rblumen/drift/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/rblumen/drift/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/rblumen/drift/releases/tag/v0.2.0
 [0.1.0]: https://github.com/rblumen/drift/compare/af21039...v0.1.0
