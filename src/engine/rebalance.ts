@@ -4,7 +4,7 @@ import { makeClassifier, type ClassifyFn } from './classify';
 import { rollup } from './rollup';
 import { resolveTradeVehicles } from './resolve';
 import { nativeAllocationByAccount, projectedNativeAllocationByAccount } from './nativeAllocation';
-import { consolidateParentClasses, childrenOf, PARENT_CLASS } from './hierarchy';
+import { consolidateParentClasses, childrenOf, CLASS_HIERARCHY, PARENT_CLASS } from './hierarchy';
 import { accountBucket, greedyPlace } from './placement';
 import { targetTaxTreatment } from './placementHierarchy';
 import { fillOrdered } from './cashfill';
@@ -456,10 +456,10 @@ function synthesizeBlendedFundSells(
       if (r * B.marketValue < strategy.minTradeUsd) continue;
 
       // Fund-level sale total — surfaced as an informational flag so the user
-      // sees that this run touched a blended-fund position. The engine has no
-      // symmetric buy mechanism for blended funds, so repeated rebalances will
-      // trend the allocation away from this position; the flag makes that
-      // asymmetry visible at the moment of impact.
+      // sees that this run touched a blended-fund position. Step 8.8 (issue #49)
+      // provides the symmetric composite-buy mechanism, so a fund whose
+      // composition still fits the household's buy direction gets replenished on
+      // later rebalances rather than trending toward depletion.
       flags.push({
         kind: 'BLENDED_FUND_SOLD',
         accountId: A.id, ticker: B.ticker, amountUsd: r * B.marketValue,
@@ -527,6 +527,242 @@ function synthesizeBlendedFundSells(
         const forcedAmt = r * w * B.marketValue;
         sellDemand[ac] = Math.max(0, sellDemand[ac] - Math.min(forcedAmt, sellDemand[ac]));
       }
+    }
+  }
+
+  return flags;
+}
+
+/**
+ * Express a fund decomposition in the engine's *effective* class vocabulary —
+ * the same lens rollup + consolidateParentClasses put holdings through — so a
+ * composite buy's per-class deltas line up with the classes the trade list and
+ * projected-value maps actually use.
+ *
+ *  • A parent-level slice (e.g. a TDF's US_TOTAL_MARKET sleeve) is redistributed
+ *    into its children by defaultWeights when targeting is at the child level
+ *    (mirror of rollup's redistribution).
+ *  • A child-level slice folds into its parent when the strategy targets the
+ *    parent (mirror of consolidateParentClasses).
+ *  • Everything else passes through unchanged.
+ */
+function effectiveDecomposition(
+  decomp: FundDecomposition,
+  targets: Strategy['targets'],
+): Partial<Record<AssetClass, number>> {
+  const parentTargeted = (p: AssetClass) =>
+    (targets[p] ?? 0) > 0 && childrenOf(p).every(c => (targets[c] ?? 0) === 0);
+
+  const out: Partial<Record<AssetClass, number>> = {};
+  const add = (ac: AssetClass, w: number) => { out[ac] = (out[ac] ?? 0) + w; };
+  for (const [ac, w] of Object.entries(decomp) as [AssetClass, number][]) {
+    if (!w || w <= 0) continue;
+    const group = CLASS_HIERARCHY[ac];
+    const parent = PARENT_CLASS[ac];
+    if (group && !parentTargeted(ac)) {
+      for (const child of group.children) add(child, w * (group.defaultWeights[child] ?? 0));
+    } else if (parent && parentTargeted(parent)) {
+      add(parent, w);
+    } else {
+      add(ac, w);
+    }
+  }
+  return out;
+}
+
+/**
+ * Step 8.8 — Composite-buy substitution for blended funds (issue #49).
+ *
+ * The buy-side mirror of Step 8.7: when an account's buy vector points in the
+ * same direction as the composition of a blended fund the account ALREADY
+ * HOLDS, one purchase of the fund can replace several per-class buys. Only
+ * held funds with a known decomposition are candidates — the engine never
+ * assumes outside knowledge of an account's fund menu.
+ *
+ * For a candidate fund with (effective, normalized) weights w and per-class
+ * eligible buy demand b over the classes the fund covers (budget B = Σ b):
+ *
+ *  • A composite spend `s` delivers `s·w[ac]` of every covered class.
+ *  • Residual demand `r[ac] = max(0, b[ac] − s·w[ac])` stays as individual buys,
+ *    uniformly scaled by `λ = (B − s) / Σr` so total spend stays exactly B —
+ *    the substitution is spend-neutral and per-account nets are untouched.
+ *  • Classes the fund delivers beyond their demand (over-buys, including
+ *    zero-demand slices like a TDF's cash sleeve) and classes whose residual
+ *    buys get scaled down are both checked against the Step 8.6 target band:
+ *    the class's projected household weight must stay within
+ *    targetTolerance, OR move toward target, OR deviate from target by less
+ *    than minTradeUsd (the same dust allowance Step 11 uses for 0%-target
+ *    classes). No new tolerance knob.
+ *  • Fit threshold: a substitution must fully collapse at least TWO individual
+ *    buy legs and the composite itself must clear minTradeUsd — every accepted
+ *    substitution strictly reduces the executed trade count.
+ *
+ * Candidate spends are the natural breakpoints (each leg's full-absorption
+ * point b[ac]/w[ac], plus the full budget B), evaluated largest-first; among
+ * funds, the one collapsing the most legs wins (tie → larger spend). Funds the
+ * sell side (Step 8.7) touched this run are excluded — recommending a buy and
+ * a sell of the same fund in one run would be contradictory. Runs after 8.6 /
+ * 8.7, so trade-count minimization can never drop a single leg of a composite.
+ */
+function synthesizeCompositeBuys(
+  accounts: Account[],
+  positions: Position[],
+  decompositions: Record<string, FundDecomposition>,
+  trades: Trade[],
+  currentValue: Record<AssetClass, number>,
+  householdValue: number,
+  strategy: Strategy,
+): Flag[] {
+  const flags: Flag[] = [];
+  if (strategy.preferCompositeBuys === false || householdValue <= 0) return flags;
+
+  interface Fit {
+    ticker: string;
+    s: number;                                     // composite spend (fund dollars)
+    collapsed: number;                             // individual buy legs removed
+    w: Partial<Record<AssetClass, number>>;        // normalized effective weights
+    keptByClass: Record<AssetClass, number>;       // residual demand kept per class
+    bByClass: Record<AssetClass, number>;          // eligible demand per class
+  }
+
+  for (const A of accounts) {
+    if (A.locked) continue;
+    const inTaxable = accountBucket(A.type) === 'TAXABLE';
+
+    // Funds Step 8.7 force-sold in this account this run are not buy candidates.
+    const soldHere = new Set(
+      trades
+        .filter(t => t.accountId === A.id && t.deltaUsd < 0 && t.forceTicker)
+        .map(t => t.forceTicker!.toUpperCase()),
+    );
+
+    // Candidates: blended funds already held in A, decomposition known, not locked,
+    // not sold this run. Deduped by ticker; larger holdings evaluated first only
+    // for deterministic ordering — selection is by fit, not size.
+    const seen = new Set<string>();
+    const candidates = positions
+      .filter(p => {
+        const key = p.ticker.toUpperCase();
+        if (p.accountId !== A.id || p.locked) return false;
+        if (!decompositions[key] || soldHere.has(key) || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .sort((a, b) => b.marketValue - a.marketValue)
+      .map(p => p.ticker);
+
+    while (candidates.length > 0) {
+      // Household projected value per class under the current trade list.
+      const projVal = { ...currentValue };
+      for (const t of trades) projVal[t.assetClass] += t.deltaUsd;
+
+      let best: Fit | null = null;
+
+      for (const ticker of candidates) {
+        const raw = effectiveDecomposition(decompositions[ticker.toUpperCase()]!, strategy.targets);
+        const wTotal = Object.values(raw).reduce((s, v) => s + (v ?? 0), 0);
+        if (wTotal <= EPSILON) continue;
+        const w: Partial<Record<AssetClass, number>> = {};
+        for (const [ac, v] of Object.entries(raw) as [AssetClass, number][]) w[ac] = v / wTotal;
+
+        // Eligible buy demand: plain buys in A for classes the fund covers. Forced
+        // trades (composite legs, 8.7 routing) and buys that exclude this fund
+        // (8.7 compensating buy-backs) are never substituted.
+        const b = zeroByClass();
+        for (const t of trades) {
+          if (t.accountId !== A.id || t.deltaUsd <= 0 || t.forceTicker) continue;
+          if ((t.excludeTickers ?? []).some(x => x.toUpperCase() === ticker.toUpperCase())) continue;
+          if ((w[t.assetClass] ?? 0) > 0) b[t.assetClass] += t.deltaUsd;
+        }
+        const legs = ALL_ASSET_CLASSES.filter(ac => b[ac] > EPSILON);
+        if (legs.length < 2) continue;                 // can't collapse two legs
+        const budget = legs.reduce((s, ac) => s + b[ac], 0);
+
+        // Natural spend breakpoints: each leg's full-absorption point, plus the
+        // full budget. Largest feasible wins.
+        const spends = [...new Set(
+          [budget, ...legs.map(ac => b[ac] / w[ac]!)].filter(s => s <= budget + EPSILON),
+        )].sort((x, y) => y - x);
+
+        for (const s of spends) {
+          if (s < strategy.minTradeUsd) break;         // sorted desc — all smaller fail too
+
+          // Residuals and the uniform spend-neutral shrink factor.
+          const covered = Object.keys(w) as AssetClass[];
+          const r = zeroByClass();
+          let sumR = 0;
+          for (const ac of covered) {
+            r[ac] = Math.max(0, b[ac] - s * w[ac]!);
+            sumR += r[ac];
+          }
+          const lambda = sumR > EPSILON ? Math.max(0, Math.min(1, (budget - s) / sumR)) : 0;
+
+          // Band check on every class the substitution perturbs.
+          let feasible = true;
+          const kept = zeroByClass();
+          for (const ac of covered) {
+            kept[ac] = lambda * r[ac];
+            const diff = s * w[ac]! + kept[ac] - b[ac];
+            if (Math.abs(diff) <= EPSILON) continue;
+            const targetVal = strategy.targets[ac] * householdValue;
+            const oldDev = Math.abs(projVal[ac] - targetVal);
+            const newDev = Math.abs(projVal[ac] + diff - targetVal);
+            const bandUsd = targetTolerance(ac, strategy) * householdValue;
+            if (newDev > bandUsd + EPSILON && newDev > oldDev + EPSILON && newDev >= strategy.minTradeUsd) {
+              feasible = false;
+              break;
+            }
+          }
+          if (!feasible) continue;
+
+          // Every kept residual leg must remain executable (≥ minTradeUsd).
+          let collapsed = 0;
+          for (const ac of legs) {
+            if (kept[ac] <= EPSILON) { collapsed++; continue; }
+            if (kept[ac] < strategy.minTradeUsd) { feasible = false; break; }
+          }
+          if (!feasible || collapsed < 2) continue;
+
+          if (
+            best === null ||
+            collapsed > best.collapsed ||
+            (collapsed === best.collapsed && s > best.s + EPSILON)
+          ) {
+            best = { ticker, s, collapsed, w, keptByClass: kept, bByClass: b };
+          }
+          break;                                       // largest feasible spend for this fund
+        }
+      }
+
+      if (!best) break;
+
+      // Commit: scale (or remove) the substituted individual buys, then emit the
+      // composite legs pinned to the fund. The resolver merges the legs into one
+      // "buy $s of <ticker>" ResolvedTrade with the sub-class breakdown.
+      for (let i = trades.length - 1; i >= 0; i--) {
+        const t = trades[i];
+        if (t.accountId !== A.id || t.deltaUsd <= 0 || t.forceTicker) continue;
+        if ((t.excludeTickers ?? []).some(x => x.toUpperCase() === best!.ticker.toUpperCase())) continue;
+        const bAC = best.bByClass[t.assetClass];
+        if (!(bAC > EPSILON) || !((best.w[t.assetClass] ?? 0) > 0)) continue;
+        const factor = best.keptByClass[t.assetClass] / bAC;
+        const newDelta = t.deltaUsd * factor;
+        if (newDelta <= EPSILON) trades.splice(i, 1);
+        else trades[i] = { ...t, deltaUsd: newDelta };
+      }
+      for (const [ac, weight] of Object.entries(best.w) as [AssetClass, number][]) {
+        const legUsd = best.s * weight;
+        if (legUsd <= EPSILON) continue;
+        trades.push({
+          accountId: A.id, assetClass: ac, deltaUsd: legUsd,
+          inTaxableAccount: inTaxable, forceTicker: best.ticker,
+        });
+      }
+      flags.push({
+        kind: 'BLENDED_FUND_BOUGHT',
+        accountId: A.id, ticker: best.ticker, amountUsd: best.s,
+      });
+      candidates.splice(candidates.indexOf(best.ticker), 1);
     }
   }
 
@@ -1333,6 +1569,25 @@ export function rebalance(
   flags.push(...synthesizeBlendedFundSells(
     accounts, positions, decompositions, trades,
     unlockedCurrent, effectiveAllowed, strategy,
+  ));
+
+  // Step 8.8 — Composite-buy substitution for blended funds (issue #49).
+  //
+  // The buy-side mirror of Step 8.7, resolving the sell/buy asymmetry PR #47
+  // disclosed: when an account's per-class buys point in the same direction as
+  // the composition of a blended fund the account already holds, one purchase
+  // of the fund replaces several individual buys. Substitutions are
+  // spend-neutral (per-account nets untouched), gated by the Step 8.6 target
+  // band on every perturbed class, and only accepted when they collapse at
+  // least two buy legs — every composite strictly reduces trade count.
+  //
+  // Runs after 8.6 (minimization can't drop a lone composite leg) and after
+  // 8.7 (funds force-sold this run are excluded as buy candidates, and 8.7's
+  // compensating buy-backs keep their excludeTickers routing). Disable with
+  // strategy.preferCompositeBuys = false.
+  flags.push(...synthesizeCompositeBuys(
+    accounts, positions, decompositions, trades,
+    currentValue, householdValue, strategy,
   ));
 
   // ── Tax-adjustment trade conversion (issue #7) ────────────────────────────

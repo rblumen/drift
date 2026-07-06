@@ -1420,6 +1420,37 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
           </button>
         </div>
 
+        {/* Composite buys toggle (issue #49) */}
+        <div className="flex items-start justify-between gap-4 max-w-2xl border-t border-gray-100 pt-3">
+          <div>
+            <div className="text-sm text-gray-700">Composite buys</div>
+            <p className="text-xs text-gray-400 mt-0.5 max-w-md">
+              Collapse several asset-class buys into one purchase of a blended fund
+              (target-date, balanced) the account already holds, when the fund's
+              composition matches. Fewer trades; only held funds with a known
+              decomposition are used.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={strategy.preferCompositeBuys !== false}
+            onClick={() => setStrategy({
+              ...strategy,
+              preferCompositeBuys: strategy.preferCompositeBuys === false,
+            })}
+            className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+              strategy.preferCompositeBuys !== false ? 'bg-brand-600' : 'bg-gray-300'
+            }`}
+          >
+            <span
+              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                strategy.preferCompositeBuys !== false ? 'translate-x-6' : 'translate-x-1'
+              }`}
+            />
+          </button>
+        </div>
+
         {/* Tax-adjusted allocation (issue #7) */}
         <TaxAdjustmentControl
           strategy={strategy}

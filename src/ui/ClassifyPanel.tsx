@@ -359,11 +359,12 @@ export function ClassifyPanel({
             the fund (with compensating buys in other tickers) only when the household drift demands it.
             Use the position-level lock if you want a specific blended-fund holding excluded entirely.
           </p>
-          <p className="mt-2 text-warn">
-            <strong>Asymmetry to be aware of:</strong> the engine will <em>sell</em> a blended fund when
-            drift demands but has no symmetric mechanism to <em>buy</em> one back. Over repeated rebalances
-            your allocation will gradually trend away from any blended fund the engine has touched.
-            If you'd rather preserve a specific blended-fund holding, lock the position.
+          <p className="mt-2">
+            The engine also <em>buys</em> blended funds: when several asset-class buys in an account
+            line up with the composition of a blended fund the account already holds, they collapse
+            into one composite purchase of that fund (fewer trades, and the position isn't slowly
+            depleted by one-way sells). This only ever routes through funds you already hold with a
+            known decomposition, and can be turned off in the Strategy tab ("Composite buys").
           </p>
         </HelpSection>
       </HelpBox>
@@ -551,7 +552,7 @@ export function ClassifyPanel({
             </table>
           </div>
           <p className="px-4 pb-3 font-mono text-[10px] text-muted-3">
-            Blended funds count toward allocation totals. The engine may recommend selling a blended fund, but never buying one — buys go to single-class funds (their sub-components can't be bought individually).
+            Blended funds count toward allocation totals. The engine may recommend selling a blended fund proportionally, or buying one when several asset-class buys in the same account match its composition (composite buys — only funds already held are considered).
           </p>
         </Card>
       )}

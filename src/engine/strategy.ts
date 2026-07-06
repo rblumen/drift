@@ -87,4 +87,7 @@ export const DEFAULT_STRATEGY: Strategy = {
   minTradeUsd:  250,
   // Exhaust tax-advantaged rebalancing before selling in taxable accounts.
   preferTaxAdvantagedRebalance: true,
+  // Collapse multi-class buys into a single held blended fund when its
+  // composition fits (issue #49, Step 8.8).
+  preferCompositeBuys: true,
 };

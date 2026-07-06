@@ -2215,9 +2215,9 @@ describe('Goal 4: blended-fund sells â€” issue #40', () => {
 
   describe('BLENDED_FUND_SOLD disclosure', () => {
     // Whenever the engine touches a blended fund, it surfaces a one-per-fund
-    // informational flag carrying the total fund-level sale amount. Users see
-    // this so they know the engine sells but doesn't buy blended funds â€”
-    // repeated rebalances will trend them out of the position over time.
+    // informational flag carrying the total fund-level sale amount, so the
+    // user sees the position was disturbed. (Composite buys — issue #49 —
+    // replenish a still-fitting fund on later rebalances.)
     const accts: Account[] = [
       { id: 'k401', name: '401k', institution: 'Empower', type: 'FOUR_OH_ONE_K',
         availableTickers: ['FDKLX', 'FXAIX', 'VXUS', 'BND'] },
@@ -2453,6 +2453,324 @@ describe('Goal 10 / issue #42: rebalance lands within the target band, not the t
       return Math.abs(r.projectedWeights.US_LARGE_CAP - 0.5);
     };
     expect(dev(0.5)).toBeLessThanOrEqual(dev(1.0));
+  });
+});
+
+// ─── Issue #49: composite buys — Step 8.8 ────────────────────────────────────
+//
+// The buy-side mirror of Step 8.7. When an account's per-class buys point in
+// the direction of a blended fund the account ALREADY HOLDS (composition
+// known), one purchase of the fund replaces several individual buys. Only held
+// funds are candidates — the engine never assumes outside knowledge of an
+// account's fund menu. Substitutions are spend-neutral, must collapse at least
+// two buy legs, and every perturbed class must stay within the Step 8.6 target
+// band (or move toward target, or deviate by less than minTradeUsd).
+
+describe('Goal 4: composite buys — issue #49', () => {
+  // 60% US large cap, 30% INTL developed, 10% fixed income.
+  const TDF_DECOMP = {
+    US_LARGE_CAP:   0.60,
+    DEVELOPED_INTL: 0.30,
+    FIXED_INCOME:   0.10,
+  };
+  const TDF = { FDKLX: TDF_DECOMP };
+
+  const SIMPLE_STRAT: Strategy = {
+    targets: { ...ZERO_TARGETS,
+      US_LARGE_CAP: 0.60, DEVELOPED_INTL: 0.30, FIXED_INCOME: 0.10,
+    },
+    placement: fillPlacement({}),
+    toleranceAbs: 0,
+    minTradeUsd:  0,
+  };
+
+  const compositeBuys = (r: ReturnType<typeof rebalance>, ticker = 'FDKLX') =>
+    r.trades.filter(t => t.forceTicker === ticker && t.deltaUsd > 0);
+  const boughtFlags = (r: ReturnType<typeof rebalance>) =>
+    r.flags.filter(f => f.kind === 'BLENDED_FUND_BOUGHT');
+
+  describe('perfect cover — one composite replaces three individual buys', () => {
+    // 401k holds only FDKLX, already at target proportions. A $10k contribution
+    // buys 60/30/10 — exactly the fund's composition. The engine should emit a
+    // single composite purchase of the fund instead of three per-class buys.
+    const accts: Account[] = [
+      { id: 'k401', name: '401k', institution: 'Empower', type: 'FOUR_OH_ONE_K', newCash: 10_000 },
+    ];
+    const positions: Position[] = [
+      { accountId: 'k401', ticker: 'FDKLX', marketValue: 100_000 },
+    ];
+
+    it('routes the whole contribution through the held blended fund', () => {
+      const r = rebalance(accts, positions, SIMPLE_STRAT, {}, TDF, 0, 0);
+      const legs = compositeBuys(r);
+      expect(legs.length).toBe(3);
+      expect(near(legs.reduce((s, t) => s + t.deltaUsd, 0), 10_000, 5)).toBe(true);
+      // No stray per-class buys remain.
+      expect(r.trades.filter(t => t.deltaUsd > 0 && !t.forceTicker)).toHaveLength(0);
+    });
+
+    it('legs respect the 60/30/10 composition', () => {
+      const r = rebalance(accts, positions, SIMPLE_STRAT, {}, TDF, 0, 0);
+      const leg = (ac: AssetClass) =>
+        compositeBuys(r).find(t => t.assetClass === ac)?.deltaUsd ?? 0;
+      expect(near(leg('US_LARGE_CAP'),   6_000, 5)).toBe(true);
+      expect(near(leg('DEVELOPED_INTL'), 3_000, 5)).toBe(true);
+      expect(near(leg('FIXED_INCOME'),   1_000, 5)).toBe(true);
+    });
+
+    it('emits one BLENDED_FUND_BOUGHT flag with the fund-level total', () => {
+      const r = rebalance(accts, positions, SIMPLE_STRAT, {}, TDF, 0, 0);
+      const bought = boughtFlags(r);
+      expect(bought).toHaveLength(1);
+      expect(bought[0].kind === 'BLENDED_FUND_BOUGHT' && bought[0].ticker).toBe('FDKLX');
+      expect(bought[0].kind === 'BLENDED_FUND_BOUGHT' && bought[0].accountId).toBe('k401');
+      expect(bought[0].kind === 'BLENDED_FUND_BOUGHT' &&
+        near(bought[0].amountUsd, 10_000, 5)).toBe(true);
+    });
+
+    it('preserves the per-account net (Principle #3)', () => {
+      const r = rebalance(accts, positions, SIMPLE_STRAT, {}, TDF, 0, 0);
+      expect(near(accountSum(r.trades, 'k401'), 10_000, 5)).toBe(true);
+    });
+  });
+
+  describe('close-but-not-exact — composite covers the binding portion, residual stays individual', () => {
+    // Buy demand is 30k/15k/10k (US_LC/INTL/FI) against a 60/30/10 fund: the
+    // first two legs absorb exactly at s = $50k, leaving a $5k FI residual that
+    // must remain an individual buy.
+    const accts: Account[] = [
+      { id: 'k401', name: '401k', institution: 'Empower', type: 'FOUR_OH_ONE_K', newCash: 55_000 },
+    ];
+    const positions: Position[] = [
+      { accountId: 'k401', ticker: 'FDKLX', marketValue: 100_000 },
+    ];
+    const SKEWED: Strategy = {
+      ...SIMPLE_STRAT,
+      // Household after deposit = $155k. Targets put US_LC at 90k, INTL at 45k,
+      // FI at 20k → buys of 30k/15k/10k on top of the fund's 60k/30k/10k.
+      targets: { ...ZERO_TARGETS,
+        US_LARGE_CAP: 90 / 155, DEVELOPED_INTL: 45 / 155, FIXED_INCOME: 20 / 155,
+      },
+    };
+
+    it('emits a $50k composite plus a $5k individual FI buy', () => {
+      const r = rebalance(accts, positions, SKEWED, {}, TDF, 0, 0);
+      const legs = compositeBuys(r);
+      expect(near(legs.reduce((s, t) => s + t.deltaUsd, 0), 50_000, 10)).toBe(true);
+      const residual = r.trades.filter(t => t.deltaUsd > 0 && !t.forceTicker);
+      expect(residual).toHaveLength(1);
+      expect(residual[0].assetClass).toBe('FIXED_INCOME');
+      expect(near(residual[0].deltaUsd, 5_000, 10)).toBe(true);
+    });
+
+    it('total spend equals the contribution (spend-neutral substitution)', () => {
+      const r = rebalance(accts, positions, SKEWED, {}, TDF, 0, 0);
+      expect(near(accountSum(r.trades, 'k401'), 55_000, 10)).toBe(true);
+    });
+  });
+
+  describe('overbuy tolerance — target band gates the substitution', () => {
+    // FDKC has a 3% cash sleeve the strategy targets at 0%. A zero-target class
+    // has a zero-width band, so the only allowance is the minTradeUsd dust
+    // clause (mirroring Step 11): the composite fires when the forced cash
+    // slice is dust, and falls back to individual buys when it is material.
+    //
+    // The FDKC position is kept small (its $150 embedded cash is itself below
+    // minTradeUsd) and the non-blended positions sit at the 60/30/10 target,
+    // so the only engine action is deploying the contribution.
+    const CASH_TDF = {
+      FDKC: { US_LARGE_CAP: 0.58, DEVELOPED_INTL: 0.29, FIXED_INCOME: 0.10, CASH: 0.03 },
+    };
+    const accts = (cash: number): Account[] => [
+      { id: 'k401', name: '401k', institution: 'Empower', type: 'FOUR_OH_ONE_K', newCash: cash },
+    ];
+    // Invested mix is exactly 60/30/10: US_LC 18k, INTL 9k, FI 3k (incl. FDKC's slices).
+    const positions: Position[] = [
+      { accountId: 'k401', ticker: 'FDKC',  marketValue:  5_000 },
+      { accountId: 'k401', ticker: 'FXAIX', marketValue: 15_100 },
+      { accountId: 'k401', ticker: 'VXUS',  marketValue:  7_550 },
+      { accountId: 'k401', ticker: 'BND',   marketValue:  2_500 },
+    ];
+    const STRAT_250: Strategy = { ...SIMPLE_STRAT, minTradeUsd: 250 };
+
+    it('fires when the forced cash over-buy is below minTradeUsd', () => {
+      // $3k contribution → composite's cash slice ≈ $90; with the $150 already
+      // embedded in the held FDKC, projected CASH lands at ≈ $240 < $250: the
+      // dust allowance passes.
+      const r = rebalance(accts(3_000), positions, STRAT_250, {}, CASH_TDF, 0, 0);
+      expect(boughtFlags(r)).toHaveLength(1);
+      expect(near(
+        compositeBuys(r, 'FDKC').reduce((s, t) => s + t.deltaUsd, 0), 3_000, 25,
+      )).toBe(true);
+    });
+
+    it('falls back to individual buys when the over-buy exceeds the band', () => {
+      // $50k contribution → composite's cash slice ≈ $1.5k ≥ $250 and outside
+      // the zero-width band for a 0%-target class: no composite.
+      const r = rebalance(accts(50_000), positions, STRAT_250, {}, CASH_TDF, 0, 0);
+      expect(boughtFlags(r)).toHaveLength(0);
+      expect(compositeBuys(r, 'FDKC')).toHaveLength(0);
+      // The three individual buys still execute.
+      expect(r.trades.filter(t => t.deltaUsd > 0)).toHaveLength(3);
+    });
+  });
+
+  describe('two competing blended funds — better fit wins', () => {
+    // FDKLX (60/30/10) matches the buy direction exactly; FBAL (40/40/20) does
+    // not. Only FDKLX should be bought.
+    const TWO_FUNDS = {
+      FDKLX: TDF_DECOMP,
+      FBAL:  { US_LARGE_CAP: 0.40, DEVELOPED_INTL: 0.40, FIXED_INCOME: 0.20 },
+    };
+    const accts: Account[] = [
+      { id: 'k401', name: '401k', institution: 'Empower', type: 'FOUR_OH_ONE_K', newCash: 10_000 },
+    ];
+    // Current mix: US_LC 50k, INTL 35k, FI 15k. Targets sized so the $10k of
+    // buys split exactly 60/30/10 — FDKLX's composition, not FBAL's.
+    const positions: Position[] = [
+      { accountId: 'k401', ticker: 'FDKLX', marketValue: 50_000 },
+      { accountId: 'k401', ticker: 'FBAL',  marketValue: 50_000 },
+    ];
+    const STRAT: Strategy = {
+      ...SIMPLE_STRAT,
+      targets: { ...ZERO_TARGETS,
+        US_LARGE_CAP: 56 / 110, DEVELOPED_INTL: 38 / 110, FIXED_INCOME: 16 / 110,
+      },
+    };
+
+    it('buys the fund whose composition matches the buy vector', () => {
+      const r = rebalance(accts, positions, STRAT, {}, TWO_FUNDS, 0, 0);
+      const bought = boughtFlags(r);
+      expect(bought).toHaveLength(1);
+      expect(bought[0].kind === 'BLENDED_FUND_BOUGHT' && bought[0].ticker).toBe('FDKLX');
+      expect(compositeBuys(r, 'FBAL')).toHaveLength(0);
+    });
+  });
+
+  describe('preferCompositeBuys: false disables the substitution', () => {
+    const accts: Account[] = [
+      { id: 'k401', name: '401k', institution: 'Empower', type: 'FOUR_OH_ONE_K', newCash: 10_000 },
+    ];
+    const positions: Position[] = [
+      { accountId: 'k401', ticker: 'FDKLX', marketValue: 100_000 },
+    ];
+
+    it('emits only individual per-class buys', () => {
+      const OFF: Strategy = { ...SIMPLE_STRAT, preferCompositeBuys: false };
+      const r = rebalance(accts, positions, OFF, {}, TDF, 0, 0);
+      expect(compositeBuys(r)).toHaveLength(0);
+      expect(boughtFlags(r)).toHaveLength(0);
+      expect(r.trades.filter(t => t.deltaUsd > 0)).toHaveLength(3);
+    });
+  });
+
+  describe('fit threshold — a single-class match never substitutes', () => {
+    // Only US_LC is under target, so the account's buy vector has one leg. A
+    // composite would not reduce trade count; the buy stays individual.
+    const accts: Account[] = [
+      { id: 'k401', name: '401k', institution: 'Empower', type: 'FOUR_OH_ONE_K', newCash: 10_000 },
+    ];
+    // INTL and FI sit exactly at their post-deposit targets; the whole $10k is
+    // US_LC demand.
+    const positions: Position[] = [
+      { accountId: 'k401', ticker: 'FDKLX', marketValue: 50_000 },
+      { accountId: 'k401', ticker: 'VXUS',  marketValue: 18_000 },
+      { accountId: 'k401', ticker: 'BND',   marketValue: 12_000 },
+    ];
+    const STRAT: Strategy = {
+      ...SIMPLE_STRAT,
+      // Household after deposit = $90k. Current: US_LC 30k, INTL 33k, FI 17k.
+      targets: { ...ZERO_TARGETS,
+        US_LARGE_CAP: 40 / 90, DEVELOPED_INTL: 33 / 90, FIXED_INCOME: 17 / 90,
+      },
+    };
+
+    it('leaves the lone buy leg as an individual trade', () => {
+      const r = rebalance(accts, positions, STRAT, {}, TDF, 0, 0);
+      expect(compositeBuys(r)).toHaveLength(0);
+      expect(boughtFlags(r)).toHaveLength(0);
+    });
+  });
+
+  describe('composite buy + non-blended sell in the same account nets correctly', () => {
+    // GLD must be sold (0% alternatives target); the proceeds fund a 60/30/10
+    // multi-class buy that FDKLX covers exactly. The sell and the composite
+    // must net to zero through Step 8.5.
+    const accts: Account[] = [
+      { id: 'k401', name: '401k', institution: 'Empower', type: 'FOUR_OH_ONE_K' },
+    ];
+    const positions: Position[] = [
+      { accountId: 'k401', ticker: 'FDKLX', marketValue: 50_000 },
+      { accountId: 'k401', ticker: 'GLD',   marketValue: 10_000 },
+    ];
+
+    it('sells GLD, buys the fund, per-account net stays zero', () => {
+      const r = rebalance(accts, positions, SIMPLE_STRAT, {}, TDF, 0, 0);
+      const sell = r.trades.find(t => t.deltaUsd < 0);
+      expect(sell).toBeDefined();
+      expect(near(sell!.deltaUsd, -10_000, 10)).toBe(true);
+      expect(near(
+        compositeBuys(r).reduce((s, t) => s + t.deltaUsd, 0), 10_000, 10,
+      )).toBe(true);
+      expect(near(accountSum(r.trades, 'k401'), 0, 10)).toBe(true);
+    });
+  });
+
+  describe('no same-run buy+sell of one fund — Step 8.7 interaction', () => {
+    // Drawdown forces a proportional FDKLX sale with compensating buys (the
+    // Step 8.7 over-sell path). Those buy-backs must never route back into
+    // FDKLX as a composite purchase — that would recommend buying and selling
+    // the same fund in one run.
+    const accts: Account[] = [
+      { id: 'k401', name: '401k', institution: 'Empower', type: 'FOUR_OH_ONE_K',
+        rmdDueUsd: 2_000,
+        availableTickers: ['FDKLX', 'FXAIX', 'VXUS'] },
+    ];
+    const positions: Position[] = [
+      { accountId: 'k401', ticker: 'FDKLX', marketValue: 100_000 },
+    ];
+
+    it('never emits a buy leg against the fund being sold', () => {
+      const r = rebalance(accts, positions, SIMPLE_STRAT, {}, TDF, 0, 0);
+      expect(r.trades.some(t => t.forceTicker === 'FDKLX' && t.deltaUsd < 0)).toBe(true);
+      expect(compositeBuys(r)).toHaveLength(0);
+      expect(boughtFlags(r)).toHaveLength(0);
+    });
+  });
+
+  describe('parent-level decomposition maps to child-level targeting', () => {
+    // Real TDF decompositions use US_TOTAL_MARKET; the default strategy targets
+    // the cap children. The effective composition must redistribute the parent
+    // slice by the Russell weights so the composite lines up with child-level
+    // buy demand.
+    const PARENT_TDF = {
+      FDKLX: { US_TOTAL_MARKET: 0.60, DEVELOPED_INTL: 0.30, FIXED_INCOME: 0.10 },
+    };
+    // Child-level targets: the 60% US sleeve splits 67/25/8 (Russell weights).
+    const CHILD_STRAT: Strategy = {
+      ...SIMPLE_STRAT,
+      targets: { ...ZERO_TARGETS,
+        US_LARGE_CAP: 0.60 * 0.67, US_MID_CAP: 0.60 * 0.25, US_SMALL_CAP: 0.60 * 0.08,
+        DEVELOPED_INTL: 0.30, FIXED_INCOME: 0.10,
+      },
+    };
+    const accts: Account[] = [
+      { id: 'k401', name: '401k', institution: 'Empower', type: 'FOUR_OH_ONE_K', newCash: 10_000 },
+    ];
+    const positions: Position[] = [
+      { accountId: 'k401', ticker: 'FDKLX', marketValue: 100_000 },
+    ];
+
+    it('routes the contribution through the fund with cap-child legs', () => {
+      const r = rebalance(accts, positions, CHILD_STRAT, {}, PARENT_TDF, 0, 0);
+      const legs = compositeBuys(r);
+      expect(near(legs.reduce((s, t) => s + t.deltaUsd, 0), 10_000, 10)).toBe(true);
+      const classes = new Set(legs.map(t => t.assetClass));
+      expect(classes.has('US_LARGE_CAP')).toBe(true);
+      expect(classes.has('US_MID_CAP')).toBe(true);
+      expect(classes.has('US_SMALL_CAP')).toBe(true);
+      expect(classes.has('US_TOTAL_MARKET')).toBe(false);
+    });
   });
 });
 

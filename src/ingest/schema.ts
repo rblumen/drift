@@ -160,6 +160,9 @@ export const strategySchema = z.preprocess(migrateStrategyTargets, z.object({
   rebalanceTargetFraction: z.number().gt(0).max(1).optional(),
   minTradeUsd:  z.number().nonnegative(),
   preferTaxAdvantagedRebalance: z.boolean().optional(),
+  // Composite buys of held blended funds (issue #49). Optional; the engine
+  // defaults a missing value to true.
+  preferCompositeBuys: z.boolean().optional(),
   taxAdjustment: z.object({
     enabled: z.boolean(),
     effectiveRateAtRetirement: z.number().min(0).max(1),

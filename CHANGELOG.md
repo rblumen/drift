@@ -7,9 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Composite buys of blended funds** ([#49](https://github.com/rblumen/drift/issues/49)) — the engine can now *buy* a blended fund (target-date, balanced), resolving the sell/buy asymmetry disclosed in #40/#47: when several asset-class buys in an account line up with the composition of a blended fund the account **already holds**, they collapse into one composite purchase of that fund. Fewer trades to execute, and a deliberately held TDF is no longer slowly depleted by one-way sells. A substitution only happens when it strictly reduces the trade count (at least two per-class buys collapse) and every affected class's projected weight stays within the rebalance target band — no new tolerance knob. Only funds already held with a known decomposition are considered; the engine never assumes knowledge of an account's fund menu. Results and the downloadable report surface each composite with a new informational "Blended fund bought" flag, and a new **Composite buys** toggle on the Strategy tab (default on) disables the behavior.
+
 ### Changed
 
 - **Spillover flags now explain what fills the preferred bucket** ([#199](https://github.com/rblumen/drift/issues/199)) — a Placement spillover's "See reasoning" expansion (and the downloadable report) now names what occupies the overflowed home instead of a bare "preferred bucket full", e.g. "— preferred bucket full: $10,000 locked (VOO) and $2,000 cash occupy taxable". Occupants cover locked positions (with tickers), fully locked accounts, within-tolerance holdings held in band, and asset classes the placement already routed there — so a spillover no longer reads as contradicting a "Revisit placement" flag when both fire.
+- The blended-fund help text on the Classify tab and the "Blended fund sold" flag copy no longer warn about the sell-only asymmetry — with composite buys ([#49](https://github.com/rblumen/drift/issues/49)) both sides now exist.
 
 ## [0.3.0] - 2026-07-06
 
