@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Spillover flags now explain what fills the preferred bucket** ([#199](https://github.com/rblumen/drift/issues/199)) — a Placement spillover's "See reasoning" expansion (and the downloadable report) now names what occupies the overflowed home instead of a bare "preferred bucket full", e.g. "— preferred bucket full: $10,000 locked (VOO) and $2,000 cash occupy taxable". Occupants cover locked positions (with tickers), fully locked accounts, within-tolerance holdings held in band, and asset classes the placement already routed there — so a spillover no longer reads as contradicting a "Revisit placement" flag when both fire.
+
 ## [0.3.0] - 2026-07-06
 
 ### Added

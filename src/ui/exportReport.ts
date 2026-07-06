@@ -19,6 +19,7 @@ import { ALL_ASSET_CLASSES } from '../engine/types';
 import { withdrawalPriorityOf, isWithdrawalEligible } from '../engine/rebalance';
 import { isTaxableSale } from '../engine/taxableSale';
 import { AC_COLOR, AC_LABEL, ACCT_TYPE_LABEL, fmtUsd, fmtPct, fmtDelta } from './fmt';
+import { spilloverReason } from './spilloverCopy';
 
 function esc(s: string): string {
   return s
@@ -297,8 +298,12 @@ export function buildHtml(result: RebalanceResult, accounts: Account[], resolved
       return `<div class="flag flag-blue"><strong>Blended fund sold:</strong> ${fmtUsd(f.amountUsd)} of <code>${esc(f.ticker)}</code> in <em>${esc(acctName(f.accountId))}</em> sold proportionally to fix the household allocation. The engine sells blended funds when drift demands but does not buy them back, so repeated rebalances will trend your allocation away from this position.</div>`;
     if (f.kind === 'BLENDED_FUND_OVERSELL')
       return `<div class="flag flag-red"><strong>Blended fund over-sell:</strong> Selling <code>${esc(f.ticker)}</code> in <em>${esc(acctName(f.accountId))}</em> forced an extra ${fmtUsd(f.amountUsd)} of ${esc(AC_LABEL[f.assetClass])} to be sold, with no non-blended ticker available to buy it back.</div>`;
-    if (f.kind === 'PLACEMENT_SPILLOVER')
-      return `<div class="flag flag-blue"><strong>Placement spillover:</strong> ${fmtUsd(f.amountUsd)} of ${esc(AC_LABEL[f.assetClass])} placed in a ${esc(f.bucket.toLowerCase().replace('_', '-'))} account (preferred bucket full).</div>`;
+    if (f.kind === 'PLACEMENT_SPILLOVER') {
+      // #199: name what occupies the preferred bucket when the engine says so.
+      const reason = spilloverReason(f, accounts);
+      const tail = reason ? ` — ${esc(reason)}.` : ' (preferred bucket full).';
+      return `<div class="flag flag-blue"><strong>Placement spillover:</strong> ${fmtUsd(f.amountUsd)} of ${esc(AC_LABEL[f.assetClass])} placed in a ${esc(f.bucket.toLowerCase().replace('_', '-'))} account${tail}</div>`;
+    }
     if (f.kind === 'NO_ELIGIBLE_ACCOUNT')
       return `<div class="flag flag-red"><strong>No eligible account:</strong> ${fmtUsd(f.amountUsd)} of ${esc(AC_LABEL[f.assetClass])} could not be placed — no account has capacity for this asset class.</div>`;
     return '';

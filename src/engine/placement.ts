@@ -1,4 +1,4 @@
-import type { Account, AccountType, AssetClass, PlacementBucket, Strategy, Flag } from './types';
+import type { Account, AccountType, AssetClass, PlacementBucket, PlacementTarget, Strategy, Flag, SpilloverOccupant } from './types';
 import { ALL_ASSET_CLASSES } from './types';
 import { accountSatisfiesPlacement } from './placementHierarchy';
 import { EPSILON, zeroByClass } from './utils';
@@ -29,6 +29,18 @@ export interface PlacementResult {
   // targetLocation[accountId][assetClass] = target dollar amount
   targetLocation: Record<string, Record<AssetClass, number>>;
   placementFlags: Flag[];
+}
+
+/** Occupancy context for enriching PLACEMENT_SPILLOVER flags (issue #199).
+ *  Optional — without it, spillover flags carry no preferredBucket/occupiedBy. */
+export interface SpilloverContext {
+  /** Every household account, including locked ones. A locked account never
+   *  appears in the placement list but its balance still fills its bucket. */
+  allAccounts: Account[];
+  /** Per-account frozen value that Step 4 excluded from free capacity —
+   *  locked positions, within-tolerance classes, whole locked accounts —
+   *  precomputed by rebalance.ts to mirror the capacity math exactly. */
+  staticOccupants: Record<string, SpilloverOccupant[]>;
 }
 
 function partition<T>(arr: T[], pred: (x: T) => boolean): [T[], T[]] {
@@ -101,6 +113,7 @@ export function greedyPlace(
   targetValue: Record<AssetClass, number>,
   effectiveAllowed: Record<string, Set<AssetClass>>,
   strategy: Strategy,
+  spilloverContext?: SpilloverContext,
 ): PlacementResult {
   const remainingNeed: Record<AssetClass, number> = { ...targetValue };
   const remainingCapacity: Record<string, number> = { ...accountCapacities };
@@ -110,6 +123,46 @@ export function greedyPlace(
   for (const acct of accounts) {
     targetLocation[acct.id] = zeroByClass();
   }
+
+  // #199 — describe what occupies the overflowed preferred target(s) so the
+  // spillover flag can explain itself. Static occupants (locked / in-band value)
+  // come from the caller; dynamic occupants are the classes this fill already
+  // placed there. The spilled class's own placements are excluded — its own
+  // dollars in its preferred home are the fill working as intended, not a blocker.
+  const occupantsOf = (
+    overflowed: PlacementTarget[],
+    ac: AssetClass,
+  ): { preferredBucket: PlacementTarget; occupiedBy: SpilloverOccupant[] } | undefined => {
+    if (!spilloverContext || overflowed.length === 0) return undefined;
+    const merged = new Map<string, SpilloverOccupant>();
+    const add = (o: SpilloverOccupant) => {
+      const key = o.kind === 'LOCKED_ACCOUNT' ? `A:${o.accountId}` : `${o.kind}:${o.assetClass}`;
+      const prev = merged.get(key);
+      if (!prev) { merged.set(key, { ...o }); return; }
+      prev.amountUsd += o.amountUsd;
+      if (prev.kind === 'LOCKED_POSITION' && o.kind === 'LOCKED_POSITION') {
+        prev.tickers = [...new Set([...prev.tickers, ...o.tickers])];
+      }
+    };
+    for (const a of spilloverContext.allAccounts) {
+      if (!overflowed.some(t => accountSatisfiesPlacement(a, t))) continue;
+      // Non-locked accounts that can't hold the class at all aren't part of the
+      // overflow story — they were never a candidate home (mirrors the pass-1
+      // eligibility check). A locked account occupies its bucket unconditionally.
+      if (!a.locked && !effectiveAllowed[a.id]?.has(ac)) continue;
+      for (const o of spilloverContext.staticOccupants[a.id] ?? []) add(o);
+      if (a.locked) continue;
+      for (const oc of ALL_ASSET_CLASSES) {
+        if (oc === ac) continue;
+        const placed = targetLocation[a.id]?.[oc] ?? 0;
+        if (placed > EPSILON) add({ kind: 'PLACED_CLASS', assetClass: oc, amountUsd: placed });
+      }
+    }
+    const occupiedBy = [...merged.values()]
+      .filter(o => o.amountUsd > EPSILON)
+      .sort((x, y) => y.amountUsd - x.amountUsd);
+    return occupiedBy.length > 0 ? { preferredBucket: overflowed[0], occupiedBy } : undefined;
+  };
 
   // Constraint count drives placement order: fewer eligible buckets = more
   // constrained = placed first. A missing entry defaults to the two-bucket
@@ -173,7 +226,10 @@ export function greedyPlace(
     // primary — not an overflow, so it is not flagged. This is why a TAX_ADVANTAGED-
     // preferred class landing in a Roth never flags: the Roth satisfies the primary
     // target outright.
-    let priorHomeOverflowed = false;
+    // Targets that existed in the household but overflowed, in priority order.
+    // Non-empty ⇔ the old `priorHomeOverflowed` boolean; the list itself feeds
+    // occupantsOf so the flag can say which home overflowed and why (#199).
+    const overflowedTargets: PlacementTarget[] = [];
     for (let targetIdx = 0; targetIdx < placementTargets.length; targetIdx++) {
       const target = placementTargets[targetIdx];
       if (remainingNeed[ac] <= EPSILON) break;
@@ -191,7 +247,7 @@ export function greedyPlace(
       );
       if (eligible.length === 0) {
         // The home exists but is already full → a genuine overflow source for later spill.
-        if (targetHasAnyAccount) priorHomeOverflowed = true;
+        if (targetHasAnyAccount) overflowedTargets.push(target);
         continue;
       }
 
@@ -209,12 +265,15 @@ export function greedyPlace(
       }
 
       // Spillover only when a real higher-priority home overflowed into this one.
-      if (priorHomeOverflowed && placed > EPSILON) {
-        flags.push({ kind: 'PLACEMENT_SPILLOVER', assetClass: ac, bucket: target, amountUsd: placed });
+      if (overflowedTargets.length > 0 && placed > EPSILON) {
+        flags.push({
+          kind: 'PLACEMENT_SPILLOVER', assetClass: ac, bucket: target, amountUsd: placed,
+          ...occupantsOf(overflowedTargets, ac),
+        });
       }
       // This target became a (possibly partial) home; if it can't absorb the remainder,
       // the next target down is a spill destination.
-      if (remainingNeed[ac] > EPSILON) priorHomeOverflowed = true;
+      if (remainingNeed[ac] > EPSILON) overflowedTargets.push(target);
     } // end pass 1
 
     // Pass 2 — spill into any eligible account (any bucket).
@@ -237,8 +296,11 @@ export function greedyPlace(
       const spillByBucket = distributeAnywhere(anyEligible, toPlace, ac, remainingCapacity, targetLocation);
       remainingNeed[ac] -= toPlace;
 
+      // All destination buckets share the same overflow story: the pass-1
+      // targets that existed but filled up. Compute the occupancy once.
+      const occupancy = occupantsOf(overflowedTargets, ac);
       for (const [bucket, amountUsd] of spillByBucket) {
-        flags.push({ kind: 'PLACEMENT_SPILLOVER', assetClass: ac, bucket, amountUsd });
+        flags.push({ kind: 'PLACEMENT_SPILLOVER', assetClass: ac, bucket, amountUsd, ...occupancy });
       }
     }
   }

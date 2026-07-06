@@ -1,10 +1,10 @@
-import type { Account, AccountType, Position, Strategy, RebalanceResult, AssetClass, Flag, FundDecomposition, Trade } from './types';
+import type { Account, AccountType, Position, Strategy, RebalanceResult, AssetClass, Flag, FundDecomposition, Trade, SpilloverOccupant } from './types';
 import { ALL_ASSET_CLASSES } from './types';
 import { makeClassifier, type ClassifyFn } from './classify';
 import { rollup } from './rollup';
 import { resolveTradeVehicles } from './resolve';
 import { nativeAllocationByAccount, projectedNativeAllocationByAccount } from './nativeAllocation';
-import { consolidateParentClasses, childrenOf } from './hierarchy';
+import { consolidateParentClasses, childrenOf, PARENT_CLASS } from './hierarchy';
 import { accountBucket, greedyPlace } from './placement';
 import { targetTaxTreatment } from './placementHierarchy';
 import { fillOrdered } from './cashfill';
@@ -1009,6 +1009,52 @@ export function rebalance(
     freeCapacity[acct.id] = Math.max(0, accountValues[acct.id] - frozen);
   }
 
+  // Step 4b — Static bucket occupants (#199): per account, the frozen value the
+  // loop above excluded from free capacity, itemized so a PLACEMENT_SPILLOVER
+  // flag can say what fills the preferred bucket. Mirrors the freeze exactly:
+  //   locked account → its whole balance; in-band class → its whole current value
+  //   (any locked positions in it included, not double-listed); OOT class → its
+  //   individually-locked value, labeled with the locked tickers that map to it.
+  // Ticker labels are best-effort (classify + one hierarchy hop for the rollup
+  // child-split / parent consolidation); dollars always come from the same maps
+  // the capacity math used.
+  const lockedPositionsByAccount: Record<string, Position[]> = {};
+  for (const pos of positions) {
+    if (pos.locked) (lockedPositionsByAccount[pos.accountId] ??= []).push(pos);
+  }
+  const tickerMapsToClass = (ticker: string, ac: AssetClass): boolean => {
+    const decomp = decompositions[ticker.toUpperCase()];
+    const base = decomp ? (Object.keys(decomp) as AssetClass[]) : [classify(ticker)];
+    return base.some(c => c !== null && (c === ac || PARENT_CLASS[c] === ac || PARENT_CLASS[ac] === c));
+  };
+  const staticOccupants: Record<string, SpilloverOccupant[]> = {};
+  for (const acct of accounts) {
+    const entries: SpilloverOccupant[] = [];
+    if (acct.locked) {
+      if (accountValues[acct.id] > EPSILON) {
+        entries.push({ kind: 'LOCKED_ACCOUNT', accountId: acct.id, amountUsd: accountValues[acct.id] });
+      }
+    } else {
+      for (const ac of ALL_ASSET_CLASSES) {
+        if (withinTolerance.has(ac)) {
+          const current = currentValueByAccount[acct.id][ac];
+          if (current > EPSILON) entries.push({ kind: 'HELD_IN_BAND', assetClass: ac, amountUsd: current });
+        } else {
+          const lockedUsd = effectiveLocked[acct.id][ac];
+          if (lockedUsd > EPSILON) {
+            const tickers = [...new Set(
+              (lockedPositionsByAccount[acct.id] ?? [])
+                .filter(p => tickerMapsToClass(p.ticker, ac))
+                .map(p => p.ticker),
+            )];
+            entries.push({ kind: 'LOCKED_POSITION', assetClass: ac, tickers, amountUsd: lockedUsd });
+          }
+        }
+      }
+    }
+    staticOccupants[acct.id] = entries;
+  }
+
   // Step 5 — Scale out-of-tolerance targets to exactly fill total free capacity.
   //
   // Sum of OOT target values ≠ total free capacity in general (tolerance offsets the
@@ -1072,6 +1118,7 @@ export function rebalance(
     adjustedTarget,
     effectiveAllowed,
     strategy,
+    { allAccounts: accounts, staticOccupants },
   );
   flags.push(...placementFlags);
 
