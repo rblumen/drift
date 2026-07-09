@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-09
+
 ### Added
 
 - **Composite buys of blended funds** ([#49](https://github.com/rblumen/drift/issues/49)) — the engine can now *buy* a blended fund (target-date, balanced), resolving the sell/buy asymmetry disclosed in #40/#47: when several asset-class buys in an account line up with the composition of a blended fund the account **already holds**, they collapse into one composite purchase of that fund. Fewer trades to execute, and a deliberately held TDF is no longer slowly depleted by one-way sells. A substitution only happens when it strictly reduces the trade count (at least two per-class buys collapse) and every affected class's projected weight stays within the rebalance target band — no new tolerance knob. Only funds already held with a known decomposition are considered; the engine never assumes knowledge of an account's fund menu. Results and the downloadable report surface each composite with a new informational "Blended fund bought" flag, and a new **Composite buys** toggle on the Strategy tab (default on) disables the behavior.
@@ -193,7 +195,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - All computation is client-side — no backend, no network calls, no telemetry.
 - Synthetic fixtures only; real financial data is git-ignored.
 
-[Unreleased]: https://github.com/rblumen/drift/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/rblumen/drift/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/rblumen/drift/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/rblumen/drift/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/rblumen/drift/releases/tag/v0.2.0
 [0.1.0]: https://github.com/rblumen/drift/compare/af21039...v0.1.0
