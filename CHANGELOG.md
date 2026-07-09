@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Spillover flags now explain what fills the preferred bucket** ([#199](https://github.com/rblumen/drift/issues/199)) — a Placement spillover's "See reasoning" expansion (and the downloadable report) now names what occupies the overflowed home instead of a bare "preferred bucket full", e.g. "— preferred bucket full: $10,000 locked (VOO) and $2,000 cash occupy taxable". Occupants cover locked positions (with tickers), fully locked accounts, within-tolerance holdings held in band, and asset classes the placement already routed there — so a spillover no longer reads as contradicting a "Revisit placement" flag when both fire.
 - The blended-fund help text on the Classify tab and the "Blended fund sold" flag copy no longer warn about the sell-only asymmetry — with composite buys ([#49](https://github.com/rblumen/drift/issues/49)) both sides now exist.
 
+### Fixed
+
+- Number inputs no longer clip their last digit in current Chrome ([#209](https://github.com/rblumen/drift/issues/209)) — Chrome now shows number-input spinner buttons permanently instead of on hover, which squeezed 4-character values like "57.5" out of the Strategy tab's dense target-% fields. Spinners are hidden app-wide (they were never part of the design); typing, arrow-key, and scroll-wheel stepping are unaffected.
+
 ## [0.3.0] - 2026-07-06
 
 ### Added
