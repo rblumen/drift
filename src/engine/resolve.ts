@@ -1,6 +1,6 @@
 import type { AssetClass, FundDecomposition, Position, ResolvedTrade, Trade } from './types';
 import type { ClassifyFn } from './classify';
-import { CLASS_HIERARCHY, PARENT_CLASS } from './hierarchy';
+import { CLASS_HIERARCHY, PARENT_CLASS, synthesizeImplicitDecompositions } from './hierarchy';
 
 // Returns every asset class a ticker can satisfy a trade for, accounting for the
 // hierarchy and explicit decompositions. A ticker covers its whole class *family*:
@@ -17,13 +17,28 @@ function coveredClasses(
   classify: ClassifyFn,
   decompositions: Record<string, FundDecomposition>,
 ): AssetClass[] {
+  const fam = new Set<AssetClass>();
+  // A class is covered along with its whole family: itself, its children, and its
+  // parent — so a broad fund satisfies its sub-class trades and a sub-class fund
+  // satisfies a parent-level trade, in either direction.
+  const addFamily = (ac: AssetClass) => {
+    fam.add(ac);
+    for (const child of CLASS_HIERARCHY[ac]?.children ?? []) fam.add(child);
+    const parent = PARENT_CLASS[ac];
+    if (parent) fam.add(parent);
+  };
   const decomp = decompositions[ticker.toUpperCase()];
-  if (decomp) return Object.keys(decomp) as AssetClass[];
+  if (decomp) {
+    // Expand each decomposed class through the hierarchy — a blended fund covers
+    // the families of every sleeve it holds. This keeps an implicit total-market
+    // decomposition ({ US_TOTAL_MARKET: 1 }, issue #215) covering the cap children
+    // exactly as the raw classify path did, so multi-sleeve trades still merge.
+    for (const ac of Object.keys(decomp) as AssetClass[]) addFamily(ac);
+    return [...fam];
+  }
   const ac = classify(ticker);
   if (ac === null) return [];
-  const fam = new Set<AssetClass>([ac, ...(CLASS_HIERARCHY[ac]?.children ?? [])]);
-  const parent = PARENT_CLASS[ac];
-  if (parent) fam.add(parent);
+  addFamily(ac);
   return [...fam];
 }
 
@@ -49,6 +64,14 @@ export function resolveTradeVehicles(
   classify: ClassifyFn,
   strategyTargets?: Partial<Record<AssetClass, number>>,
 ): ResolvedTrade[] {
+  // Issue #215 — mirror rebalance()'s implicit decompositions so a held broad fund
+  // (e.g. SWTSX → US_TOTAL_MARKET) is recognized as a blended fund here too: its
+  // sleeve trades merge into one fund-level ResolvedTrade labeled by the fund's own
+  // class rather than a single sub-class. Explicit decompositions win; no-ops for
+  // portfolios without parent-classified funds. Idempotent when the caller already
+  // passed an augmented map (rebalance()'s internal call).
+  decompositions = synthesizeImplicitDecompositions(positions, decompositions, classify);
+
   const resolved: ResolvedTrade[] = [];
 
   // Group trades by account.

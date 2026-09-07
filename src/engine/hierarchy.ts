@@ -1,4 +1,5 @@
-import type { AssetClass, Strategy } from './types';
+import type { AssetClass, Strategy, Position, FundDecomposition } from './types';
+import type { ClassifyFn } from './classify';
 
 export interface ClassGroup {
   readonly children: readonly AssetClass[];
@@ -80,6 +81,56 @@ export const PARENT_CLASS: Partial<Record<AssetClass, AssetClass>> = Object.from
 /** True when `ac` is a parent class with declared children (e.g. ALTERNATIVES, US_TOTAL_MARKET). */
 export function isParentClass(ac: AssetClass): boolean {
   return ac in CLASS_HIERARCHY;
+}
+
+/**
+ * Synthesize implicit single-sleeve blended-fund decompositions for held broad
+ * funds (issue #215).
+ *
+ * A held fund whose ticker classifies to a PARENT class (US_TOTAL_MARKET,
+ * FIXED_INCOME, DEVELOPED_INTL, ALTERNATIVES) is really a *blend* of that parent's
+ * cap / sector / region sleeves: trading $X of it moves every sleeve in the fund's
+ * fixed proportion, never $X of a single sleeve. Expressing the holding as the
+ * parent-level decomposition `{ P: 1.0 }` routes it through the existing
+ * blended-fund machinery (rollup's `blendedValueByAccount`, Steps 8.7 / 8.8, and
+ * resolve's multi-sleeve merge), so a lone sleeve trade can no longer be pinned to
+ * the fund with a misleading single-sleeve label and an unexecutable dollar amount.
+ *
+ * The slice is expressed at the PARENT level on purpose — exactly how a target-date
+ * fund's sleeves are carried (see `src/data/targetDateFunds.ts`). `rollup`'s
+ * hierarchy redistribution and `effectiveDecomposition` turn it into leaf weights
+ * wherever the strategy targets children.
+ *
+ * Rules:
+ *   • Only synthesized when ABSENT — an explicit user- or target-date-supplied
+ *     decomposition always wins.
+ *   • Only for PARENT classifications — funds that classify to a leaf class
+ *     (e.g. FXAIX → US_LARGE_CAP) get nothing; trading them is already exact.
+ *   • Locked positions are skipped — their value stays on the hard-immovability
+ *     path (a fully-locked broad holding is never traded, so it needs no
+ *     decomposition; a ticker also held unlocked elsewhere is covered by that
+ *     unlocked instance).
+ *
+ * Returns the SAME map reference when nothing was synthesized, so simple
+ * portfolios keep byte-identical behavior (no new object identity to invalidate
+ * memoization, no blended-fund code paths newly engaged).
+ */
+export function synthesizeImplicitDecompositions(
+  positions: Position[],
+  decompositions: Record<string, FundDecomposition>,
+  classify: ClassifyFn,
+): Record<string, FundDecomposition> {
+  let augmented: Record<string, FundDecomposition> | null = null;
+  for (const pos of positions) {
+    if (pos.locked) continue;
+    const key = pos.ticker.toUpperCase();
+    if (decompositions[key] || augmented?.[key]) continue;
+    const ac = classify(pos.ticker);
+    if (ac === null || !isParentClass(ac)) continue;
+    augmented ??= { ...decompositions };
+    augmented[key] = { [ac]: 1 };
+  }
+  return augmented ?? decompositions;
 }
 
 /** True when `ac` is a sub-class nested under a parent (e.g. CRYPTO, US_LARGE_CAP). */

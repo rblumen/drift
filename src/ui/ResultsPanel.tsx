@@ -260,7 +260,9 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
       <div className="bg-brand-50 border border-brand-200 rounded-lg px-4 py-3 text-[11px] text-brand-700">
         <strong>Blended fund sold:</strong>{' '}
         {fmtUsd(flag.amountUsd)} of <code className="font-mono">{flag.ticker}</code> in{' '}
-        <em>{acctName(flag.accountId)}</em> sold proportionally. Lock the position to preserve it.
+        <em>{acctName(flag.accountId)}</em>. It holds several asset classes at once, so
+        trading it moves every sleeve together in fixed proportion — the engine sells it as a
+        unit and buys back the sleeves you didn't mean to reduce. Lock the position to preserve it.
       </div>
     );
   }
