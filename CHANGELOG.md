@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Recommendation and warning reasoning text no longer renders larger than its headline ([#214](https://github.com/rblumen/drift/issues/214)) — expanded flag explanations now use 11px text matching the headline size instead of 14px, improving visual hierarchy.
+- **Import source selector no longer renders squeezed** ([#213](https://github.com/rblumen/drift/issues/213)) — the Source card's "Import from file / Class totals / Manual entry" segmented control moved out of the card header, where it competed with the title for width, into its own full-width row in the card body. Segments now render at their natural size on both wide and narrow (mobile) screens, scrolling horizontally instead of squeezing and wrapping their labels when space is tight.
 
 ## [0.4.0] - 2026-07-09
 

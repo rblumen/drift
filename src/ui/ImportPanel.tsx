@@ -441,27 +441,28 @@ export function ImportPanel({ accounts, positions, setPositions }: Props) {
       </HelpBox>
 
       {/* ── SOURCE card ─────────────────────────────────────────────────────── */}
-      <Card
-        title="Source"
-        action={
-          <div style={segmentedTrackStyle} role="tablist" aria-label="Import source">
-            {METHOD_META.map(m => (
-              <button
-                key={m.id}
-                type="button"
-                role="tab"
-                aria-selected={method === m.id}
-                onClick={() => changeMethod(m.id)}
-                style={{ ...segmentStyle(method === m.id), padding: '4px 12px' }}
-                className="text-[11.5px] font-medium"
-              >
-                {m.label}
-              </button>
-            ))}
-          </div>
-        }
-      >
+      <Card title="Source">
         <div className="px-4 py-3.5 flex flex-col gap-3">
+          {/* max-w-full + overflow-x-auto so on narrow viewports the track scrolls
+              horizontally instead of shrinking segments and wrapping their labels. */}
+          <div className="self-start max-w-full overflow-x-auto">
+            <div style={segmentedTrackStyle} role="tablist" aria-label="Import source" className="w-max">
+              {METHOD_META.map(m => (
+                <button
+                  key={m.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={method === m.id}
+                  onClick={() => changeMethod(m.id)}
+                  style={segmentStyle(method === m.id)}
+                  className="text-[11.5px] font-medium whitespace-nowrap"
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="flex gap-5 items-end flex-wrap">
             {/* Into account */}
             <label className="flex flex-col gap-1.5">
