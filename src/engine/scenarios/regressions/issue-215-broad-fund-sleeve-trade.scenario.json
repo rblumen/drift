@@ -1,0 +1,39 @@
+{
+  "name": "issue-215-broad-fund-sleeve-trade",
+  "description": "Issue #215: a held total-market fund (SWTSX → US_TOTAL_MARKET) with a custom cap tilt drifts on a single sleeve (mid-cap overweight). The pre-fix engine pinned a lone US_MID_CAP sell to SWTSX — an unexecutable instruction shown as 'SWTSX · Mid Cap', since selling SWTSX moves large/mid/small together. The fixed engine treats SWTSX as an implicit blended fund: it sells the fund as a unit (a BLENDED_FUND_SOLD disclosure, labeled US Total Market) and buys back the over-sold large/small sleeves via FXAIX/VB, so the executed trades preserve the account net and land every sleeve on target. Fails on the pre-fix engine (no BLENDED_FUND_SOLD flag).",
+  "principle": [3, 4],
+  "accounts": [
+    { "id": "tax", "name": "Taxable Brokerage", "institution": "Schwab", "type": "TAXABLE" }
+  ],
+  "holdings": [
+    { "accountId": "tax", "ticker": "SWTSX", "marketValue": 100000 },
+    { "accountId": "tax", "ticker": "FXAIX", "marketValue": 50000 },
+    { "accountId": "tax", "ticker": "VB", "marketValue": 10000 }
+  ],
+  "strategy": {
+    "targets": {
+      "US_LARGE_CAP": 0.79, "US_MID_CAP": 0.05, "US_SMALL_CAP": 0.16,
+      "US_TOTAL_MARKET": 0.0, "DEVELOPED_INTL": 0.0, "EMERGING_INTL": 0.0,
+      "FIXED_INCOME": 0.0, "ALTERNATIVES": 0.0, "CASH": 0.0
+    },
+    "placement": {},
+    "toleranceAbs": 0.05,
+    "toleranceRel": 0.25,
+    "minTradeUsd": 100
+  },
+  "expected": {
+    "flags": [
+      { "kind": "BLENDED_FUND_SOLD", "ticker": "SWTSX", "amountUsd": 68000 }
+    ],
+    "absentFlags": [
+      { "kind": "BLENDED_FUND_OVERSELL" }
+    ],
+    "projectedWeights": {
+      "US_LARGE_CAP": 0.79,
+      "US_MID_CAP": 0.05,
+      "US_SMALL_CAP": 0.16
+    },
+    "netByAccount": { "tax": 0 },
+    "projectedDriftWithinTolerance": true
+  }
+}

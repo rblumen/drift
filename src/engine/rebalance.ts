@@ -4,7 +4,7 @@ import { makeClassifier, type ClassifyFn } from './classify';
 import { rollup } from './rollup';
 import { resolveTradeVehicles } from './resolve';
 import { nativeAllocationByAccount, projectedNativeAllocationByAccount } from './nativeAllocation';
-import { consolidateParentClasses, childrenOf, CLASS_HIERARCHY, PARENT_CLASS } from './hierarchy';
+import { consolidateParentClasses, childrenOf, CLASS_HIERARCHY, PARENT_CLASS, synthesizeImplicitDecompositions } from './hierarchy';
 import { accountBucket, greedyPlace } from './placement';
 import { targetTaxTreatment } from './placementHierarchy';
 import { fillOrdered } from './cashfill';
@@ -403,19 +403,41 @@ function synthesizeBlendedFundSells(
   for (const A of accounts) {
     if (A.locked) continue;
 
-    const blendedFunds = positions
+    const heldFunds = positions
       .filter(p => p.accountId === A.id && decompositions[p.ticker.toUpperCase()] && !p.locked)
       .sort((a, b) => b.marketValue - a.marketValue);
+    if (heldFunds.length === 0) continue;
+
+    // Express each fund in the engine's EFFECTIVE class vocabulary — the same lens
+    // rollup + consolidateParentClasses put holdings and sell demand through (issue
+    // #215). A parent-level slice (an implicit total-market fund's US_TOTAL_MARKET,
+    // a TDF's US_TOTAL_MARKET sleeve) fans out to its cap children when they are
+    // targeted individually; a child-level slice folds back to its parent when the
+    // parent is targeted. Reasoning in the RAW vocabulary made this step silently
+    // no-op for parent-level slices — the per-cap sell demand is keyed at the leaf,
+    // so residual computed to 0 (the #215 bug, and the identical latent gap for
+    // TDFs). A fund whose effective composition collapses to a SINGLE class has no
+    // composition to preserve — the ordinary sell path already routes it to the fund
+    // correctly — so it is not a composite-sell candidate (this keeps a broad bond
+    // fund targeted at the parent level byte-identical to pre-#215 behavior).
+    const effByFund = new Map<string, Partial<Record<AssetClass, number>>>();
+    const blendedFunds = heldFunds.filter(B => {
+      const eff = effectiveDecomposition(decompositions[B.ticker.toUpperCase()]!, strategy.targets);
+      const legs = (Object.keys(eff) as AssetClass[]).filter(ac => (eff[ac] ?? 0) > 0);
+      if (legs.length < 2) return false;
+      effByFund.set(B.ticker.toUpperCase(), eff);
+      return true;
+    });
     if (blendedFunds.length === 0) continue;
 
     const inTaxable = accountBucket(A.type) === 'TAXABLE';
 
-    // Total non-locked blended-fund contribution per sub-class in A.
+    // Total non-locked blended-fund contribution per sub-class in A (effective).
     const blendedContrib = zeroByClass();
     for (const B of blendedFunds) {
-      const w = decompositions[B.ticker.toUpperCase()]!;
+      const w = effByFund.get(B.ticker.toUpperCase())!;
       for (const [ac, weight] of Object.entries(w) as [AssetClass, number][]) {
-        blendedContrib[ac] += B.marketValue * weight;
+        blendedContrib[ac] += B.marketValue * (weight ?? 0);
       }
     }
 
@@ -433,8 +455,8 @@ function synthesizeBlendedFundSells(
     }
 
     for (const B of blendedFunds) {
-      const decomp = decompositions[B.ticker.toUpperCase()]!;
-      const subClasses = Object.keys(decomp) as AssetClass[];
+      const decomp = effByFund.get(B.ticker.toUpperCase())!;
+      const subClasses = (Object.keys(decomp) as AssetClass[]).filter(ac => (decomp[ac] ?? 0) > 0);
 
       // Demand that lands on B for each sub-class.
       const residual: Record<AssetClass, number> = zeroByClass();
@@ -900,6 +922,15 @@ export function rebalance(
   plannedWithdrawal: number = 0,
 ): RebalanceResult {
   const classify = makeClassifier(tickerOverrides);
+
+  // Issue #215 — treat a held broad fund (total-market, broad bond, developed-intl,
+  // alternatives) as an implicit single-sleeve blended fund so it flows through the
+  // existing blended-fund machinery instead of having a lone cap/sector sleeve trade
+  // pinned to it with a misleading label. Explicit decompositions always win; leaf
+  // classifications get nothing. No-ops (same reference) for portfolios that hold no
+  // parent-classified funds, so simple portfolios are unchanged. Uses the original
+  // (pre-tax-scaling) positions — synthesis keys on ticker, not value.
+  decompositions = synthesizeImplicitDecompositions(positions, decompositions, classify);
 
   // Normalize targets to a complete map over ALL_ASSET_CLASSES. A class omitted
   // from strategy.targets means a 0% allocation; without this, reading an absent

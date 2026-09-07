@@ -3,6 +3,8 @@ import type { Account, Position, AssetClass, PlacementTarget, Strategy } from '.
 import { ALL_ASSET_CLASSES } from './types';
 import { DEFAULT_STRATEGY } from './strategy';
 import { rebalance } from './rebalance';
+import { resolveTradeVehicles } from './resolve';
+import { makeClassifier } from './classify';
 import { zeroByClass } from './utils';
 
 // â”€â”€â”€ helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -2771,6 +2773,114 @@ describe('Goal 4: composite buys — issue #49', () => {
       expect(classes.has('US_SMALL_CAP')).toBe(true);
       expect(classes.has('US_TOTAL_MARKET')).toBe(false);
     });
+  });
+});
+
+// ── Issue #215: held broad funds are implicit blended funds ──────────────────
+//
+// A held fund that classifies to a PARENT class (SWTSX → US_TOTAL_MARKET, BND →
+// FIXED_INCOME) is really a blend of that parent's sleeves. Before #215 a lone
+// sleeve trade was pinned to the fund with a misleading single-sleeve label and an
+// unexecutable dollar amount. Now the fund flows through the blended-fund path:
+// Step 8.7 sells it as a unit with composition-preserving buy-backs, and the
+// resolver labels the merged sale by the fund's own class.
+describe('Issue #215: broad fund treated as an implicit blended fund', () => {
+  const classify = makeClassifier();
+
+  const CAP_TILT: Strategy = {
+    targets: { ...ZERO_TARGETS, US_LARGE_CAP: 0.79, US_MID_CAP: 0.05, US_SMALL_CAP: 0.16 },
+    placement: fillPlacement({}),
+    toleranceAbs: 0.05, toleranceRel: 0.25, minTradeUsd: 100,
+  };
+  // Single taxable account: SWTSX (total market) is the only mid-cap vehicle, while
+  // FXAIX/VB absorb the large/small buy-backs. A custom cap tilt drives mid-cap
+  // overweight, so only the mid sleeve needs to be sold.
+  const capAccts: Account[] = [
+    { id: 'tax', name: 'Taxable', institution: 'Schwab', type: 'TAXABLE' },
+  ];
+  const capPositions: Position[] = [
+    { accountId: 'tax', ticker: 'SWTSX', marketValue: 100_000 },
+    { accountId: 'tax', ticker: 'FXAIX', marketValue: 50_000 },
+    { accountId: 'tax', ticker: 'VB',    marketValue: 10_000 },
+  ];
+
+  it('sells SWTSX as a unit labeled US_TOTAL_MARKET, not "SWTSX · Mid Cap"', () => {
+    const r = rebalance(capAccts, capPositions, CAP_TILT, {}, {}, 0, 0);
+    const resolved = resolveTradeVehicles(r.trades, capPositions, {}, classify, CAP_TILT.targets);
+    const swtsx = resolved.find(t => t.ticker === 'SWTSX');
+    expect(swtsx).toBeDefined();
+    // The bug: a lone mid-cap sleeve mislabeled the SWTSX trade. Post-fix the merged
+    // SWTSX sale carries the fund's true class and spans all three cap sleeves.
+    expect(swtsx!.assetClass).toBe('US_TOTAL_MARKET');
+    expect(swtsx!.deltaUsd).toBeLessThan(0);
+    expect(new Set(swtsx!.mergedFrom!.map(m => m.assetClass)))
+      .toEqual(new Set(['US_LARGE_CAP', 'US_MID_CAP', 'US_SMALL_CAP']));
+    // No resolved trade is a lone SWTSX mid-cap sleeve.
+    expect(resolved.some(t => t.ticker === 'SWTSX' && t.assetClass === 'US_MID_CAP' && !t.mergedFrom)).toBe(false);
+  });
+
+  it('emits BLENDED_FUND_SOLD for SWTSX, preserves account net, and hits target', () => {
+    const r = rebalance(capAccts, capPositions, CAP_TILT, {}, {}, 0, 0);
+    expect(r.flags.some(f => f.kind === 'BLENDED_FUND_SOLD' && f.ticker === 'SWTSX')).toBe(true);
+    expect(r.flags.some(f => f.kind === 'BLENDED_FUND_OVERSELL')).toBe(false);
+    expect(near(accountSum(r.trades, 'tax'), 0, 1)).toBe(true);
+    expect(r.projectedWeights.US_LARGE_CAP).toBeCloseTo(0.79, 3);
+    expect(r.projectedWeights.US_MID_CAP).toBeCloseTo(0.05, 3);
+    expect(r.projectedWeights.US_SMALL_CAP).toBeCloseTo(0.16, 3);
+  });
+
+  // Broadened scope: a broad FIXED_INCOME fund with INDIVIDUAL child targets engages
+  // the same composition-preserving machinery, labeled by its parent class.
+  it('sells a broad FI fund (BND) as a unit labeled FIXED_INCOME under child targets', () => {
+    const strat: Strategy = {
+      targets: { ...ZERO_TARGETS,
+        US_TREASURY: 0.50, US_CORP_BOND: 0.05, MUNI_BOND: 0.35, TIPS: 0.05, INTL_BOND: 0.05 },
+      placement: fillPlacement({}),
+      toleranceAbs: 0.05, toleranceRel: 0.25, minTradeUsd: 100,
+    };
+    const accts: Account[] = [{ id: 'tax', name: 'Taxable', institution: 'Schwab', type: 'TAXABLE' }];
+    const positions: Position[] = [
+      { accountId: 'tax', ticker: 'BND',  marketValue: 100_000 }, // FIXED_INCOME (only corp/tips/intl source)
+      { accountId: 'tax', ticker: 'GOVT', marketValue:  40_000 }, // US_TREASURY
+      { accountId: 'tax', ticker: 'MUNY', marketValue:  40_000 }, // MUNI_BOND
+    ];
+    const r = rebalance(accts, positions, strat, {}, {}, 0, 0);
+    expect(r.flags.some(f => f.kind === 'BLENDED_FUND_SOLD' && f.ticker === 'BND')).toBe(true);
+    expect(near(accountSum(r.trades, 'tax'), 0, 1)).toBe(true);
+    const resolved = resolveTradeVehicles(r.trades, positions, {}, classify, strat.targets);
+    const bnd = resolved.find(t => t.ticker === 'BND');
+    expect(bnd).toBeDefined();
+    expect(bnd!.assetClass).toBe('FIXED_INCOME');
+    expect(bnd!.deltaUsd).toBeLessThan(0);
+    expect(bnd!.mergedFrom!.length).toBeGreaterThan(1);
+  });
+
+  // Acceptance criterion: a broad fund targeted at the PARENT (family) level must
+  // stay byte-identical to pre-#215 behavior — the fund's effective decomposition
+  // folds back to a single class, so Step 8.7 no-ops (no spurious flag, no churn).
+  it('simple portfolio unchanged: parent-targeted BND sell raises no BLENDED_FUND_SOLD flag', () => {
+    const strat: Strategy = {
+      targets: { ...ZERO_TARGETS, FIXED_INCOME: 0.30, US_LARGE_CAP: 0.70 },
+      placement: fillPlacement({ FIXED_INCOME: ['TAXABLE'] }),
+      toleranceAbs: 0.05, toleranceRel: 0.25, minTradeUsd: 100,
+    };
+    const accts: Account[] = [{ id: 'tax', name: 'Taxable', institution: 'Schwab', type: 'TAXABLE' }];
+    // 60% BND / 40% FXAIX — FI overweight vs a 30% target, so BND must be sold.
+    const positions: Position[] = [
+      { accountId: 'tax', ticker: 'BND',   marketValue: 60_000 },
+      { accountId: 'tax', ticker: 'FXAIX', marketValue: 40_000 },
+    ];
+    const r = rebalance(accts, positions, strat, {}, {}, 0, 0);
+    // The broad bond fund is sold, but as a single effective class — no composite
+    // synthesis, no disclosure flag, no over-sell churn.
+    expect(r.flags.some(f => f.kind === 'BLENDED_FUND_SOLD')).toBe(false);
+    expect(r.flags.some(f => f.kind === 'BLENDED_FUND_OVERSELL')).toBe(false);
+    // The FI sell still routes cleanly to BND, labeled by the targeted class.
+    const resolved = resolveTradeVehicles(r.trades, positions, {}, classify, strat.targets);
+    const fiSell = resolved.find(t => t.assetClass === 'FIXED_INCOME' && t.deltaUsd < 0);
+    expect(fiSell?.ticker).toBe('BND');
+    expect(fiSell?.mergedFrom).toBeUndefined();
+    expect(near(accountSum(r.trades, 'tax'), 0, 1)).toBe(true);
   });
 });
 
