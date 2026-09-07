@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Recommendation and warning reasoning text no longer renders larger than its headline ([#214](https://github.com/rblumen/drift/issues/214)) — expanded flag explanations now use 11px text matching the headline size instead of 14px, improving visual hierarchy.
+
 ## [0.4.0] - 2026-07-09
 
 ### Added
