@@ -164,7 +164,7 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
 
   if (flag.kind === 'REVISIT_PLACEMENT') {
     return (
-      <div className="bg-warn-bg border border-warn-banner-border rounded-lg px-4 py-3 text-sm text-warn-banner-text">
+      <div className="bg-warn-bg border border-warn-banner-border rounded-lg px-4 py-3 text-[11px] text-warn-banner-text">
         <strong>Revisit placement strategy.</strong>{' '}
         Taxable accounts hold {fmtPct(flag.taxableShare)} of household value, which exceeds
         the {fmtPct(flag.fixedIncomeTarget)} fixed-income target.
@@ -174,7 +174,7 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
   }
   if (flag.kind === 'TAXABLE_SALE') {
     return (
-      <div className="bg-warn-bg border border-warn-banner-border rounded-lg px-4 py-3 text-sm text-warn-banner-text">
+      <div className="bg-warn-bg border border-warn-banner-border rounded-lg px-4 py-3 text-[11px] text-warn-banner-text">
         <strong>Taxable sale:</strong>{' '}
         Selling {fmtUsd(flag.amountUsd)} of {AC_LABEL[flag.assetClass]} in{' '}
         <em>{acctName(flag.accountId)}</em> may trigger a capital gain. Review before executing.
@@ -183,7 +183,7 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
   }
   if (flag.kind === 'TAXABLE_REBALANCE_AVOIDABLE') {
     return (
-      <div className="bg-warn-bg border border-warn-banner-border rounded-lg px-4 py-3 text-sm text-warn-banner-text">
+      <div className="bg-warn-bg border border-warn-banner-border rounded-lg px-4 py-3 text-[11px] text-warn-banner-text">
         <strong>Avoidable taxable sale:</strong>{' '}
         About {fmtUsd(flag.amountUsd)} of the {AC_LABEL[flag.assetClass]} sale in{' '}
         <em>{acctName(flag.accountId)}</em> could be avoided by rebalancing within your
@@ -196,7 +196,7 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
     // otherwise fall back to the bare one-liner.
     const reason = spilloverReason(flag, accounts);
     return (
-      <div className="bg-brand-50 border border-brand-200 rounded-lg px-4 py-3 text-sm text-brand-700">
+      <div className="bg-brand-50 border border-brand-200 rounded-lg px-4 py-3 text-[11px] text-brand-700">
         <strong>Placement spillover:</strong>{' '}
         {fmtUsd(flag.amountUsd)} of {AC_LABEL[flag.assetClass]} placed in a{' '}
         {flag.bucket.toLowerCase().replace('_', '-')} account
@@ -206,7 +206,7 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
   }
   if (flag.kind === 'UNMAPPED_HOLDING') {
     return (
-      <div className="bg-warn-bg border border-warn-banner-border rounded-lg px-4 py-3 text-sm text-warn-banner-text">
+      <div className="bg-warn-bg border border-warn-banner-border rounded-lg px-4 py-3 text-[11px] text-warn-banner-text">
         <strong>Unmapped holding:</strong>{' '}
         Ticker <code className="font-mono">{flag.ticker}</code> has no asset class.
         Go to the Classify tab to assign one.
@@ -215,7 +215,7 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
   }
   if (flag.kind === 'NO_ELIGIBLE_ACCOUNT') {
     return (
-      <div className="bg-danger-bg border border-danger-hover-border rounded-lg px-4 py-3 text-sm text-danger">
+      <div className="bg-danger-bg border border-danger-hover-border rounded-lg px-4 py-3 text-[11px] text-danger">
         <strong>No eligible account:</strong>{' '}
         {fmtUsd(flag.amountUsd)} of {AC_LABEL[flag.assetClass]} could not be placed —
         no account has capacity for this asset class.
@@ -226,7 +226,7 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
     const gap = flag.projectedWeight - flag.targetWeight;
     const over = gap > 0;
     return (
-      <div className="bg-danger-bg border border-danger-hover-border rounded-lg px-4 py-3 text-sm text-danger">
+      <div className="bg-danger-bg border border-danger-hover-border rounded-lg px-4 py-3 text-[11px] text-danger">
         <strong>Target not reachable — {AC_LABEL[flag.assetClass]}:</strong>{' '}
         projects to <strong>{fmtPct(flag.projectedWeight)}</strong> after trades
         (target {fmtPct(flag.targetWeight)}, still{' '}
@@ -239,7 +239,7 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
   }
   if (flag.kind === 'EXCESS_CASH') {
     return (
-      <div className="bg-warn-bg border border-warn-banner-border rounded-lg px-4 py-3 text-sm text-warn-banner-text">
+      <div className="bg-warn-bg border border-warn-banner-border rounded-lg px-4 py-3 text-[11px] text-warn-banner-text">
         <strong>Free cash undeployed:</strong>{' '}
         {fmtUsd(flag.amountUsd)} of household free cash could not be distributed — every
         eligible account is closed, locked, or has hit its deposit limit.
@@ -248,7 +248,7 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
   }
   if (flag.kind === 'WITHDRAWAL_SHORTFALL') {
     return (
-      <div className="bg-warn-bg border border-warn-banner-border rounded-lg px-4 py-3 text-sm text-warn-banner-text">
+      <div className="bg-warn-bg border border-warn-banner-border rounded-lg px-4 py-3 text-[11px] text-warn-banner-text">
         <strong>Withdrawal not fully funded:</strong>{' '}
         {fmtUsd(flag.amountUsd)} of the additional withdrawal could not be raised.
         Mark another account Eligible to cover it.
@@ -257,7 +257,7 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
   }
   if (flag.kind === 'BLENDED_FUND_SOLD') {
     return (
-      <div className="bg-brand-50 border border-brand-200 rounded-lg px-4 py-3 text-sm text-brand-700">
+      <div className="bg-brand-50 border border-brand-200 rounded-lg px-4 py-3 text-[11px] text-brand-700">
         <strong>Blended fund sold:</strong>{' '}
         {fmtUsd(flag.amountUsd)} of <code className="font-mono">{flag.ticker}</code> in{' '}
         <em>{acctName(flag.accountId)}</em> sold proportionally. Lock the position to preserve it.
@@ -266,7 +266,7 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
   }
   if (flag.kind === 'BLENDED_FUND_BOUGHT') {
     return (
-      <div className="bg-brand-50 border border-brand-200 rounded-lg px-4 py-3 text-sm text-brand-700">
+      <div className="bg-brand-50 border border-brand-200 rounded-lg px-4 py-3 text-[11px] text-brand-700">
         <strong>Blended fund bought:</strong>{' '}
         {fmtUsd(flag.amountUsd)} of <code className="font-mono">{flag.ticker}</code> in{' '}
         <em>{acctName(flag.accountId)}</em> — one composite purchase covering several
@@ -276,7 +276,7 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
   }
   if (flag.kind === 'BLENDED_FUND_OVERSELL') {
     return (
-      <div className="bg-danger-bg border border-danger-hover-border rounded-lg px-4 py-3 text-sm text-danger">
+      <div className="bg-danger-bg border border-danger-hover-border rounded-lg px-4 py-3 text-[11px] text-danger">
         <strong>Blended fund over-sell:</strong>{' '}
         Selling <code className="font-mono">{flag.ticker}</code> in{' '}
         <em>{acctName(flag.accountId)}</em> forced an extra {fmtUsd(flag.amountUsd)} of{' '}
@@ -286,7 +286,7 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
   }
   if (flag.kind === 'MISSING_COST_BASIS') {
     return (
-      <div className="bg-warn-bg border border-warn-banner-border rounded-lg px-4 py-3 text-sm text-warn-banner-text">
+      <div className="bg-warn-bg border border-warn-banner-border rounded-lg px-4 py-3 text-[11px] text-warn-banner-text">
         <strong>Missing cost basis:</strong>{' '}
         <code className="font-mono">{flag.ticker}</code> in{' '}
         <em>{acctName(flag.accountId)}</em> has no cost basis recorded. Add it in the Import tab.
@@ -297,7 +297,7 @@ function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
   if (flag.kind === 'FIVE_TWENTY_NINE_REBALANCE_LIMIT') {
     const names = flag.accountIds.map(acctName).join(', ');
     return (
-      <div className="bg-warn-bg border border-warn-banner-border rounded-lg px-4 py-3 text-sm text-warn-banner-text">
+      <div className="bg-warn-bg border border-warn-banner-border rounded-lg px-4 py-3 text-[11px] text-warn-banner-text">
         <strong>529 rebalance limit:</strong>{' '}
         Trades are recommended for {names}. The IRS allows only{' '}
         <strong>2 investment-direction changes per 529 account per calendar year.</strong>
@@ -312,7 +312,7 @@ function WashSaleBanner({ flags, accounts }: { flags: Flag[]; accounts: Account[
   const risks = flags.filter((f): f is Extract<Flag, { kind: 'WASH_SALE_RISK' }> => f.kind === 'WASH_SALE_RISK');
   if (risks.length === 0) return null;
   return (
-    <div className="bg-danger-bg border border-danger-hover-border rounded-lg px-4 py-3 text-sm text-danger">
+    <div className="bg-danger-bg border border-danger-hover-border rounded-lg px-4 py-3 text-[11px] text-danger">
       <strong>Possible wash sale.</strong>{' '}
       Selling in a taxable account and buying the same asset class within 30 days
       may trigger the wash-sale rule. Consult your tax advisor.
