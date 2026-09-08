@@ -78,6 +78,22 @@ describe('RadarChart (issue #98)', () => {
     const titles = [...container.querySelectorAll('title')].map(t => t.textContent);
     expect(titles.some(t => t?.includes('US — Current 64.0%, Target 57.5%'))).toBe(true);
   });
+
+  // Issue #216: a household total drives a compact dollar in the tooltip/aria
+  // summary, but never in the shape geometry itself (shape-only by design).
+  it('adds a compact dollar amount to the tooltip and aria summary when a total is given', async () => {
+    await render(<RadarChart data={FAMILY} size={300} scaleMax={0.7} total={1_000_000} />);
+    const titles = [...container.querySelectorAll('title')].map(t => t.textContent);
+    expect(titles.some(t => t?.includes('US — Current 64.0% ($640.0k), Target 57.5% ($575.0k)'))).toBe(true);
+    const label = container.querySelector('svg[role="img"]')!.getAttribute('aria-label')!;
+    expect(label).toContain('64.0% ($640.0k)');
+  });
+
+  it('omits the dollar amount from the tooltip when no total is given', async () => {
+    await render(<RadarChart data={FAMILY} size={300} scaleMax={0.7} />);
+    const titles = [...container.querySelectorAll('title')].map(t => t.textContent);
+    expect(titles.every(t => !t?.includes('$'))).toBe(true);
+  });
 });
 
 const SUB: BulletDatum[] = [
@@ -104,7 +120,21 @@ describe('BulletBars (issue #98)', () => {
     // one dashed hollow box (Intl under)
     expect(rects.filter(r => r.getAttribute('stroke-dasharray') === '3 2')).toHaveLength(1);
   });
+
+  // Issue #216: a household total adds a compact dollar to the tooltip and
+  // aria summary alongside the percentage.
+  it('adds a compact dollar amount to the tooltip and aria summary when a total is given', async () => {
+    await render(<BulletBars data={SUB} total={1_000_000} />);
+    const svg = container.querySelector('svg[role="img"]')!;
+    expect(svg.getAttribute('aria-label')).toContain('current 42.0% ($420.0k)');
+    const titles = [...container.querySelectorAll('title')].map(t => t.textContent);
+    expect(titles.some(t => t?.includes('current 42.0% ($420.0k), target 38.5% ($385.0k)'))).toBe(true);
+  });
 });
+
+// Household total for the Harness fixtures below (issue #216) — drives the
+// compact dollar amounts shown alongside the percentages.
+const HARNESS_TOTAL = 1_000_000;
 
 // A stateful harness so clicking a toggle button actually swaps the view.
 function Harness({ initial = 'radar' as ChartView }) {
@@ -116,6 +146,7 @@ function Harness({ initial = 'radar' as ChartView }) {
       familyRows={FAMILY}
       subRows={SUB}
       familyColors={['#082855', '#0d3e7a', '#1a5fa0', '#2e72b4', '#e8600a']}
+      total={HARNESS_TOTAL}
     />
   );
 }
@@ -175,5 +206,20 @@ describe('AllocationViews toggle (issue #98)', () => {
     // bar: no row swatches
     await act(async () => { tab('Bar view').click(); });
     expect(swatches()).toHaveLength(0);
+  });
+
+  // Issue #216: the drift table's Current/Target columns show a compact
+  // dollar amount (stacked below the percent, not inline — the 4.2rem column
+  // is too narrow for "% ($)" on one line) computed from the `total` prop.
+  it('shows a compact household dollar amount under each Current/Target percent in the drift table', () => {
+    // US current = 0.64 * 1,000,000 = $640,000 => "$640.0k"; target = 0.575 => "$575.0k"
+    expect(container.textContent).toContain('($640.0k)');
+    expect(container.textContent).toContain('($575.0k)');
+  });
+
+  it('adds a compact dollar amount to the donut ring tooltips', async () => {
+    await act(async () => { tab('Donut view').click(); });
+    const titles = [...container.querySelectorAll('title')].map(t => t.textContent);
+    expect(titles.some(t => t?.includes('US (current): 64.0% ($640.0k)'))).toBe(true);
   });
 });

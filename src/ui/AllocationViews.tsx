@@ -12,7 +12,7 @@ import { RadarChart } from './RadarChart';
 import type { RadarDatum } from './RadarChart';
 import { BulletBars } from './BulletBars';
 import type { BulletDatum } from './BulletBars';
-import { fmtPct } from './fmt';
+import { fmtPct, fmtUsdCompact } from './fmt';
 import { segmentedTrackStyle, segmentStyle } from './segmented';
 
 export type ChartView = 'donut' | 'radar' | 'bar';
@@ -38,6 +38,13 @@ interface Props {
   subRows: BulletDatum[];
   /** Family donut ramp — same order/keys as familyRows. */
   familyColors: string[];
+  /**
+   * Household total consistent with familyRows/subRows (issue #216) — the
+   * same tax-adjusted `vizTotal` ResultsPanel already computes for these
+   * weights. Drives the compact dollar amounts in the drift table and the
+   * donut/bar/radar tooltips.
+   */
+  total: number;
   /**
    * Render the internal title + toggle row (default true). ResultsPanel passes
    * false and hosts the ChartToggle in its collapsible card header instead
@@ -150,7 +157,7 @@ function driftMarks(cur: number, tgt: number) {
   return { text: `${arrow} ${sign}${Math.abs(drift * 100).toFixed(1)}`, color };
 }
 
-function DriftTable({ firstCol, rows }: { firstCol: string; rows: DriftRow[] }) {
+function DriftTable({ firstCol, rows, total }: { firstCol: string; rows: DriftRow[]; total: number }) {
   const cols = '1fr 4.2rem 4.2rem 4rem';
   return (
     <div>
@@ -187,8 +194,18 @@ function DriftTable({ firstCol, rows }: { firstCol: string; rows: DriftRow[] }) 
               )}
               <span className="truncate">{r.label}</span>
             </span>
-            <span className="text-right tabular-nums font-mono" style={{ color: CURRENT, fontSize: 12 }}>{fmtPct(r.cur)}</span>
-            <span className="text-right tabular-nums font-mono" style={{ color: TARGET, fontSize: 12 }}>{fmtPct(r.tgt)}</span>
+            {/* Percent leads, compact dollar stacked below in muted small text
+                (issue #216) — the 4.2rem column is too narrow for "% ($)" on
+                one line without overflow, so the amount wraps to its own row
+                instead of widening the column. */}
+            <span className="text-right tabular-nums font-mono" style={{ color: CURRENT, fontSize: 12 }}>
+              <div>{fmtPct(r.cur)}</div>
+              <div style={{ fontSize: 9.5, color: '#a9c2dd' }}>({fmtUsdCompact(r.cur * total)})</div>
+            </span>
+            <span className="text-right tabular-nums font-mono" style={{ color: TARGET, fontSize: 12 }}>
+              <div>{fmtPct(r.tgt)}</div>
+              <div style={{ fontSize: 9.5, color: '#b7bfc9' }}>({fmtUsdCompact(r.tgt * total)})</div>
+            </span>
             <span className="text-right tabular-nums font-mono" style={{ color: d.color, fontSize: 12 }}>{d.text}</span>
           </div>
         );
@@ -228,7 +245,7 @@ function Caption({ view }: { view: ChartView }) {
 
 // ── Card body ─────────────────────────────────────────────────────────────────
 
-export function AllocationViews({ view, onViewChange, familyRows, subRows, familyColors, showHeader = true }: Props) {
+export function AllocationViews({ view, onViewChange, familyRows, subRows, familyColors, total, showHeader = true }: Props) {
   const isBar = view === 'bar';
 
   const donutInner: DonutSlice[] = familyRows.map((r, i) => ({ label: r.label, weight: r.a, color: familyColors[i] }));
@@ -259,14 +276,14 @@ export function AllocationViews({ view, onViewChange, familyRows, subRows, famil
           className="flex items-center justify-center shrink-0"
           style={{ minWidth: 300, minHeight: PANE_MIN_HEIGHT }}
         >
-          {view === 'donut' && <DonutRings inner={donutInner} outer={donutOuter} size={232} />}
-          {view === 'radar' && <RadarChart data={familyRows} size={270} aName="Current" bName="Target" />}
-          {view === 'bar' && <BulletBars data={subRows} />}
+          {view === 'donut' && <DonutRings inner={donutInner} outer={donutOuter} size={232} total={total} />}
+          {view === 'radar' && <RadarChart data={familyRows} size={270} aName="Current" bName="Target" total={total} />}
+          {view === 'bar' && <BulletBars data={subRows} total={total} />}
         </div>
 
         {/* table pane */}
         <div className="self-center" style={{ flex: '0 1 330px', minWidth: 270 }}>
-          <DriftTable firstCol={isBar ? 'Asset class' : 'Family'} rows={tableRows} />
+          <DriftTable firstCol={isBar ? 'Asset class' : 'Family'} rows={tableRows} total={total} />
           <Caption view={view} />
         </div>
       </div>

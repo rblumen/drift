@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   fmtUsd,
   fmtUsdCents,
+  fmtUsdCompact,
   fmtPct,
   fmtDelta,
   fmtShares,
@@ -69,6 +70,46 @@ describe('fmtUsdCents', () => {
 
   it('formats a large value with thousands separators and cents', () => {
     expect(fmtUsdCents(1_234_567.89)).toBe('$1,234,567.89');
+  });
+});
+
+// ─── fmtUsdCompact ────────────────────────────────────────────────────────────
+
+describe('fmtUsdCompact', () => {
+  it('formats a sub-thousand value as a plain whole dollar', () => {
+    expect(fmtUsdCompact(446)).toBe('$446');
+  });
+
+  it('formats zero', () => {
+    expect(fmtUsdCompact(0)).toBe('$0');
+  });
+
+  it('formats thousands with one decimal and a "k" suffix', () => {
+    expect(fmtUsdCompact(446_400)).toBe('$446.4k');
+  });
+
+  it('formats millions with two decimals and an "M" suffix', () => {
+    expect(fmtUsdCompact(1_237_000)).toBe('$1.24M');
+  });
+
+  it('formats a negative value with the sign in front of the $ (not a unicode minus)', () => {
+    expect(fmtUsdCompact(-446_400)).toBe('-$446.4k');
+    expect(fmtUsdCompact(-446)).toBe('-$446');
+  });
+
+  it('switches to the "k" suffix exactly at the $1,000 boundary', () => {
+    expect(fmtUsdCompact(999)).toBe('$999');
+    expect(fmtUsdCompact(1_000)).toBe('$1.0k');
+  });
+
+  it('switches to the "M" suffix exactly at the $1,000,000 boundary', () => {
+    expect(fmtUsdCompact(999_000)).toBe('$999.0k');
+    expect(fmtUsdCompact(1_000_000)).toBe('$1.00M');
+  });
+
+  it('rounds within the "k" range', () => {
+    expect(fmtUsdCompact(1_249)).toBe('$1.2k');
+    expect(fmtUsdCompact(1_250)).toBe('$1.3k');
   });
 });
 

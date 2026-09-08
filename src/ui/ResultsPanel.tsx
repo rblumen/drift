@@ -14,7 +14,7 @@ import { withdrawalPriorityOf, isWithdrawalEligible } from '../engine/rebalance'
 import { isTaxableSale } from '../engine/taxableSale';
 import { isChildClass, isParentClass, childrenOf } from '../engine/hierarchy';
 import {
-  AC_COLOR, AC_LABEL, AC_SHORT_LABEL, ACCT_TYPE_LABEL, fmtUsd, fmtPct, fmtDelta,
+  AC_COLOR, AC_LABEL, AC_SHORT_LABEL, ACCT_TYPE_LABEL, fmtUsd, fmtUsdCompact, fmtPct, fmtDelta,
   FAMILY_COLOR, FAMILY_LABEL, rollupFamilies, activeFamilies,
 } from './fmt';
 import { PieChart } from './PieChart';
@@ -336,14 +336,21 @@ function WashSaleBanner({ flags, accounts }: { flags: Flag[]; accounts: Account[
 // see ResultsPanel.AllocationRow.test.tsx (issue #190).
 
 export function AllocationRow({
-  ac, current, target, projected, taCurrent, taProjected, depth = 0,
+  ac, current, target, projected, total, taCurrent, taProjected, depth = 0,
 }: {
-  ac: AssetClass; current: number; target: number; projected: number;
+  ac: AssetClass; current: number; target: number; projected: number; total: number;
   taCurrent?: number; taProjected?: number; depth?: 0 | 1;
 }) {
   const drift    = current - target;
   const showTA   = taCurrent !== undefined && taProjected !== undefined;
   const isChild  = depth > 0;
+
+  // Household dollar amounts (issue #216) — the class's weight × the same
+  // household total the weights on this row are drawn from. Display-only:
+  // never rounded until the fmtUsdCompact/fmtPct calls below.
+  const currentUsd = current * total;
+  const targetUsd  = target * total;
+  const driftUsd   = drift * total;
 
   // Drift bar: 8% abs = full bar width
   const driftAmt  = Math.abs(drift);
@@ -357,21 +364,25 @@ export function AllocationRow({
       <td className={`py-1.5 ${isChild ? 'pl-10 pr-4 text-gray-500 font-normal text-xs' : 'px-4 text-gray-700 font-medium text-[12.5px]'}`}>
         {AC_LABEL[ac]}
       </td>
-      <td className="px-4 py-1.5 text-right font-mono tabular-nums text-[12.5px]">{fmtPct(current)}</td>
-      <td className="px-4 py-1.5 text-right font-mono tabular-nums text-[12.5px] text-gray-500">{fmtPct(target)}</td>
+      <td className="px-4 py-1.5 text-right font-mono tabular-nums text-[12.5px]">
+        {fmtPct(current)} <span className="text-gray-400">({fmtUsdCompact(currentUsd)})</span>
+      </td>
+      <td className="px-4 py-1.5 text-right font-mono tabular-nums text-[12.5px] text-gray-500">
+        {fmtPct(target)} <span className="text-gray-400">({fmtUsdCompact(targetUsd)})</span>
+      </td>
       <td className="px-4 py-1.5">
         <div className="flex items-center justify-end gap-2">
-          <span
-            className="font-mono tabular-nums text-[12.5px] text-right"
-            style={{ color: driftTextColor ?? '#9ca3af' }}
-          >
-            {drift >= 0 ? '+' : ''}{fmtPct(drift)}
-          </span>
           {showBar && (
             <div className="w-[72px] shrink-0 h-[3px] bg-gray-100 rounded overflow-hidden">
               <div className="h-full rounded" style={{ width: barWidth, background: barColor }} />
             </div>
           )}
+          <span
+            className="font-mono tabular-nums text-[12.5px] text-right"
+            style={{ color: driftTextColor ?? '#9ca3af' }}
+          >
+            {drift >= 0 ? '+' : ''}{fmtUsdCompact(driftUsd)} <span className="text-gray-400">({fmtPct(driftAmt)})</span>
+          </span>
         </div>
       </td>
       <td className="px-4 py-1.5 text-right font-mono tabular-nums text-[12.5px] text-gray-500">{fmtPct(projected)}</td>
@@ -1214,6 +1225,7 @@ export function ResultsPanel({
                 familyRows={familyRows}
                 subRows={subRows}
                 familyColors={familyColors}
+                total={vizTotal}
                 showHeader={false}
               />
             )}
@@ -1274,6 +1286,7 @@ export function ResultsPanel({
                     current={currentWeights[ac]}
                     target={targetWeights[ac]}
                     projected={projectedWeights[ac]}
+                    total={householdValue}
                     taCurrent={result.taxAdjusted?.currentWeights[ac]}
                     taProjected={result.taxAdjusted?.projectedWeights[ac]}
                   />
@@ -1294,6 +1307,7 @@ export function ResultsPanel({
                         current={cur}
                         target={tgt}
                         projected={proj}
+                        total={householdValue}
                         taCurrent={result.taxAdjusted?.currentWeights[child]}
                         taProjected={result.taxAdjusted?.projectedWeights[child]}
                         depth={1}
