@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Household allocation now shows dollar amounts alongside percentages** ([#216](https://github.com/rblumen/drift/issues/216)) — the Results tab's household allocation table shows each asset class's Current and Target as a percent with the compact dollar amount in parentheses (e.g. "36.0% ($446.4k)"), and Drift now leads with the dollar delta and shows the percent in parentheses (e.g. "+$49.6k (4.0%)"). The After-trades and after-tax columns stay percent-only. The donut/bar/radar chart tooltips and the companion drift table pick up the same compact dollar amounts.
+
 ### Fixed
 
 - **Broad funds no longer generate unexecutable single-sleeve trades** ([#215](https://github.com/rblumen/drift/issues/215)) — a held total-market fund (e.g. SWTSX) targeted with a custom cap tilt used to produce a recommendation like "SWTSX · Mid Cap" whose dollar amount could not actually be executed, because buying or selling SWTSX moves large-, mid-, and small-cap together, not one sleeve. The engine now treats any held broad fund (total-market, broad bond, developed-international, alternatives) as a blend of its sleeves: it trades the fund as a unit, labels the recommendation by the fund's true asset class (e.g. "US Total Market"), and adds compensating buy-backs of the sleeves you didn't mean to move so the recommended trades preserve each account's net and land every sleeve on target. The same fix closes an identical latent gap for target-date and other blended funds whose composition is expressed at the parent level. Simple portfolios that target a broad fund at the family level (e.g. a single 30% bond sleeve) are unaffected — no extra trades, no new flags.

@@ -8,6 +8,23 @@ export function fmtUsdCents(n: number): string {
   return n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 }
 
+// Compact USD for dense contexts (household allocation table, chart legends —
+// issue #216): thousands as "$446.4k", millions as "$1.24M", under $1,000 as
+// a plain whole dollar. Negative values keep the sign in front of the "$"
+// (matching fmtUsd's convention), never the unicode minus fmtDelta uses.
+// Display-only rounding — never round the stored value (CLAUDE.md).
+export function fmtUsdCompact(n: number): string {
+  const sign = n < 0 ? '-' : '';
+  const abs = Math.abs(n);
+  if (abs >= 1_000_000) {
+    return `${sign}$${(abs / 1_000_000).toFixed(2)}M`;
+  }
+  if (abs >= 1_000) {
+    return `${sign}$${(abs / 1_000).toFixed(1)}k`;
+  }
+  return `${sign}$${Math.round(abs)}`;
+}
+
 export function fmtPct(n: number, decimals = 1): string {
   return (n * 100).toFixed(decimals) + '%';
 }

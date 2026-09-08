@@ -1,4 +1,4 @@
-import { fmtPct } from './fmt';
+import { fmtPct, fmtUsdCompact } from './fmt';
 
 export interface DonutSlice {
   label: string;
@@ -14,6 +14,18 @@ interface Props {
   outer: DonutSlice[];
   /** SVG diameter in px (default 180). */
   size?: number;
+  /**
+   * Household total consistent with the weights above (issue #216) — when
+   * given, tooltips and the aria summary show a compact dollar amount
+   * alongside the percentage. Omit to keep percent-only (e.g. no total yet
+   * known).
+   */
+  total?: number;
+}
+
+/** "36.0%" or "36.0% ($446.4k)" when a household total is known (issue #216). */
+function fmtSlicePct(weight: number, total: number | undefined): string {
+  return total === undefined ? fmtPct(weight) : `${fmtPct(weight)} (${fmtUsdCompact(weight * total)})`;
 }
 
 /**
@@ -43,7 +55,7 @@ function buildRingSegments(
  * allocation-view toggle can render just the donut next to its own shared drift
  * table. `DonutChart` composes this plus its built-in legend.
  */
-export function DonutRings({ inner, outer, size = 180 }: Props) {
+export function DonutRings({ inner, outer, size = 180, total }: Props) {
   const cx = size / 2;
   const cy = size / 2;
   const sw      = Math.round(size * 0.10);   // ring stroke width  (~18px @ 180)
@@ -59,11 +71,11 @@ export function DonutRings({ inner, outer, size = 180 }: Props) {
   // both rings (current vs. target) in one text alternative.
   const targetSummary = outer
     .filter(s => s.weight > 0.0005)
-    .map(s => `${s.label} ${fmtPct(s.weight)}`)
+    .map(s => `${s.label} ${fmtSlicePct(s.weight, total)}`)
     .join(', ');
   const currentSummary = inner
     .filter(s => s.weight > 0.0005)
-    .map(s => `${s.label} ${fmtPct(s.weight)}`)
+    .map(s => `${s.label} ${fmtSlicePct(s.weight, total)}`)
     .join(', ');
   const ariaLabel = hasInner
     ? `Current vs. target allocation. Target: ${targetSummary}. Current: ${currentSummary}.`
@@ -88,7 +100,7 @@ export function DonutRings({ inner, outer, size = 180 }: Props) {
               strokeDashoffset={seg.offset}
               transform={`rotate(-90 ${cx} ${cy})`}
             >
-              <title>{seg.label} (current): {fmtPct(seg.weight)}</title>
+              <title>{seg.label} (current): {fmtSlicePct(seg.weight, total)}</title>
             </circle>
           ))}
 
@@ -105,7 +117,7 @@ export function DonutRings({ inner, outer, size = 180 }: Props) {
               strokeDashoffset={seg.offset}
               transform={`rotate(-90 ${cx} ${cy})`}
             >
-              <title>{seg.label} (target): {fmtPct(seg.weight)}</title>
+              <title>{seg.label} (target): {fmtSlicePct(seg.weight, total)}</title>
             </circle>
           ))}
 

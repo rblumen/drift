@@ -10,7 +10,7 @@
 // plus an aria-label summarizing both series, since the per-vertex <title>s only
 // surface on hover.
 
-import { fmtPct } from './fmt';
+import { fmtPct, fmtUsdCompact } from './fmt';
 
 export interface RadarDatum {
   /** Family label shown at the spoke tip (e.g. "US", "Bonds"). */
@@ -35,6 +35,18 @@ interface Props {
   aName?: string;
   /** Legend name for the b series (default "Target"). */
   bName?: string;
+  /**
+   * Household total consistent with the a/b weights (issue #216) — when given,
+   * the per-vertex tooltip and aria summary show a compact dollar amount
+   * alongside the percentage. The radar's shape/geometry and tip labels stay
+   * percent-only by design — this is shape-only, not a dollar chart.
+   */
+  total?: number;
+}
+
+/** "36.0%" or "36.0% ($446.4k)" when a household total is known (issue #216). */
+function fmtWeightPct(weight: number, total: number | undefined): string {
+  return total === undefined ? fmtPct(weight) : `${fmtPct(weight)} (${fmtUsdCompact(weight * total)})`;
 }
 
 const CURRENT = '#0d3e7a';       // shaded polygon / current vertex
@@ -60,6 +72,7 @@ export function RadarChart({
   scaleMax,
   aName = 'Current',
   bName = 'Target',
+  total,
 }: Props) {
   const smax = scaleMax ?? deriveScaleMax(data);
   const cx = size / 2;
@@ -95,7 +108,7 @@ export function RadarChart({
 
   // Screen-reader summary (both series), matching the DonutChart approach.
   const summary = (pick: (d: RadarDatum) => number) =>
-    data.map(d => `${d.label} ${fmtPct(pick(d))}`).join(', ');
+    data.map(d => `${d.label} ${fmtWeightPct(pick(d), total)}`).join(', ');
   const ariaLabel =
     `${aName} vs. ${bName} allocation radar. ` +
     `${aName}: ${summary(d => d.a)}. ${bName}: ${summary(d => d.b)}.`;
@@ -183,7 +196,7 @@ export function RadarChart({
             <circle cx={pb[0]} cy={pb[1]} r={2.4} fill="#fff" stroke={TARGET_STROKE} strokeWidth={1.4} />
             <circle cx={pa[0]} cy={pa[1]} r={3.2} fill={CURRENT}>
               <title>
-                {d.label} — {aName} {fmtPct(d.a)}, {bName} {fmtPct(d.b)}
+                {d.label} — {aName} {fmtWeightPct(d.a, total)}, {bName} {fmtWeightPct(d.b, total)}
               </title>
             </circle>
           </g>

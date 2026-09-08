@@ -7,7 +7,7 @@
 //
 // Pure SVG; a11y matches DonutChart (role="img" + a two-series aria summary).
 
-import { fmtPct } from './fmt';
+import { fmtPct, fmtUsdCompact } from './fmt';
 
 export interface BulletDatum {
   /** Full asset-class label, used in the tooltip + aria summary. */
@@ -27,6 +27,17 @@ interface Props {
    * value across bars rounded up to the next 0.05.
    */
   scaleMax?: number;
+  /**
+   * Household total consistent with the weights above (issue #216) — when
+   * given, the tooltip and aria summary show a compact dollar amount
+   * alongside the percentage. Omit to keep percent-only.
+   */
+  total?: number;
+}
+
+/** "36.0%" or "36.0% ($446.4k)" when a household total is known (issue #216). */
+function fmtWeightPct(weight: number, total: number | undefined): string {
+  return total === undefined ? fmtPct(weight) : `${fmtPct(weight)} (${fmtUsdCompact(weight * total)})`;
 }
 
 const OVER    = '#e8600a';
@@ -44,7 +55,7 @@ function deriveScaleMax(data: BulletDatum[]): number {
   return Math.max(0.05, Math.ceil((peak - 1e-9) / 0.05) * 0.05);
 }
 
-export function BulletBars({ data, scaleMax }: Props) {
+export function BulletBars({ data, scaleMax, total }: Props) {
   const smax = scaleMax ?? deriveScaleMax(data);
   const n = data.length;
   const axisW = 34;
@@ -66,7 +77,7 @@ export function BulletBars({ data, scaleMax }: Props) {
 
   const ariaLabel =
     `Current vs. target allocation by asset class. ` +
-    data.map(d => `${d.label} current ${fmtPct(d.a)}, target ${fmtPct(d.b)}`).join('; ') +
+    data.map(d => `${d.label} current ${fmtWeightPct(d.a, total)}, target ${fmtWeightPct(d.b, total)}`).join('; ') +
     '.';
 
   return (
@@ -110,7 +121,7 @@ export function BulletBars({ data, scaleMax }: Props) {
             {/* solid current up to min(cur, tgt) */}
             <rect x={x} y={yBlueTop} width={barW} height={y0 - yBlueTop} rx={2} fill="rgba(13,62,122,0.9)">
               <title>
-                {d.label} — current {fmtPct(d.a)}, target {fmtPct(d.b)}
+                {d.label} — current {fmtWeightPct(d.a, total)}, target {fmtWeightPct(d.b, total)}
               </title>
             </rect>
             {/* excess: orange cap */}
