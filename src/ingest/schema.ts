@@ -41,6 +41,9 @@ export const positionSchema = z.object({
   // Aggregate cost basis, in dollars. Only meaningful for positions in TAXABLE
   // accounts (see Position docstring in engine/types.ts).
   costBasis: z.number().nonnegative().optional(),
+  // Epoch ms when this position was last created/confirmed by an import or hand-edited
+  // (issue #212). Optional — absent on legacy saves; no migration backfill needed.
+  lastUpdatedAt: z.number().optional(),
 });
 
 export const accountSchema = z.object({
