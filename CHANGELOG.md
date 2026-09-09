@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Household allocation now shows dollar amounts alongside percentages** ([#216](https://github.com/rblumen/drift/issues/216)) — the Results tab's household allocation table shows each asset class's Current and Target as a percent with the compact dollar amount in parentheses (e.g. "36.0% ($446.4k)"), and Drift now leads with the dollar delta and shows the percent in parentheses (e.g. "+$49.6k (4.0%)"). The After-trades and after-tax columns stay percent-only. The donut/bar/radar chart tooltips and the companion drift table pick up the same compact dollar amounts.
+- **Import/update freshness indicator** ([#212](https://github.com/rblumen/drift/issues/212)) — the Positions tab now shows when each account's holdings were last imported or edited (e.g. "Updated just now", "Updated 3 days ago"), so you can tell at a glance which accounts are current and which are stale when prepping a rebalance — and it doubles as confirmation that an import landed. When you update balances by hand one holding at a time, rows you haven't touched yet in the current pass are flagged with a subtle marker so it's easy to see what's left. Freshness is tracked per holding and rolled up to the account; older saves simply read as "not tracked yet" until their next update.
 
 ### Fixed
 

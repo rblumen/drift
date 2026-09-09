@@ -133,6 +133,12 @@ export interface Position {
   locked?: boolean;
   /** Set when a field on this position was hand-edited after import. Display-only. */
   edited?: boolean;
+  /** Epoch ms when this position was last created/confirmed by an import or hand-edited
+   *  (issue #212). Display-only metadata — the engine's math never reads it. Absent means
+   *  "not tracked yet" (e.g. a save from before this field existed); no migration backfill
+   *  is performed. Account-level freshness and the per-row lag marker are both *derived*
+   *  from this field (see src/ingest/freshness.ts) rather than stored separately. */
+  lastUpdatedAt?: number;
   /** Aggregate cost basis for this holding, in dollars. Only meaningful for
    *  positions in TAXABLE accounts; ignored elsewhere. Used by the tax-adjusted
    *  allocation feature (issue #7) to value the position at
