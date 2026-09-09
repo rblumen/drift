@@ -82,7 +82,7 @@ src/
 │   ├── LandingPage.tsx         # marketing / home screen shown before the tab shell
 │   ├── AccountsPanel.tsx
 │   ├── ClassifyPanel.tsx
-│   ├── ImportPanel.tsx
+│   ├── PositionsPanel.tsx
 │   ├── StrategyPanel.tsx
 │   ├── ResultsPanel.tsx
 │   ├── OverviewPanel.tsx

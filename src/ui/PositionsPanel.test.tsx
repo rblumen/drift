@@ -8,7 +8,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { ImportPanel } from './ImportPanel';
+import { PositionsPanel } from './PositionsPanel';
 import type { Account, Position } from '../engine/types';
 
 (globalThis as unknown as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
@@ -26,7 +26,7 @@ async function render(positions: Position[] = []): Promise<void> {
   root = createRoot(container);
   await act(async () => {
     root!.render(
-      <ImportPanel accounts={ACCOUNTS} positions={positions} setPositions={() => {}} />,
+      <PositionsPanel accounts={ACCOUNTS} positions={positions} setPositions={() => {}} />,
     );
   });
 }
@@ -46,7 +46,7 @@ afterEach(() => {
   root = null;
 });
 
-describe('ImportPanel source segmented control', () => {
+describe('PositionsPanel source segmented control', () => {
   it('defaults to the file method with a drop zone and format select', async () => {
     await render();
     // The file method shows the browse/drop affordance and the format select.
