@@ -12,6 +12,7 @@ import { AC_LABEL, ACCT_TYPE_COLOR, ACCT_TYPE_LABEL, ACCT_TYPE_TAG_LABEL, ACCOUN
 import { PieChart } from './PieChart';
 import { HelpBox, HelpDef, HelpSection } from './HelpBox';
 import { IconLock, IconLockOpen, IconX, IconPencil, IconChevronDown, IconChevronRight, IconUpload } from './icons';
+import { accountFreshness, formatRelativeUpdate, isLagging } from '../ingest/freshness';
 import { Card, AcctTypeTag, StatusChip } from './card';
 import { btnPrimaryCompact, btnGhostCompact } from './buttons';
 import { segmentedTrackStyle, segmentStyle } from './segmented';
@@ -316,19 +317,26 @@ export function PositionsPanel({ accounts, positions, setPositions }: Props) {
 
   function confirmImport() {
     if (!preview) return;
-    setPositions(mergePositions(positions, preview, accountId));
+    // One Date.now() for the whole import (issue #212) — every row in this
+    // confirm gets the same stamp, so a fresh import never self-flags as
+    // "lagging" (see isLagging) and doubles as an import-success confirmation
+    // via the account's "Updated just now" freshness reading.
+    const stampedAt = Date.now();
+    const stamped = preview.map(p => ({ ...p, lastUpdatedAt: stampedAt }));
+    setPositions(mergePositions(positions, stamped, accountId));
     setPreview(null);
     setParseErrors([]);
   }
 
   function confirmMultiImport() {
     if (!multiAccount) return;
+    const stampedAt = Date.now();
     let updated = positions;
     for (const disc of multiAccount.discovered) {
       const appId = accountMapping[disc.accountNumber];
       if (!appId) continue;
       const remapped = (multiAccount.positionsByNumber[disc.accountNumber] ?? [])
-        .map(p => ({ ...p, accountId: appId }));
+        .map(p => ({ ...p, accountId: appId, lastUpdatedAt: stampedAt }));
       updated = mergePositions(updated, remapped, appId);
     }
     setPositions(updated);
@@ -345,6 +353,7 @@ export function PositionsPanel({ accounts, positions, setPositions }: Props) {
       ticker:      manualRow.ticker.trim().toUpperCase(),
       marketValue: mv,
       price:       manualRow.price ? parseFloat(manualRow.price) || undefined : undefined,
+      lastUpdatedAt: Date.now(),
     };
     setPositions(mergePositions(positions, [
       ...positions.filter(p => p.accountId === accountId && p.ticker !== pos.ticker),
@@ -360,17 +369,19 @@ export function PositionsPanel({ accounts, positions, setPositions }: Props) {
       const v = parseFloat(empowerTotals[ac] ?? '');
       if (!isNaN(v) && v > 0) numericTotals[ac] = v;
     }
-    const incoming = parseEmpowerTotals(accountId, numericTotals);
+    const stampedAt = Date.now();
+    const incoming = parseEmpowerTotals(accountId, numericTotals).map(p => ({ ...p, lastUpdatedAt: stampedAt }));
     setPositions(mergePositions(positions, incoming, accountId));
     setEmpowerTotals({});
   }
 
   // Update one position by its index in the master `positions` array.
-  // `markEdited` is true for content edits (so the row gets a manual-edit indicator),
-  // false for non-content toggles like lock/unlock.
+  // `markEdited` is true for content edits (so the row gets a manual-edit indicator
+  // and a fresh lastUpdatedAt stamp, issue #212), false for non-content toggles like
+  // lock/unlock — those don't represent the user confirming the data is current.
   function updatePositionByIdx(idx: number, patch: Partial<Position>, markEdited: boolean) {
     setPositions(positions.map((p, i) =>
-      i === idx ? { ...p, ...patch, ...(markEdited ? { edited: true } : {}) } : p
+      i === idx ? { ...p, ...patch, ...(markEdited ? { edited: true, lastUpdatedAt: Date.now() } : {}) } : p
     ));
   }
 
@@ -714,6 +725,11 @@ export function PositionsPanel({ accounts, positions, setPositions }: Props) {
           {allGrouped.map(({ account, rows, total, color }) => {
             const pct = grandTotal > 0 ? (total / grandTotal) * 100 : 0;
             const isOpen = !collapsed.has(account.id);
+            // Derived freshness (issue #212): max lastUpdatedAt across the account's
+            // positions, and the relative "Updated …" label. undefined = nothing tracked
+            // yet (legacy) — the label is then suppressed rather than shown as stale.
+            const freshest = accountFreshness(positions, account.id);
+            const updatedLabel = formatRelativeUpdate(Date.now(), freshest);
             return (
               <div key={account.id}>
                 {/* Group header row — clickable to collapse */}
@@ -735,6 +751,14 @@ export function PositionsPanel({ accounts, positions, setPositions }: Props) {
                     color={ACCT_TYPE_COLOR[account.type] ?? '#8792a0'}
                     taxable={account.type === 'TAXABLE'}
                   />
+                  {freshest !== undefined && (
+                    <span
+                      className="font-mono text-[10.5px] text-faint"
+                      title="When this account's holdings were last imported or edited"
+                    >
+                      {updatedLabel}
+                    </span>
+                  )}
 
                   {/* Count + totals */}
                   <span className="ml-auto font-mono text-[11px] text-muted-2">{rows.length} position{rows.length !== 1 ? 's' : ''}</span>
@@ -761,9 +785,19 @@ export function PositionsPanel({ accounts, positions, setPositions }: Props) {
                     <tbody className="divide-y divide-line-3">
                       {rows.map(({ pos: p, posIdx }) => (
                         <tr key={posIdx} className={`hover:bg-paper ${p.locked ? 'opacity-60' : ''}`}>
-                          {/* Edited indicator */}
-                          <td className="pl-3 pr-0 py-1.5 w-4 text-warn">
-                            {p.edited && <span className="inline-flex" title="Manually edited" aria-label="Manually edited"><IconPencil size={13} /></span>}
+                          {/* Status indicators: stale-lag dot (issue #212) + manual-edit pencil */}
+                          <td className="pl-3 pr-0 py-1.5 w-6">
+                            <span className="inline-flex items-center gap-1">
+                              {isLagging(p.lastUpdatedAt, freshest) && (
+                                <span
+                                  className="inline-block w-1.5 h-1.5 rounded-full shrink-0"
+                                  style={{ background: '#c98500' }}
+                                  title="Not yet updated in this pass — may be stale"
+                                  aria-label="May be stale"
+                                />
+                              )}
+                              {p.edited && <span className="inline-flex text-warn" title="Manually edited" aria-label="Manually edited"><IconPencil size={13} /></span>}
+                            </span>
                           </td>
                           {/* Ticker */}
                           <td className="px-2 py-1.5 font-mono font-medium w-28">
