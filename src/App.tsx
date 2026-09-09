@@ -39,7 +39,7 @@ type Tab = 'overview' | 'accounts' | 'import' | 'classify' | 'strategy' | 'resul
 const TABS: { id: Tab; label: string }[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'accounts', label: 'Accounts' },
-  { id: 'import',   label: 'Import' },
+  { id: 'import',   label: 'Positions' },
   { id: 'classify', label: 'Classify' },
   { id: 'strategy', label: 'Strategy' },
   { id: 'results',  label: 'Results' },
@@ -196,7 +196,7 @@ export default function App() {
   const railSteps: RailStep[] = [
     { id: 'overview', label: 'Overview', n: '01', done: false },
     { id: 'accounts', label: 'Accounts', n: '02', done: hasAccounts },
-    { id: 'import',   label: 'Import',   n: '03', done: hasPositions },
+    { id: 'import',   label: 'Positions', n: '03', done: hasPositions },
     { id: 'classify', label: 'Classify', n: '04', done: allClassified, warnCount: unmappedCount },
     { id: 'strategy', label: 'Strategy', n: '05', done: hasPositions },
     { id: 'results',  label: 'Results',  n: '06', done: false, infoCount: resolvedTrades.length },
