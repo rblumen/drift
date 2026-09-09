@@ -268,7 +268,7 @@ src/
     ├── LandingPage.tsx      # marketing / home screen
     ├── OverviewPanel.tsx    # orientation / cover-sheet tab
     ├── AccountsPanel.tsx
-    ├── ImportPanel.tsx
+    ├── PositionsPanel.tsx
     ├── ClassifyPanel.tsx
     ├── StrategyPanel.tsx
     ├── ResultsPanel.tsx

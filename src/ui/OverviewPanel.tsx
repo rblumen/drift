@@ -17,7 +17,7 @@ import { btnPrimary, btnTextLink } from './buttons';
 import { Card, Stat } from './card';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-type AppTab = 'overview' | 'accounts' | 'import' | 'classify' | 'strategy' | 'results';
+type AppTab = 'overview' | 'accounts' | 'positions' | 'classify' | 'strategy' | 'results';
 
 /** One family row of the allocation-vs-target table (weights in 0..1). */
 export interface FamilyRow {
@@ -72,7 +72,7 @@ export function OverviewPanel({
     nextTab = 'accounts'; nextLabel = 'Get started';
     nextDesc = 'Add your accounts to begin — name each one and set its tax type.';
   } else if (!hasPositions) {
-    nextTab = 'import'; nextLabel = 'Import positions';
+    nextTab = 'positions'; nextLabel = 'Import positions';
     nextDesc = 'Upload a broker CSV or enter your holdings so Drift can see your portfolio.';
   } else if (unmappedCount > 0) {
     nextTab = 'classify'; nextLabel = `Classify ${unmappedCount} ticker${unmappedCount !== 1 ? 's' : ''}`;

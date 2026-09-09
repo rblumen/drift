@@ -13,7 +13,7 @@ import { resolveTradeVehicles } from './engine/resolve';
 import { makeClassifier } from './engine/classify';
 import { OverviewPanel } from './ui/OverviewPanel';
 import { AccountsPanel } from './ui/AccountsPanel';
-import { ImportPanel } from './ui/ImportPanel';
+import { PositionsPanel } from './ui/PositionsPanel';
 import { ClassifyPanel } from './ui/ClassifyPanel';
 import { StrategyPanel } from './ui/StrategyPanel';
 import { ResultsPanel } from './ui/ResultsPanel';
@@ -34,12 +34,12 @@ import { appStateSchema, type Reminder } from './ingest/schema';
 import SAMPLE_PORTFOLIO from './data/sample-portfolio.json';
 import { Analytics } from '@vercel/analytics/react';
 
-type Tab = 'overview' | 'accounts' | 'import' | 'classify' | 'strategy' | 'results';
+type Tab = 'overview' | 'accounts' | 'positions' | 'classify' | 'strategy' | 'results';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'accounts', label: 'Accounts' },
-  { id: 'import',   label: 'Positions' },
+  { id: 'positions', label: 'Positions' },
   { id: 'classify', label: 'Classify' },
   { id: 'strategy', label: 'Strategy' },
   { id: 'results',  label: 'Results' },
@@ -196,7 +196,7 @@ export default function App() {
   const railSteps: RailStep[] = [
     { id: 'overview', label: 'Overview', n: '01', done: false },
     { id: 'accounts', label: 'Accounts', n: '02', done: hasAccounts },
-    { id: 'import',   label: 'Positions', n: '03', done: hasPositions },
+    { id: 'positions', label: 'Positions', n: '03', done: hasPositions },
     { id: 'classify', label: 'Classify', n: '04', done: allClassified, warnCount: unmappedCount },
     { id: 'strategy', label: 'Strategy', n: '05', done: hasPositions },
     { id: 'results',  label: 'Results',  n: '06', done: false, infoCount: resolvedTrades.length },
@@ -214,7 +214,7 @@ export default function App() {
         return { text: 'Ready for results', warn: false };
       case 'accounts':
         return { text: hasAccounts ? `${accounts.length} account${accounts.length !== 1 ? 's' : ''}` : 'No accounts yet', warn: false };
-      case 'import':
+      case 'positions':
         return { text: hasPositions ? `${positions.length} position${positions.length !== 1 ? 's' : ''}` : 'No positions yet', warn: false };
       case 'classify':
         return unmappedCount > 0
@@ -600,8 +600,8 @@ export default function App() {
               onLoadSample={handleLoadSample}
             />
           )}
-          {activeTab === 'import' && (
-            <ImportPanel
+          {activeTab === 'positions' && (
+            <PositionsPanel
               accounts={accounts}
               positions={positions}
               setPositions={setPositions}

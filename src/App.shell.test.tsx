@@ -67,7 +67,7 @@ describe('#194 stage 2 — workflow rail', () => {
     await renderApp();
     const tabs = railTabs();
     expect(tabs.map(t => t.id)).toEqual([
-      'tab-overview', 'tab-accounts', 'tab-import', 'tab-classify', 'tab-strategy', 'tab-results',
+      'tab-overview', 'tab-accounts', 'tab-positions', 'tab-classify', 'tab-strategy', 'tab-results',
     ]);
     expect(tabs.map(t => (t.textContent ?? '').replace(/\d/g, '').trim()))
       .toContain('Overview');

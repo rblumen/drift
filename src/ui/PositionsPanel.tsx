@@ -163,7 +163,7 @@ function EditableCell({
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function ImportPanel({ accounts, positions, setPositions }: Props) {
+export function PositionsPanel({ accounts, positions, setPositions }: Props) {
   const firstAccountId = accounts[0]?.id ?? '';
   const [accountId,     setAccountId]     = useState(firstAccountId);
   const [method,        setMethod]        = useState<InputMethod>('file');

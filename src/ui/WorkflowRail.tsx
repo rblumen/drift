@@ -14,7 +14,7 @@
 import { DriftWordmark } from './Logo';
 import { IconDownload, IconUpload, IconX, IconCheck, IconInfo } from './icons';
 
-export type RailTab = 'overview' | 'accounts' | 'import' | 'classify' | 'strategy' | 'results';
+export type RailTab = 'overview' | 'accounts' | 'positions' | 'classify' | 'strategy' | 'results';
 
 /** Per-tab derived status the rail renders in the right slot. */
 export interface RailStep {
