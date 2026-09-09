@@ -2,7 +2,7 @@
 //
 // `Position.lastUpdatedAt` (engine/types.ts) is the single stored fact — a
 // display-only stamp set when a position is created/confirmed by an import or
-// hand-edited (see ImportPanel.tsx's confirm/add/edit paths). Everything else
+// hand-edited (see PositionsPanel.tsx's confirm/add/edit paths). Everything else
 // here is a *pure derivation* from that field: account-level freshness is the
 // max over the account's positions, never a separately-stored value, so it can
 // never drift out of sync with the positions themselves.
