@@ -345,21 +345,77 @@ export function PositionsPanel({ accounts, positions, setPositions }: Props) {
     setParseErrors([]);
   }
 
-  function addManualRow() {
-    const mv = parseFloat(manualRow.marketValue);
-    if (!manualRow.ticker.trim() || isNaN(mv) || mv < 0 || !accountId) return;
+  // Shared add-a-position path (issue #222): both the top-of-page manual-add
+  // control and the per-account inline "+ Add position" affordance funnel
+  // through here, so a position added either way gets the same validation and
+  // the same fresh lastUpdatedAt stamp (issue #212) — a newly added position
+  // must never read as stale. Returns whether a position was actually added,
+  // so callers can decide whether to clear their draft.
+  function addPositionTo(targetAccountId: string, row: { ticker: string; marketValue: string; price: string }): boolean {
+    const mv = parseFloat(row.marketValue);
+    if (!row.ticker.trim() || !targetAccountId || isNaN(mv) || mv <= 0) return false;
     const pos: Position = {
-      accountId,
-      ticker:      manualRow.ticker.trim().toUpperCase(),
+      accountId:   targetAccountId,
+      ticker:      row.ticker.trim().toUpperCase(),
       marketValue: mv,
-      price:       manualRow.price ? parseFloat(manualRow.price) || undefined : undefined,
+      price:       row.price ? parseFloat(row.price) || undefined : undefined,
       lastUpdatedAt: Date.now(),
     };
     setPositions(mergePositions(positions, [
-      ...positions.filter(p => p.accountId === accountId && p.ticker !== pos.ticker),
+      ...positions.filter(p => p.accountId === targetAccountId && p.ticker !== pos.ticker),
       pos,
-    ], accountId));
-    setManualRow({ ticker: '', marketValue: '', price: '' });
+    ], targetAccountId));
+    return true;
+  }
+
+  function addManualRow() {
+    if (addPositionTo(accountId, manualRow)) {
+      setManualRow({ ticker: '', marketValue: '', price: '' });
+    }
+  }
+
+  // ── Per-account inline "+ Add position" affordance (issue #222) ────────────
+  // Which account groups currently have their inline add-row expanded, and
+  // each one's in-progress draft (ticker / market value / price), keyed by
+  // account id so several groups can be open independently.
+  const [inlineAddOpen,   setInlineAddOpen]   = useState<Set<string>>(new Set());
+  const [inlineAddDrafts, setInlineAddDrafts] = useState<Record<string, { ticker: string; marketValue: string; price: string }>>({});
+
+  const blankInlineDraft = { ticker: '', marketValue: '', price: '' };
+
+  function openInlineAdd(id: string) {
+    setInlineAddOpen(prev => new Set(prev).add(id));
+    setInlineAddDrafts(prev => (prev[id] ? prev : { ...prev, [id]: blankInlineDraft }));
+  }
+  function closeInlineAdd(id: string) {
+    setInlineAddOpen(prev => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  }
+  function updateInlineAddDraft(id: string, patch: Partial<{ ticker: string; marketValue: string; price: string }>) {
+    setInlineAddDrafts(prev => ({ ...prev, [id]: { ...(prev[id] ?? blankInlineDraft), ...patch } }));
+  }
+  // Enter commits and clears the draft but leaves the row open, for rapid
+  // entry of several positions in a row.
+  function commitInlineAdd(id: string) {
+    const draft = inlineAddDrafts[id] ?? blankInlineDraft;
+    if (addPositionTo(id, draft)) {
+      setInlineAddDrafts(prev => ({ ...prev, [id]: blankInlineDraft }));
+    }
+  }
+  // Header "+ Add position" trigger: the entry row lives inside the account's
+  // (collapsible) table, so make sure the group is expanded before opening it.
+  function beginInlineAdd(id: string) {
+    setCollapsed(prev => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+    openInlineAdd(id);
   }
 
   function loadEmpowerTotals() {
@@ -760,22 +816,38 @@ export function PositionsPanel({ accounts, positions, setPositions }: Props) {
                     </span>
                   )}
 
-                  {/* Count + totals */}
-                  <span className="ml-auto font-mono text-[11px] text-muted-2">{rows.length} position{rows.length !== 1 ? 's' : ''}</span>
-                  <span className="font-mono text-[12px] font-medium text-brand-ink tabular-nums">{fmtUsd(total)}</span>
-                  <span className="font-mono text-[10.5px] text-faint tabular-nums w-11 text-right">
-                    {pct.toFixed(1)}%
-                  </span>
-
-                  {/* Clear button — stop propagation so it doesn't toggle collapse */}
-                  <span
-                    role="button"
-                    tabIndex={0}
-                    onClick={e => { e.stopPropagation(); setPositions(positions.filter(p => p.accountId !== account.id)); }}
-                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); setPositions(positions.filter(p => p.accountId !== account.id)); } }}
-                    className="text-xs text-muted-2 hover:text-danger hover:underline ml-2 cursor-pointer"
-                  >
-                    Clear
+                  {/* Right cluster (issue #222). The redundant "N positions" count is
+                      dropped; the total and % of household right-align toward the
+                      market-value and price columns, and "+ Position" / "Clear" get
+                      their own room on the right. Wrapped in one flex span (no gap) so
+                      the slot widths — sized to the price / cost-basis / control columns
+                      — line the header up with the table columns below, independent of
+                      the header's own gap. stopPropagation on the actions so a click
+                      doesn't toggle the group's collapse. */}
+                  <span className="ml-auto flex items-center">
+                    <span className="font-mono text-[12px] font-medium text-brand-ink tabular-nums pr-2">{fmtUsd(total)}</span>
+                    <span className="font-mono text-[10.5px] text-faint tabular-nums w-24 pr-2 text-right">
+                      {pct.toFixed(1)}%
+                    </span>
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`Add position to ${account.name}`}
+                      onClick={e => { e.stopPropagation(); beginInlineAdd(account.id); }}
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); beginInlineAdd(account.id); } }}
+                      className="text-xs text-muted-2 hover:text-brand-600 hover:underline w-28 text-right cursor-pointer whitespace-nowrap"
+                    >
+                      + Position
+                    </span>
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      onClick={e => { e.stopPropagation(); setPositions(positions.filter(p => p.accountId !== account.id)); }}
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); setPositions(positions.filter(p => p.accountId !== account.id)); } }}
+                      className="text-xs text-muted-2 hover:text-danger hover:underline w-[69px] text-right cursor-pointer"
+                    >
+                      Clear
+                    </span>
                   </span>
                 </button>
 
@@ -910,6 +982,79 @@ export function PositionsPanel({ accounts, positions, setPositions }: Props) {
                           </td>
                         </tr>
                       ))}
+                      {/* Inline add-position entry row (issue #222). The trigger now
+                          lives in the account header ("+ Add position"), so this row
+                          renders ONLY while adding — a collapsed account costs no extra
+                          vertical space. Indented to line up with the ticker column of
+                          the position rows above (indicator w-6 + ticker px-2 ≈ pl-8). */}
+                      {inlineAddOpen.has(account.id) && (
+                        <tr>
+                          <td colSpan={8} className="pl-8 pr-2 py-1">
+                            <div
+                              className="flex gap-2 items-end flex-wrap py-0.5"
+                              onBlur={e => {
+                                const next = e.relatedTarget as Node | null;
+                                if (next && e.currentTarget.contains(next)) return;
+                                const draft = inlineAddDrafts[account.id] ?? blankInlineDraft;
+                                if (!draft.ticker.trim()) closeInlineAdd(account.id);
+                              }}
+                            >
+                              <input
+                                autoFocus
+                                value={inlineAddDrafts[account.id]?.ticker ?? ''}
+                                onChange={e => updateInlineAddDraft(account.id, { ticker: e.target.value })}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') { e.preventDefault(); commitInlineAdd(account.id); }
+                                  else if (e.key === 'Escape') { e.preventDefault(); closeInlineAdd(account.id); }
+                                }}
+                                placeholder="Ticker"
+                                aria-label={`Ticker for new position in ${account.name}`}
+                                className="w-20 border border-line rounded px-2 py-1 text-[12px] font-mono uppercase"
+                              />
+                              <input
+                                type="number"
+                                value={inlineAddDrafts[account.id]?.marketValue ?? ''}
+                                onChange={e => updateInlineAddDraft(account.id, { marketValue: e.target.value })}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') { e.preventDefault(); commitInlineAdd(account.id); }
+                                  else if (e.key === 'Escape') { e.preventDefault(); closeInlineAdd(account.id); }
+                                }}
+                                placeholder="Market value ($)"
+                                aria-label={`Market value for new position in ${account.name}`}
+                                className="w-28 border border-line rounded px-2 py-1 text-[12px] text-right"
+                              />
+                              <input
+                                type="number"
+                                value={inlineAddDrafts[account.id]?.price ?? ''}
+                                onChange={e => updateInlineAddDraft(account.id, { price: e.target.value })}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') { e.preventDefault(); commitInlineAdd(account.id); }
+                                  else if (e.key === 'Escape') { e.preventDefault(); closeInlineAdd(account.id); }
+                                }}
+                                placeholder="Price (optional)"
+                                aria-label={`Price for new position in ${account.name} (optional)`}
+                                className="w-24 border border-line rounded px-2 py-1 text-[12px] text-right"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => commitInlineAdd(account.id)}
+                                disabled={!(inlineAddDrafts[account.id]?.ticker ?? '').trim() || !(inlineAddDrafts[account.id]?.marketValue ?? '')}
+                                className={btnGhostCompact}
+                              >
+                                Add
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => closeInlineAdd(account.id)}
+                                aria-label="Cancel add position"
+                                className="text-[11px] font-medium text-muted-2 hover:text-danger transition-colors"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                   </table></div>
                 )}
