@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-13
+
 ### Added
 
 - **Add a position directly within an account, in the Positions tab** ([#222](https://github.com/rblumen/drift/issues/222)) — each account header now carries a quiet "+ Position" control. Clicking it reveals an inline ticker / market value / price entry prefilled to that account, so hand-updating an account with a few positions no longer requires scrolling back to the top-of-page manual-add control. Press Enter to add and keep entering more; Esc or clicking away with an empty ticker collapses it. A position added this way is stamped with the same "just updated" freshness as any other edit ([#212](https://github.com/rblumen/drift/issues/212)). The account header also drops its redundant "N positions" count so the total, % of household, and this control line up with the columns below.
@@ -211,7 +213,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - All computation is client-side — no backend, no network calls, no telemetry.
 - Synthetic fixtures only; real financial data is git-ignored.
 
-[Unreleased]: https://github.com/rblumen/drift/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/rblumen/drift/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/rblumen/drift/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/rblumen/drift/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/rblumen/drift/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/rblumen/drift/releases/tag/v0.2.0
