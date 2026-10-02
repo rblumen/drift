@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Results: accounts with no trades start collapsed** ([#230](https://github.com/rblumen/drift/issues/230)) — on the Results tab, account cards with no trades or transfers now default to the collapsed state so the accounts that need action stay in focus. Click the header to expand; accounts with trades still start open.
+
 ## [0.5.0] - 2026-09-13
 
 ### Added
