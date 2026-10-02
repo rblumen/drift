@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Trades now name the fund to trade when an account also holds a broad fund** ([#228](https://github.com/rblumen/drift/issues/228)) — an account holding a total-market fund (e.g. SCHB) alongside specific cap funds (e.g. VOO, VO) used to get bare rows like "US Mid Cap · SELL" or "US Large Cap · BUY" with no ticker, which read as selling something you don't hold. The trade list now names the specific fund ("VO · SELL"), and buys of the same fund are combined into one row instead of being split between a named and an unnamed line. Rows still go unnamed when no held fund fits (pick one yourself) or when two equally specific funds could fill the trade.
+
 ## [0.5.0] - 2026-09-13
 
 ### Added

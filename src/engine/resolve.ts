@@ -51,6 +51,8 @@ function coveredClasses(
 // A trade is left without a ticker when:
 //   - No position in the account covers the class (greenfield buy — user picks fund).
 //   - Multiple positions in the account cover the class (ambiguous — user decides).
+//     Exception (#228): if exactly one of them is classified as the trade's exact
+//     class, it wins over funds that only cover the class via the hierarchy.
 //
 // strategyTargets — when provided, gates greenfield-buy promotion: child-class
 // buys are only collapsed to the parent when the strategy targets the parent
@@ -120,6 +122,15 @@ export function resolveTradeVehicles(
       if (trade.excludeTickers && trade.excludeTickers.length > 0) {
         const ex = new Set(trade.excludeTickers);
         tickers = tickers.filter(t => !ex.has(t));
+      }
+      // Issue #228 — a parent-class fund (SCHB → US_TOTAL_MARKET) covers its cap
+      // children only via the hierarchy, and buying/selling it moves every sleeve
+      // at once (#215). When a direct holding of the trade's exact class is also
+      // present (VO for a US_MID_CAP sell), that holding is the only executable
+      // vehicle — prefer it rather than dropping the ticker as ambiguous.
+      if (tickers.length > 1) {
+        const exact = tickers.filter(t => classify(t) === trade.assetClass);
+        if (exact.length === 1) tickers = exact;
       }
       if (tickers.length === 1) {
         if (!tickerTrades.has(tickers[0])) tickerTrades.set(tickers[0], []);

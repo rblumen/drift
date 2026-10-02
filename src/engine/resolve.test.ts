@@ -136,7 +136,41 @@ describe('Resolution (supports Goal 4): greenfield with no current positions', (
 // ─── ambiguous resolution (multiple tickers cover the same class) ─────────────
 
 describe('Resolution (supports Goal 4): ambiguous — multiple tickers cover the same class', () => {
-  it('emits trade without ticker when FXAIX and FSKAX both cover LC', () => {
+  it('emits trade without ticker when two exact-class funds (FXAIX, VOO) both cover LC', () => {
+    const trades: Trade[] = [
+      { accountId: 'ira', assetClass: 'US_LARGE_CAP', deltaUsd: -20_000, inTaxableAccount: false },
+    ];
+    const positions: Position[] = [
+      { accountId: 'ira', ticker: 'FXAIX', marketValue: 50_000 },  // US_LARGE_CAP
+      { accountId: 'ira', ticker: 'VOO',   marketValue: 50_000 },  // US_LARGE_CAP
+    ];
+    const [r] = resolveTradeVehicles(trades, positions, {}, classify);
+    expect(r.ticker).toBeUndefined();
+  });
+
+  it('still resolves unambiguous classes in the same account', () => {
+    // MUNY covers only FIXED_INCOME → unambiguous; FXAIX+VOO both exactly LC → ambiguous.
+    const trades: Trade[] = [
+      { accountId: 'ira', assetClass: 'FIXED_INCOME', deltaUsd:  10_000, inTaxableAccount: false },
+      { accountId: 'ira', assetClass: 'US_LARGE_CAP', deltaUsd: -20_000, inTaxableAccount: false },
+    ];
+    const positions: Position[] = [
+      { accountId: 'ira', ticker: 'MUNY',  marketValue: 50_000 },
+      { accountId: 'ira', ticker: 'FXAIX', marketValue: 30_000 },
+      { accountId: 'ira', ticker: 'VOO',   marketValue: 30_000 },
+    ];
+    const result = resolveTradeVehicles(trades, positions, {}, classify);
+    const fi = result.find(r => r.assetClass === 'FIXED_INCOME');
+    const lc = result.find(r => r.assetClass === 'US_LARGE_CAP');
+    expect(fi?.ticker).toBe('MUNY');
+    expect(lc?.ticker).toBeUndefined();
+  });
+});
+
+// ─── exact-class holding beats a parent fund (issue #228) ────────────────────
+
+describe('Resolution (supports Goal 4): exact-class holding preferred over a parent fund (#228)', () => {
+  it('routes a LC sell to FXAIX, not the total-market fund that only covers LC via the hierarchy', () => {
     const trades: Trade[] = [
       { accountId: 'ira', assetClass: 'US_LARGE_CAP', deltaUsd: -20_000, inTaxableAccount: false },
     ];
@@ -145,25 +179,32 @@ describe('Resolution (supports Goal 4): ambiguous — multiple tickers cover the
       { accountId: 'ira', ticker: 'FSKAX', marketValue: 50_000 },  // US_TOTAL_MARKET → LC/MC/SC
     ];
     const [r] = resolveTradeVehicles(trades, positions, {}, classify);
-    expect(r.ticker).toBeUndefined();
+    expect(r.ticker).toBe('FXAIX');
   });
 
-  it('still resolves unambiguous classes in the same account', () => {
-    // MUNY covers only FIXED_INCOME → unambiguous; FXAIX+FSKAX both cover LC → ambiguous.
+  it('labels the sub-class sell and merges the buy-back with the plain LC buy into one VOO trade', () => {
+    // Mirrors the #228 report: SCHB liquidated as a unit (forceTicker), its LC
+    // sleeve bought back via VOO (excludeTickers), plus an ordinary LC buy and a
+    // MC sell that previously came out ticker-less.
     const trades: Trade[] = [
-      { accountId: 'ira', assetClass: 'FIXED_INCOME', deltaUsd:  10_000, inTaxableAccount: false },
-      { accountId: 'ira', assetClass: 'US_LARGE_CAP', deltaUsd: -20_000, inTaxableAccount: false },
+      { accountId: 'k401', assetClass: 'US_MID_CAP',   deltaUsd:  -6_000, inTaxableAccount: false },
+      { accountId: 'k401', assetClass: 'US_LARGE_CAP', deltaUsd:  12_500, inTaxableAccount: false },
+      { accountId: 'k401', assetClass: 'US_LARGE_CAP', deltaUsd: -17_420, inTaxableAccount: false, forceTicker: 'SCHB' },
+      { accountId: 'k401', assetClass: 'US_LARGE_CAP', deltaUsd:  17_420, inTaxableAccount: false, excludeTickers: ['SCHB'] },
+      { accountId: 'k401', assetClass: 'US_MID_CAP',   deltaUsd:  -6_500, inTaxableAccount: false, forceTicker: 'SCHB' },
+      { accountId: 'k401', assetClass: 'US_SMALL_CAP', deltaUsd:  -2_080, inTaxableAccount: false, forceTicker: 'SCHB' },
     ];
     const positions: Position[] = [
-      { accountId: 'ira', ticker: 'MUNY',  marketValue: 50_000 },
-      { accountId: 'ira', ticker: 'FXAIX', marketValue: 30_000 },
-      { accountId: 'ira', ticker: 'FSKAX', marketValue: 30_000 },
+      { accountId: 'k401', ticker: 'SCHB', marketValue: 26_000 },
+      { accountId: 'k401', ticker: 'VOO',  marketValue: 25_000 },
+      { accountId: 'k401', ticker: 'VO',   marketValue:  6_000 },
     ];
     const result = resolveTradeVehicles(trades, positions, {}, classify);
-    const fi = result.find(r => r.assetClass === 'FIXED_INCOME');
-    const lc = result.find(r => r.assetClass === 'US_LARGE_CAP');
-    expect(fi?.ticker).toBe('MUNY');
-    expect(lc?.ticker).toBeUndefined();
+    expect(result.every(r => r.ticker !== undefined)).toBe(true);
+    expect(result.find(r => r.ticker === 'VO')?.deltaUsd).toBeCloseTo(-6_000, 0);
+    expect(result.find(r => r.ticker === 'VOO')?.deltaUsd).toBeCloseTo(29_920, 0);
+    expect(result.find(r => r.ticker === 'SCHB')?.deltaUsd).toBeCloseTo(-26_000, 0);
+    expect(result).toHaveLength(3);
   });
 });
 
