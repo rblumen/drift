@@ -1,5 +1,10 @@
 # Roadmap: Account Linking & the Server-Backed Stage of Drift
 
+> **Status:** Exploration complete. The chosen direction is Appendix A (closed
+> beta), started with you as the only user on the same multi-user stack. The
+> buildable spec and milestones are in
+> [`spec-account-linking.md`](spec-account-linking.md).
+
 ## Context
 
 Drift today is a **fully static, browser-only** React/Vite SPA on Vercel. Its
