@@ -12,7 +12,6 @@
     "  fidelity-hsa    Fidelity HSA                 HSA               $1.5k",
     "",
     "Expected flags from the engine",
-    "  REVISIT_PLACEMENT   — taxable $25k / $100k = 25% > Fixed Income target 20%",
     "  WITHIN_TOLERANCE    — Mid Cap, Small Cap, Developed Intl, Emerging Intl, Alternatives, Cash",
     "  OOT / trades        — Large Cap over target (equity rally); Fixed Income under target",
     "",

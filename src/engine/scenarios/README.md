@@ -75,7 +75,7 @@ No TypeScript changes are ever required to add a fixture.
 |---|---|
 | `trades` | **Exhaustive.** The engine must emit exactly these trades (order-independent). Match on `accountId` + `assetClass` + `deltaUsd` (within rounding). Zero-dollar placeholder trades are ignored, so `"trades": []` means "no actionable trades". `inTaxableAccount` is optional and asserted when present. |
 | `requiredTrades` | **Presence (subset).** Each listed trade must appear (`deltaUsd` within tolerance) — pin a specific trade in a large set without enumerating all of them. The complement of `forbiddenTrades`. |
-| `flags` | **Presence (subset).** Each listed flag must appear in the result. Specify `kind` plus any flag-specific fields you want matched (e.g. `{ "kind": "REVISIT_PLACEMENT", "taxableShare": 0.3 }`); unlisted fields and other emitted flags are ignored. |
+| `flags` | **Presence (subset).** Each listed flag must appear in the result. Specify `kind` plus any flag-specific fields you want matched (e.g. `{ "kind": "PLACEMENT_SPILLOVER", "bucket": "TAXABLE" }`); unlisted fields and other emitted flags are ignored. |
 | `absentFlags` | **Absence.** None of these flags may appear — e.g. asserting a class is *not* `WITHIN_TOLERANCE` (the relative band fired) or that no `PLACEMENT_SPILLOVER` was raised. Same matcher shape as `flags`. |
 | `projectedWeights` | **Partial.** Only the listed asset classes are checked against `result.projectedWeights` (post-trade household weights, as fractions of 1). |
 | `currentWeights` | **Partial.** Only the listed asset classes are checked against `result.currentWeights` (pre-trade household weights). Idle/free cash surfaces under `CASH` here, so the weights sum to ~1.0 ([#83](https://github.com/rblumen/drift/issues/83)). |
@@ -113,7 +113,7 @@ as fixtures land.
 | 3. Balance-preserving per account | ✅ | ✅ | `03-balance-preserving/pure-rebalance-nets-to-zero`, `…/contribution-nets-to-newcash` |
 | 4. Household target allocation | ✅ | ✅ | `04-household-target/multi-account-hits-target`, `…/locked-account-drags-others-compensate` |
 | 5. Tolerance bands (5/25) | ✅ | ✅ | `05-tolerance-bands/on-target-portfolio-no-op`, `…/relative-band-fires-on-small-sleeve` |
-| 6. Tax-preferred placement | ✅ | ✅ | `06-tax-placement/bonds-taxable-equities-tax-advantaged`, `…/taxable-exceeds-fi-revisit-placement`, `…/no-preference-class-placed-by-capacity` |
+| 6. Tax-preferred placement | ✅ | ✅ | `06-tax-placement/bonds-taxable-equities-tax-advantaged`, `…/taxable-exceeds-fi-equities-spill`, `…/no-preference-class-placed-by-capacity` |
 | 7. Minimize taxable sells | ✅ | ✅ | `07-minimize-taxable-sells/equity-sell-redirected-to-tax-advantaged`, `…/forced-taxable-sell-when-no-alternative` |
 | 8. Distribute by remaining capacity | ✅ | ✅ | `08-capacity-distribution/sleeve-splits-largest-account-first`, `…/capacity-tie-resolved-deterministically` |
 | 9. `concentrateClasses` first | ✅ | ✅ | `09-concentrate-classes/concentrate-account-filled-first`, `…/concentrate-account-too-small-spills` |

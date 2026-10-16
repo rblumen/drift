@@ -14,14 +14,9 @@ import { isTaxableSale } from './taxableSale';
  * real trades, and the early returns pass an empty trade list (which correctly
  * yields no trade-derived advisories). This is the structural point of the seam —
  * a future trade-independent advisory can be added here in one place and cannot be
- * accidentally skipped by an early return, which is exactly how bug #114 (a dropped
- * REVISIT_PLACEMENT on balanced portfolios) happened.
- *
- * NOTE: REVISIT_PLACEMENT itself is NOT derived here. It is deliberately hoisted
- * above the early returns (Step 0.9 in rebalance.ts, #114) because it depends on
- * account values, not trades — a perfectly balanced portfolio must still surface
- * it. The flags below genuinely require the trade list, so they belong on every
- * path that produces trades and are no-ops on the empty-trade early returns.
+ * accidentally skipped by an early return, which is exactly how bug #114 (a flag
+ * dropped on balanced portfolios) happened. The flags below genuinely require the
+ * trade list, so they are no-ops on the empty-trade early returns.
  *
  * Pure: reads its inputs, returns a fresh Flag[]. Does not mutate.
  */

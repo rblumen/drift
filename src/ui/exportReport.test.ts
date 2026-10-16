@@ -289,28 +289,6 @@ describe('exportReport buildHtml — locked account', () => {
   });
 });
 
-// ─── Scenario F: REVISIT_PLACEMENT flag rendering ────────────────────────────
-
-describe('exportReport buildHtml — REVISIT_PLACEMENT flag', () => {
-  const ACCOUNTS_300K_TAXABLE: Account[] = [
-    { id: 'schwab', name: 'Schwab Brokerage', institution: 'Schwab', type: 'TAXABLE', newCash: 300_000 },
-    { id: 'ira', name: 'Fidelity Trad IRA', institution: 'Fidelity', type: 'TRADITIONAL_IRA', newCash: 300_000 },
-    { id: 'k401', name: 'Empower 401k', institution: 'Empower', type: 'FOUR_OH_ONE_K', newCash: 400_000 },
-  ];
-  const { result, resolvedTrades } = runScenario(ACCOUNTS_300K_TAXABLE, [], ZERO_TOL_STRATEGY);
-
-  it('the engine emits REVISIT_PLACEMENT for this household shape', () => {
-    expect(result.flags.some(f => f.kind === 'REVISIT_PLACEMENT')).toBe(true);
-  });
-
-  it('renders the "Revisit placement strategy" flag text with formatted percentages', () => {
-    const html = buildHtml(result, ACCOUNTS_300K_TAXABLE, resolvedTrades, 0, 0, FIXED_NOW);
-    expect(html).toContain('Revisit placement strategy.');
-    expect(html).toContain('30.0%');
-    expect(html).toContain('20.0%');
-  });
-});
-
 // ─── Scenario G: HTML escaping of untrusted-ish strings ─────────────────────
 
 describe('exportReport buildHtml — HTML escaping', () => {

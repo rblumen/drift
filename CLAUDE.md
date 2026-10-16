@@ -17,7 +17,6 @@ A local, browser-only tool that rebalances investment holdings across multiple a
 ## Domain invariants
 - Target weights must sum to ~1.0; reject configs that don't.
 - Fixed income → taxable (munis); equities + alternatives → tax-advantaged.
-- Emit `REVISIT_PLACEMENT` when taxable share of total > the fixed-income target weight.
 - v1 has no cost-basis tracking — only flag that a sale lands in a taxable account.
 - Round only at display time.
 

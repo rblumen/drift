@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Results: accounts with no trades start collapsed** ([#230](https://github.com/rblumen/drift/issues/230)) — on the Results tab, account cards with no trades or transfers now default to the collapsed state so the accounts that need action stay in focus. Click the header to expand; accounts with trades still start open.
 
+### Removed
+
+- **"Revisit placement strategy" warning** ([#232](https://github.com/rblumen/drift/issues/232)) — the Results tab and HTML report no longer warn when taxable accounts hold more of the household than the Fixed Income target. The check ignored your placement rules, so it kept firing after you'd adapted them, and it showed up even on fully balanced portfolios where there was nothing to do. When equities overflow into taxable, the existing placement-spillover note still reports it. Trade recommendations are unchanged.
+
 ## [0.5.0] - 2026-09-13
 
 ### Added

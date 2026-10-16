@@ -269,7 +269,6 @@ export function buildHtml(result: RebalanceResult, accounts: Account[], resolved
   const orderedFlags = [
     ...flags.filter(f => f.kind === 'EXCESS_CASH'),
     ...flags.filter(f => f.kind === 'WITHDRAWAL_SHORTFALL'),
-    ...flags.filter(f => f.kind === 'REVISIT_PLACEMENT'),
     ...flags.filter(f => f.kind === 'UNMAPPED_HOLDING'),
     ...flags.filter(f => f.kind === 'FIVE_TWENTY_NINE_REBALANCE_LIMIT'),
     ...flags.filter(f => f.kind === 'TAXABLE_SALE'),
@@ -285,8 +284,6 @@ export function buildHtml(result: RebalanceResult, accounts: Account[], resolved
       return `<div class="flag flag-warn"><strong>Free cash undeployed:</strong> ${fmtUsd(f.amountUsd)} of household free cash could not be distributed — every eligible account is closed, locked, or has hit its deposit limit.</div>`;
     if (f.kind === 'WITHDRAWAL_SHORTFALL')
       return `<div class="flag flag-warn"><strong>Withdrawal not fully funded:</strong> ${fmtUsd(f.amountUsd)} of the additional withdrawal could not be raised — every withdrawal-eligible account is restricted, locked, or has sold all it can.</div>`;
-    if (f.kind === 'REVISIT_PLACEMENT')
-      return `<div class="flag flag-orange"><strong>Revisit placement strategy.</strong> Taxable accounts hold ${fmtPct(f.taxableShare)} of household value, exceeding the ${fmtPct(f.fixedIncomeTarget)} fixed-income target. Equities must land in taxable accounts.</div>`;
     if (f.kind === 'UNMAPPED_HOLDING')
       return `<div class="flag flag-warn"><strong>Unmapped holding:</strong> Ticker <code>${esc(f.ticker)}</code> has no asset class — excluded from rebalance. Assign it in the Classify tab.</div>`;
     if (f.kind === 'FIVE_TWENTY_NINE_REBALANCE_LIMIT') {

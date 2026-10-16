@@ -151,11 +151,9 @@ _Derived from `DEFAULT_PLACEMENT` in `src/engine/strategy.ts` (post-#89: equitie
 
 "Tax-Free" = Roth IRA / HSA. "Tax-Deferred" = Traditional IRA / 401(k). Each class's full placement order (including further fallbacks) is user-editable in the Strategy tab.
 
-### The REVISIT_PLACEMENT heads-up
+### When taxable outgrows the bond sleeve
 
-Placement preferences are fully configurable — per asset class, and per account. The table above is just the default. The `REVISIT_PLACEMENT` flag is a standing heads-up tied to your Fixed Income target, independent of how you configure placement.
-
-The default keeps bonds in taxable and equities in tax-advantaged, which assumes the taxable balance is small enough to be absorbed by the fixed-income sleeve (20% of household by default). Once **taxable assets > Fixed Income target**, taxable can no longer be bonds-only and equities must begin landing there. The engine detects this and emits `REVISIT_PLACEMENT`. When you see it, adjust the placement rules — e.g. allow equities as a 2nd-choice for the taxable bucket.
+The default keeps bonds in taxable and equities in tax-advantaged accounts. Once **taxable assets > Fixed Income target**, taxable can no longer be bonds-only, so the overflow follows each class's placement order — the default lists Taxable as a fallback for equities. That overflow is reported as `PLACEMENT_SPILLOVER` when it happens; it is an expected consequence of account sizes, not an error.
 
 ---
 
@@ -165,7 +163,6 @@ _Derived from the `Flag` union in `src/engine/types.ts`._
 
 | Flag | What it means | Suggested action |
 |---|---|---|
-| `REVISIT_PLACEMENT` | Taxable share of household > Fixed Income target weight | Update placement rules in Strategy tab |
 | `TAXABLE_SALE` | A recommended sell lands in a taxable account | Review for capital gain impact before executing |
 | `PLACEMENT_SPILLOVER` | An asset class didn't fully fit its preferred bucket | Informational; the engine filled the next-best bucket |
 | `NO_ELIGIBLE_ACCOUNT` | No account can hold a given asset class | Check account restrictions in Accounts tab |
