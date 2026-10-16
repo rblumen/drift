@@ -828,7 +828,9 @@ export function ResultsPanel({
     withdrawalByAccount, depositByAccount, trades, flags, contributionSummary,
   } = result;
 
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  // Accounts whose open/closed state the user flipped from its default. Accounts
+  // with no trades or transfers default collapsed (#230); the rest default open.
+  const [toggled, setToggled] = useState<Set<string>>(new Set());
   const [chartView, setChartView] = useState<ChartView>(loadChartView);
   // Household-allocation card collapse (#194 stage 4 revision). In-memory only,
   // default open — same semantics as the per-account trade cards above.
@@ -840,7 +842,7 @@ export function ResultsPanel({
   }
 
   function toggleCollapsed(id: string) {
-    setCollapsed(prev => {
+    setToggled(prev => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
       return next;
@@ -1338,7 +1340,8 @@ export function ResultsPanel({
             const withdrawal = withdrawalByAccount[account.id] ?? 0;
             const netUsd     = deposit - withdrawal;
             const hasTransfer = deposit > 0.5 || withdrawal > 0.5;
-            const isOpen  = !collapsed.has(account.id);
+            const defaultOpen = acctTrades.length > 0 || hasTransfer;
+            const isOpen  = defaultOpen !== toggled.has(account.id);
             const hasBothPies = before.length > 0 && after.length > 0;
             const locked  = account.locked;
 
