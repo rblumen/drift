@@ -121,11 +121,18 @@ function assertScenario(s: Scenario, result: RebalanceResult): void {
     const want = expected.resolvedTrades.map(norm);
     const fmt = (ts: ReturnType<typeof norm>[]) =>
       ts.map(t => `${key(t)} ${t.deltaUsd}`).sort().join('\n    ');
+    // One-to-one: each actual row can satisfy only one expected row, so two
+    // ticker-less rows of the same class can't both match the same actual row.
+    const unmatched = [...actual];
     const ok =
       actual.length === want.length &&
       want.every(w => {
-        const hit = actual.find(a => key(a) === key(w));
-        return hit !== undefined && Math.abs(hit.deltaUsd - w.deltaUsd) <= Math.max(1, Math.abs(w.deltaUsd) * 0.005);
+        const i = unmatched.findIndex(a =>
+          key(a) === key(w) &&
+          Math.abs(a.deltaUsd - w.deltaUsd) <= Math.max(1, Math.abs(w.deltaUsd) * 0.005));
+        if (i < 0) return false;
+        unmatched.splice(i, 1);
+        return true;
       });
     if (!ok) {
       throw new Error(

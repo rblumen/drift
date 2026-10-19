@@ -208,6 +208,58 @@ describe('Resolution (supports Goal 4): exact-class holding preferred over a par
   });
 });
 
+describe('Resolution (supports Goal 4): exact-class preference guards (#228 review)', () => {
+  it('does not prefer an exact-class ticker held only as locked positions (Goal 1)', () => {
+    const trades: Trade[] = [
+      { accountId: 'k401', assetClass: 'US_MID_CAP', deltaUsd: 10_000, inTaxableAccount: false },
+    ];
+    const positions: Position[] = [
+      { accountId: 'k401', ticker: 'SCHB', marketValue: 20_000 },
+      { accountId: 'k401', ticker: 'VO',   marketValue:  2_000, locked: true },
+    ];
+    const [r] = resolveTradeVehicles(trades, positions, {}, classify);
+    expect(r.ticker).toBeUndefined();
+  });
+
+  it('still prefers the exact-class ticker when one of its lots is unlocked', () => {
+    const trades: Trade[] = [
+      { accountId: 'k401', assetClass: 'US_MID_CAP', deltaUsd: 10_000, inTaxableAccount: false },
+    ];
+    const positions: Position[] = [
+      { accountId: 'k401', ticker: 'SCHB', marketValue: 20_000 },
+      { accountId: 'k401', ticker: 'VO',   marketValue:  2_000, locked: true },
+      { accountId: 'k401', ticker: 'VO',   marketValue:  3_000 },
+    ];
+    const [r] = resolveTradeVehicles(trades, positions, {}, classify);
+    expect(r.ticker).toBe('VO');
+  });
+
+  it('does not prefer a ticker with an explicit decomposition even if its built-in class matches', () => {
+    const trades: Trade[] = [
+      { accountId: 'k401', assetClass: 'US_LARGE_CAP', deltaUsd: 10_000, inTaxableAccount: false },
+    ];
+    const positions: Position[] = [
+      { accountId: 'k401', ticker: 'SCHB', marketValue: 40_000 },
+      { accountId: 'k401', ticker: 'VOO',  marketValue: 30_000 },
+    ];
+    const decomps = { VOO: { US_LARGE_CAP: 0.6, FIXED_INCOME: 0.4 } };
+    const [r] = resolveTradeVehicles(trades, positions, decomps, classify);
+    expect(r.ticker).toBeUndefined();
+  });
+
+  it('leaves a parent-level trade ambiguous across a parent fund and a sub-class fund (BND vs MUNY)', () => {
+    const trades: Trade[] = [
+      { accountId: 'tax', assetClass: 'FIXED_INCOME', deltaUsd: 30_000, inTaxableAccount: true },
+    ];
+    const positions: Position[] = [
+      { accountId: 'tax', ticker: 'BND',  marketValue: 10_000 },
+      { accountId: 'tax', ticker: 'MUNY', marketValue: 10_000 },
+    ];
+    const [r] = resolveTradeVehicles(trades, positions, {}, classify);
+    expect(r.ticker).toBeUndefined();
+  });
+});
+
 // ─── blended fund — explicit decomposition (issue #40) ──────────────────────
 
 describe('Resolution (supports Goal 4): blended fund decomposed by ticker (#40)', () => {
