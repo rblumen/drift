@@ -30,30 +30,30 @@ consistently in the UI, the docs, and the schema.
 
 | Term | What it is | Belongs to | Schema |
 |---|---|---|---|
-| **Drift account** | A person's login to Drift: email, password, sessions | One person. Never shared | `auth.users` |
-| **Household** | A group of Drift accounts that manage money together. Holds members, roles, and the list of people | Its members | `households`, `household_members` |
+| **Drift user** | A person's login to Drift: email, password, sessions | One person. Never shared | `auth.users` |
+| **Household** | A group of Drift users that manage money together. Holds members, roles, and the list of people | Its members | `households`, `household_members` |
 | **Portfolio** | What Drift rebalances: a set of accounts plus one strategy (targets, placement, overrides). "Mine" and "Ours" are two portfolios | One household | `portfolios` (`state` = today's `AppState`) |
-| **Brokerage login** | One linking session with an institution: a SnapTrade connection. Can contain several brokerage accounts | The Drift account that linked it. Only they can reconnect or remove it | `brokerage_logins` |
-| **Brokerage account** | One real account at an institution (e.g. Schwab joint taxable ••1234, Schwab Roth IRA ••5678). Has its own owner(s) | Comes from one brokerage login. Assigned to **at most one portfolio** | `brokerage_accounts` |
+| **Brokerage login** | One linking session with an institution: a SnapTrade connection. Can contain several brokerage accounts | The Drift user that linked it. Only they can reconnect or remove it | `brokerage_logins` |
+| **Brokerage account** | One real account at an institution (e.g. Schwab joint taxable ••1234, Schwab Roth IRA ••5678). Has its own owner(s) | Comes from one brokerage login. Assigned to **at most one portfolio per household** | `brokerage_accounts` |
 
 Two more terms are needed to keep these straight:
 - **Person**: an owner label ("Ryan", "Partner", "Kid"), kept per household.
-  It can be tied to a member's Drift account, or not (e.g. a child's 529).
+  It can be tied to a member's Drift user, or not (e.g. a child's 529).
   Ownership is a label. It never controls access.
 - **Portfolio account**: the account entry inside a portfolio that the engine
   rebalances (today's `Account` in `AppState`). A linked brokerage account maps
   to one. CSV/manual portfolio accounts have no brokerage account behind them.
-  - **Naming collision:** `spec-account-linking.md` calls this a "Drift
-    account" (`drift_account_id`). That name now means the login, so the
-    linking spec must rename it to *portfolio account* (`portfolio_account_id`).
+  - Earlier drafts called this a "Drift account" (`drift_account_id`). It is
+    now `portfolio_account_id`, and the login is a *Drift user*, which frees
+    the word "account" for the UI.
 
 ```
-Drift account (login) ──member of──▶ Household ──contains──▶ Portfolio ("Ours")
+Drift user (login) ──member of──▶ Household ──contains──▶ Portfolio ("Ours")
         │                              │                         │ strategy, targets
         │ linked                       │ people: Ryan,           │
         ▼                              │ Partner, Kid            ▼
 Brokerage login (Schwab) ──contains──▶ Brokerage account ──assigned to──▶ Portfolio account
-                                         owners: [Ryan, Partner]        (at most one portfolio)
+                                         owners: [Ryan, Partner]   (≤ 1 portfolio per household)
 ```
 
 ---
@@ -61,7 +61,7 @@ Brokerage login (Schwab) ──contains──▶ Brokerage account ──assigne
 ## 3. Requirements
 
 ### R1 — Households and membership
-1. A Drift account can belong to several households. Creating a Drift account
+1. A Drift user can belong to several households. Creating a Drift user
    creates a personal household with one portfolio.
 2. Each member has a role in the household:
 
@@ -90,7 +90,7 @@ Brokerage login (Schwab) ──contains──▶ Brokerage account ──assigne
    when R7 ships.
 2. The invite email contains no portfolio data (linking spec §7). It has the
    inviter's name, the household name, and a link.
-3. An invite works whether or not the invitee already has a Drift account.
+3. An invite works whether or not the invitee already has a Drift user.
    **A household invite also admits the invitee to the closed beta,** skipping
    the waitlist.
 4. Invites expire (default 7 days), are single-use, and can be revoked. Tokens
@@ -99,7 +99,7 @@ Brokerage login (Schwab) ──contains──▶ Brokerage account ──assigne
 
 ### R3 — Brokerage logins, brokerage accounts, and ownership
 1. Each person links their own brokerage logins. The login belongs to its
-   Drift account, and other members never see its credentials or controls.
+   Drift user, and other members never see its credentials or controls.
 2. **Ownership is set per brokerage account, not per login.** One Schwab login
    might contain your joint taxable account (owners: you and your spouse) and
    your Roth IRA (owner: you). After linking, each account defaults to "owned
@@ -112,15 +112,24 @@ Brokerage login (Schwab) ──contains──▶ Brokerage account ──assigne
    phase. Engine uses come later (§6).
 
 ### R4 — Assigning brokerage accounts to portfolios
-1. **A brokerage account belongs to at most one portfolio at a time.** The
-   database enforces this. Portfolios never overlap.
+1. **Within a household, a brokerage account belongs to at most one
+   portfolio.** The database enforces this, so a household's portfolios never
+   overlap.
+   - **Across privacy boundaries there is no restriction.** The linker may add
+     the same account to a portfolio in each household they edit, e.g. the
+     Roth IRA in both "Mine" (private household) and "Ours" (shared
+     household).
+   - Each household sees only its own assignment. Members of one household
+     can't tell whether the account also appears elsewhere.
+   - The linker, who can see both, gets an "also in <portfolio>" note, since
+     the two portfolios may suggest different trades for it.
 2. After linking, the linker chooses a portfolio for each brokerage account,
    or leaves it unassigned. Nothing is assigned by default. Unassigned
    accounts are visible only to the linker, so a spouse can link an account
    and keep it private.
 3. **Moving an account:**
    - Any editor can move an account between portfolios in the same household.
-   - Only the linker can move it to a different household, or unassign it.
+   - Only the linker can add it to or remove it from a household.
    - A move clears its portfolio-account mapping, so the user maps it again in
      the new portfolio.
 4. Any editor of the portfolio can map an assigned brokerage account to a
@@ -137,18 +146,23 @@ brokerage-account records for one real account.
    one login are distinct by definition, even when they share an institution
    or owner. This avoids false positives such as a joint taxable account and
    a Roth IRA from the same Schwab login.
-2. A candidate pair has the same institution and the same mask (last 4),
-   across all brokerage accounts in the household. Account type and name
+2. **Detection never crosses a privacy boundary.** It compares only accounts
+   assigned within the same household. Unassigned accounts and other
+   households' assignments are never compared, and a suggestion never
+   reveals that an account exists outside the household.
+3. A candidate pair has the same institution and the same mask (last 4),
+   among the accounts assigned in that household. Account type and name
    strengthen the match when available. If either mask is missing, Drift
    makes no automatic suggestion.
-3. **Drift asks, never merges on its own:** "Schwab ••1234 linked by Partner
+4. **Drift asks, never merges on its own:** "Schwab ••1234 linked by Partner
    looks like Schwab ••1234 linked by you. Same account?"
-   - **Yes:** one record becomes primary and feeds holdings. The other is
-     marked a duplicate and can't be assigned to a portfolio. If the primary's
-     login breaks, Drift offers to switch to the duplicate.
+   - **Yes:** within this household, one record becomes primary and feeds
+     holdings. The other is excluded from this household's portfolios. Its
+     use in any other household is unaffected. If the primary's login breaks,
+     Drift offers to switch to the duplicate.
    - **No:** Drift remembers the answer and doesn't ask about that pair again.
-4. Users can also mark or unmark a duplicate by hand.
-5. The decision covers duplicate *brokerage accounts* only. Whether several
+5. Users can also mark or unmark a duplicate by hand.
+6. The decision covers duplicate *brokerage accounts* only. Whether several
    brokerage accounts may map to one portfolio account is still
    [#234](https://github.com/rblumen/drift/issues/234).
 
@@ -177,7 +191,7 @@ brokerage-account records for one real account.
 2. Portfolios (strategy and `AppState`) stay with the household. Before
    leaving, a member may **copy** a portfolio into one of their own
    households. This covers separation without anyone losing their own data.
-3. Deleting a Drift account (linking spec §5.7) removes its memberships and
+3. Deleting a Drift user (linking spec §5.7) removes its memberships and
    its brokerage logins. It also deletes households where it was the sole
    member, and notifies the remaining members of shared households.
 
@@ -211,16 +225,18 @@ source of truth. In summary:
 - **Portfolios** belong to a household (`portfolios.household_id`).
 - **Brokerage data:** `brokerage_logins` and `brokerage_accounts` are
   server-written and owned by the linker.
-- **Assignments:** `account_assignments` has its primary key on the brokerage
-  account (at most one portfolio). It holds the portfolio-account mapping and
+- **Assignments:** `account_assignments` has its primary key on (brokerage
+  account, household): at most one portfolio per household, any number of
+  households. It holds the portfolio-account mapping and
   the owner labels (`owner_person_ids`). Labels live on the assignment because
   `household_people` are scoped to a household.
-- **Duplicates:** `account_duplicates`, with a trigger that requires the two
-  accounts to come from different brokerage logins.
+- **Duplicates:** `account_duplicates`, scoped per household, with a trigger
+  that requires both accounts to be assigned in that household and to come
+  from different brokerage logins.
 - **User-side writes** go through role-checking RPCs (`save_portfolio`,
   `assign_account`, `move_account`, …).
 
-**Cost note:** SnapTrade bills per connected *Drift account*. A couple where
+**Cost note:** SnapTrade bills per connected *Drift user*. A couple where
 both link accounts counts as two, so budget about $4/household/month on
 pay-as-you-go.
 
@@ -231,7 +247,7 @@ pay-as-you-go.
 See [`spec-account-linking.md`](spec-account-linking.md) §11. In short:
 
 - **M2:** owner labels for CSV/manual accounts, including local-only mode.
-- **M3:** the full household schema and role-matrix CI. Each Drift account
+- **M3:** the full household schema and role-matrix CI. Each Drift user
   gets one personal household; only the owner role is used yet.
 - **M5:** linking with per-account assignment.
 - **M5b (after Gate 1, before M7):** everything else in R1–R8 except the
@@ -258,10 +274,11 @@ path is tested first, by the people it's for.
 
 1. ~~Is the household the right access boundary?~~ **Resolved:** yes.
    Ownership is a label. A hard privacy boundary is a separate household under
-   the same Drift account (R1.5).
-2. **Name for the account inside a portfolio.** This draft uses *portfolio
-   account*. The current UI just says "account". Keep "account" in the UI and
-   use *portfolio account* only in docs and schema?
+   the same Drift user (R1.5).
+2. **Naming.** A login is now a *Drift user*, which keeps "account" free.
+   Proposal: the UI keeps plain "account" for portfolio accounts and says
+   "brokerage account" or "linked account" where the distinction matters.
+   Docs and schema use *portfolio account*.
 3. **Duplicate fallback.** When a confirmed duplicate's primary login breaks,
    should Drift switch to the other copy automatically, or ask (current
    draft)?

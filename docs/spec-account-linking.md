@@ -14,8 +14,8 @@ with exit criteria. `<domain>` stands for the custom domain, not yet chosen.
 
 | Term | Meaning |
 |---|---|
-| Drift account | A person's login |
-| Household | A group of Drift accounts that share access to portfolios |
+| Drift user | A person's login |
+| Household | A group of Drift users that share access to portfolios |
 | Portfolio | Accounts plus one strategy (today's `AppState`) |
 | Portfolio account | An `Account` inside a portfolio, which the engine rebalances |
 | Brokerage login | One SnapTrade connection |
@@ -30,7 +30,7 @@ with exit criteria. `<domain>` stands for the custom domain, not yet chosen.
    holdings sync into Drift **without CSV export/import**.
 2. A portfolio syncs across devices, including phones.
 3. Multi-user from day one: real auth, invite-only access, and **household**
-   isolation enforced in the database. Several Drift accounts can jointly
+   isolation enforced in the database. Several Drift users can jointly
    manage one household's portfolios.
 4. The server owns synced brokerage data, so later features (scheduled syncs,
    drift alerts, LLM access) can work without a browser open.
@@ -58,7 +58,7 @@ with exit criteria. `<domain>` stands for the custom domain, not yet chosen.
 |---|---|---|
 | D1 | Data + auth | **Supabase**: Postgres, Supabase Auth, Row-Level Security (RLS). Auth and the database are one system, so RLS enforces household isolation in the database itself. Standard Postgres keeps data portable. Open source and self-hostable |
 | D2 | Server code | **Vercel Functions** in `api/`: same project, repo, CI, and preview deploys as today. Vercel Cron available for later scheduled jobs. Function region co-located with the Supabase region |
-| D3 | Aggregator | **SnapTrade**, Commercial key. Free tier (5 connected users) during the personal phase, pay-as-you-go (~$2 per connected Drift account/month) after. The Personal key is used only for the throwaway spike. **Conditional on M0 showing workplace 401(k) coverage**; see D20 |
+| D3 | Aggregator | **SnapTrade**, Commercial key. Free tier (5 connected users) during the personal phase, pay-as-you-go (~$2 per connected Drift user/month) after. The Personal key is used only for the throwaway spike. **Conditional on M0 showing workplace 401(k) coverage**; see D20 |
 | D4 | Brokerage access | Read-only holdings, balances, and positions. No trading endpoints are called, and the code must not include them |
 | D5 | Login | **Email + password, plus magic link** (Supabase Auth). Password reset by email. **TOTP MFA available as an opt-in during the beta** (free in Supabase, and expected by the FTC Safeguards Rule; exploration §8). Required MFA is a public-launch decision |
 | D6 | Invite gating | Public signups disabled in Supabase. Users are invited by email, either by you from the waitlist or by a household owner into their household (`spec-households.md` R2). The invite link lets them set a password. Non-invited visitors can join a **waitlist** |
@@ -71,7 +71,7 @@ with exit criteria. `<domain>` stands for the custom domain, not yet chosen.
 | D13 | Domain & DNS | Custom `<domain>` with DNS on Cloudflare; app served by Vercel. Records pointing at Vercel are **DNS-only** (Cloudflare proxy off). Auth emails link to `<domain>`, not `supabase.co` |
 | D14 | LLM readiness | No MCP in the beta. Versioned server API (`/api/v1/…`), server-owned holdings, and server-importable compose/engine make a read-only MCP server a thin layer later. A client-side "Copy summary for AI" ships in the beta |
 | D15 | Budget ceiling | $0/mo during the personal phase (plus domain ~$1/mo); up to ~$100/mo during the beta |
-| D16 | Households | Access is granted per **household** (owner / editor / viewer). A Drift account can belong to several households. A hard privacy boundary means a separate household under the same Drift account. Mine/hers/joint is a label, never an access boundary. Requirements: `spec-households.md` |
+| D16 | Households | Access is granted per **household** (owner / editor / viewer). A Drift user can belong to several households. A hard privacy boundary means a separate household under the same Drift user. Mine/hers/joint is a label, never an access boundary. Requirements: `spec-households.md` |
 | D17 | Supabase keys & tokens | Use the **new API keys** (`sb_publishable_…` in the browser, `sb_secret_…` on the server) and **asymmetric JWT signing keys** from day one. The legacy `anon`/`service_role` keys are being retired and can't be rotated. Functions verify access tokens locally against the project's JWKS (`jose`) |
 | D18 | Least privilege on the server | Functions act **as the user** (a Supabase client carrying the caller's token, so RLS applies). The secret key is used only for `snaptrade_users`, `waitlist`, rate limits, and account deletion |
 | D19 | Environments | Two Supabase projects: **staging** (local dev and Vercel preview deploys) and **production** (production deploys only). Preview URLs are allowed as auth redirects in staging only. Real brokerage data only in production |
@@ -184,7 +184,7 @@ inserts only from RPCs and `api/v1/`.
 | Column | Type | Notes |
 |---|---|---|
 | `id` | `uuid` PK | |
-| `household_id` | `uuid` not null → `households(id)` on delete cascade | Indexed |
+| `household_id` | `uuid` not null → `households(id)` on delete cascade | Indexed. `unique (id, household_id)` backs the composite FK from `account_assignments` |
 | `name` | `text` not null | "Ours", "Mine" |
 | `state` | `jsonb` not null | The `AppState` that `appStateSchema` validates today |
 | `schema_version` | `int` not null | Mirrors `AppState.version` (currently `1`) |
@@ -225,8 +225,9 @@ RLS: same visibility as `brokerage_logins`. Writes server-only.
 #### `account_assignments` — which portfolio a brokerage account feeds (user-written)
 | Column | Type | Notes |
 |---|---|---|
-| `brokerage_account_id` | `text` **PK** → `brokerage_accounts(id)` on delete cascade | PK enforces **at most one portfolio** |
-| `portfolio_id` | `uuid` not null → `portfolios(id)` on delete cascade | |
+| `brokerage_account_id` | `text` → `brokerage_accounts(id)` on delete cascade | PK part |
+| `household_id` | `uuid` → `households(id)` on delete cascade | PK part. PK `(brokerage_account_id, household_id)` enforces **at most one portfolio per household**; the same account may be in several households |
+| `portfolio_id` | `uuid` not null | Composite FK `(portfolio_id, household_id)` → `portfolios(id, household_id)`, so the portfolio must belong to that household |
 | `portfolio_account_id` | `text` null | The `Account.id` inside that portfolio's `AppState` that this feeds; null until mapped |
 | `owner_person_ids` | `uuid[]` not null default `{}` | Owner labels (`household_people`); several ids means joint |
 | `assigned_by` / `assigned_at` | | |
@@ -234,11 +235,13 @@ RLS: same visibility as `brokerage_logins`. Writes server-only.
 RLS: select if any role in the portfolio's household. Writes only through
 `assign_account`, `move_account`, `unassign_account`, `map_account`, and
 `save_portfolio`.
-- Only the linker can assign an account into a household or unassign it.
+- Only the linker can add an account to a household or remove it from one.
+  The linker can add it to every household they edit, one portfolio in each.
 - Any editor can move an account between portfolios of the same household,
   map it, or change its owner labels.
-- A move clears `portfolio_account_id`. A move across households also clears
-  `owner_person_ids`.
+- A move clears `portfolio_account_id`.
+- Assignments in different households are independent rows. Nothing in one
+  household's rows reveals the account's other households to its members.
 
 Whether several brokerage accounts may map to one portfolio account is an open
 general import question, tracked in
@@ -248,19 +251,22 @@ that issue decides for CSV import.
 #### `account_duplicates`
 | Column | Type | Notes |
 |---|---|---|
+| `household_id` | `uuid` → `households(id)` on delete cascade | PK part. Detection and decisions are per household |
 | `brokerage_account_id` | `text` → `brokerage_accounts(id)` on delete cascade | PK part; the duplicate |
 | `duplicate_of` | `text` → `brokerage_accounts(id)` on delete cascade | PK part; the primary |
 | `status` | `text` not null | `suggested`, `confirmed`, `rejected` |
 | `decided_by` / `decided_at` | | |
 
 Detection rules are in `spec-households.md` R5:
-- Candidates must come from **different brokerage logins** (enforced by a
-  trigger).
+- **Scoped to one household.** Both accounts must be assigned in that
+  household, and they must come from **different brokerage logins**. A
+  trigger enforces both. Unassigned accounts, and accounts in other
+  households, are never compared.
 - A match needs the same institution and the same mask.
-- `confirmed` duplicates can't be assigned and are excluded from composition.
+- A `confirmed` duplicate's assignment in that household is excluded from
+  composition. Its assignments in other households are unaffected.
 
-RLS: select by any household member who can see both accounts. Decisions go
-through `api/v1/`.
+RLS: select by members of that household. Decisions go through `api/v1/`.
 
 #### `holdings` — current positions per brokerage account (server-written)
 | Column | Type | Notes |
@@ -419,7 +425,7 @@ export function composePositions(
   codes) so it never reaches analytics.
 
 ### 5.3 First sign-in: migrating local data
-- A new Drift account gets a personal household with one empty portfolio.
+- A new Drift user gets a personal household with one empty portfolio.
 - If this browser has a local portfolio, offer "Upload this browser's
   portfolio," validated with `appStateSchema`. Local `people` become
   `household_people`.
@@ -455,8 +461,10 @@ A new "Linked accounts" source in `src/ui/PositionsPanel.tsx`:
 1. **Connect a brokerage:** call `POST /api/v1/snaptrade/connect`, open the
    returned SnapTrade portal URL. On return, call sync.
 2. **Assign:** each new brokerage account starts unassigned and is visible only
-   to the linker. For each one, the user picks a portfolio (any household they
-   edit), sets owner labels (default: themselves), or leaves it unassigned.
+   to the linker. For each one, the user picks at most one portfolio in each
+   household they edit, sets owner labels (default: themselves), or leaves it
+   unassigned. The linker sees everywhere an account is assigned; other
+   members see only their own household.
 3. **Sync now:** call `POST /api/v1/snaptrade/sync`. The server stores holdings
    and returns the updated accounts and holdings, so the panel updates without
    a second request.
@@ -489,7 +497,7 @@ drift, suggested trades) to the clipboard. Built next to
 sent anywhere by Drift.
 
 ### 5.8 Account deletion
-Settings gets "Delete my Drift account." `DELETE /api/v1/account`:
+Settings gets "Delete my Drift user account." `DELETE /api/v1/account`:
 1. deletes the SnapTrade user, which removes all brokerage connections and
    stops billing;
 2. removes the user's memberships, so their brokerage accounts leave every
@@ -640,8 +648,11 @@ raise it if needed.
     `spec-households.md` R1.
   - Nobody reads `snaptrade_users`, `waitlist`, `household_invites`, or
     `rate_limits`.
-  - A brokerage account can't be assigned to two portfolios.
-  - Duplicates from the same login are rejected.
+  - A brokerage account can't be assigned to two portfolios in one household,
+    but can be assigned in two households.
+  - Duplicates from the same login, or spanning households, are rejected.
+  - A member of one household can't detect another household's assignment of
+    the same account (no rows, counts, or duplicate suggestions).
   - Concurrent `save_portfolio` with the same revision: one wins, one gets a
     conflict.
   - `replace_holdings` is atomic, and only the linker may call it.
@@ -748,7 +759,7 @@ Each milestone is one PR to `main` on a `feat/<issue>-…` branch, per
   - Public signups disabled.
   - Preview-URL redirects allowed in staging only.
 - `supabase/migrations/`: every §4 table, `private.household_role`, all §4.3
-  RPCs, RLS. Each Drift account gets a personal household; only the owner role
+  RPCs, RLS. Each Drift user gets a personal household; only the owner role
   is used yet.
 - `api/v1/` scaffolding:
   - `_lib/` helpers (JWKS auth, user-scoped client, admin client, crypto
@@ -820,7 +831,8 @@ volume.
 - Household settings: member list, invites with a role dropdown (owner
   default, editor), revoke, leave/remove, last-owner guard, copy portfolio.
 - Invite endpoints and emails; beta admission via household invite.
-- Moving accounts between portfolios and households.
+- Moving accounts between portfolios of a household; adding an account to
+  several households.
 - Owner labels on linked accounts (`household_people`, `owner_person_ids`).
 - Duplicate detection and the confirm/reject prompt.
 - "Last edited by"; `household_events` view.
@@ -837,7 +849,7 @@ volume.
   `/join?ref=` handling, referred-first ordering in the admin view.
 - Confirm a database backup restores.
 - **Exit:** invited users can sign up, link, and sync; costs track the
-  ~$45–95/mo estimate (about $2 per Drift account that links, so about $4 per
+  ~$45–95/mo estimate (about $2 per Drift user that links, so about $4 per
   two-linker household).
 
 ### Gate 2 — Beta review
