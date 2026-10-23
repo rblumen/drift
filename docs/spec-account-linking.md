@@ -128,16 +128,10 @@ means another device saved first (§5.4).
 RLS: own rows for select. Owners may **update only `drift_account_id`**
 (column-level grant). All other writes are server-only.
 
-**One brokerage account ↔ one Drift account.** A partial unique index on
-`(user_id, drift_account_id) where drift_account_id is not null` stops two
-brokerage accounts from feeding the same Drift account. The engine treats each
-Drift account as one pool of cash whose trades must net to zero
-(`PRINCIPLES.md`, hard constraint #3). Two brokerage accounts don't share cash,
-so merging them would produce trades that can't be executed (a sell at one
-brokerage funding a buy at another) and a trade list that doesn't say where to
-act. Overlapping tickers across brokerage accounts are fine; each brokerage
-account simply maps to its own Drift account. Grouping accounts for display is
-a possible later feature that doesn't merge them for the engine.
+Whether several broker accounts may map to one Drift account is an open
+general import question, tracked in
+[#234](https://github.com/rblumen/drift/issues/234). Linking follows whatever
+that issue decides for CSV import.
 
 ### `holdings` — current positions per linked account
 | Column | Type | Notes |
@@ -223,10 +217,10 @@ export function composePositions(
   linked: LinkedHolding[],   // holdings joined with drift_account_id
 ): Position[]
 ```
-- A Drift account with a linked broker account takes its positions **only**
-  from that account's `holdings`. `AppState.positions` rows for that account
-  are ignored. (At most one broker account per Drift account; see
-  `broker_accounts`.)
+- A Drift account with linked broker accounts takes its positions **only**
+  from their `holdings`. `AppState.positions` rows for that account are
+  ignored. Behavior when several broker accounts map to one Drift account
+  follows #234.
 - Other accounts use `AppState.positions` (CSV/manual), as today.
 - `lastUpdatedAt` = the holding's `as_of`, so the existing freshness indicator
   (`src/ingest/freshness.ts`) shows real sync times.
@@ -297,8 +291,7 @@ A new "Linked accounts" source in `src/ui/PositionsPanel.tsx`:
 3. **Mapping:** any broker account with no `drift_account_id` goes through the
    existing "Map accounts" UI; the choice is saved to
    `broker_accounts.drift_account_id`. Later syncs need no mapping. Options per
-   broker account: an existing Drift account that isn't already linked, or
-   "Create a new Drift account" (pre-filled with institution and name; the user
+   broker account: an existing Drift account, or "Create a new Drift account" (pre-filled with institution and name; the user
    confirms the account type).
 4. **Auto-sync on open:** if signed in and the oldest linked `last_synced_at`
    is over 12 hours old, sync once in the background.
@@ -405,8 +398,6 @@ reports, MX for Cloudflare Email Routing. Sending from a subdomain
     missing cost basis, bad rows). Fixtures are synthetic only.
   - `composePositions`: linked vs CSV accounts, overrides, freshness
     timestamps.
-  - Mapping UI refuses a Drift account that already has a linked broker
-    account.
   - `remoteStore` save/conflict/retry with a mocked Supabase client.
   - URL scrubbing and the analytics `beforeSend` filter.
   - `api/_lib/crypto.ts` round-trip and tamper detection.
