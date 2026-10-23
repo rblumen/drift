@@ -1,6 +1,6 @@
 # Requirements: Households and Shared Portfolios
 
-**Status:** Draft for review · **Builds on:**
+**Status:** Draft for review (revision 2) · **Builds on:**
 [`spec-account-linking.md`](spec-account-linking.md) (closed-beta stack:
 Supabase, Vercel Functions, SnapTrade).
 
@@ -13,192 +13,244 @@ data-model changes they force on the account-linking spec, and a phased plan.
 ## 1. User story
 
 > I sign up and start importing and linking accounts. I invite my spouse; she
-> creates her own login and can view and manage the portfolio with me. She
+> creates her own login and can view and manage our finances with me. She
 > links her 401(k). We mark each account as mine, hers, or joint. I might keep
-> two portfolios ("mine" and "ours"). Our financial planner gets a read-only
-> login to see the full picture.
+> two portfolios, "mine" and "ours". Later, our financial planner gets a
+> read-only login to see the full picture.
 
 Market reference: Origin supports a partner sharing one financial picture,
 each with their own login. Empower has no such feature.
 
 ---
 
-## 2. Concepts
+## 2. Concepts and vocabulary
 
-| Concept | What it is | Key point |
-|---|---|---|
-| **User** | A login (Supabase `auth.users`). One per person | Never shared. Each spouse has their own |
-| **Portfolio** | What Drift rebalances: accounts, strategy, targets, overrides (today's `AppState`) | **The unit of sharing.** A user can belong to several |
-| **Member** | A user's role in one portfolio: `owner`, `editor`, or `viewer` | Permissions live here, not on the user |
-| **Brokerage connection** | A SnapTrade link to one institution login | **Belongs to the user who linked it**, and stays theirs. Only they can reconnect or remove it |
-| **Account share** | One linked brokerage account added to one portfolio | An explicit, per-account opt-in by the account's owner. The same brokerage account can be in several portfolios |
-| **Person** | A label naming who owns an account ("Ryan", "Partner", "Kid") | A per-portfolio list in `AppState`. Optionally tied to a member's login. Works without logins, including local-only mode |
+Five concepts that today's docs blur together. Each gets one name, used
+consistently in the UI, the docs, and the schema.
 
-The distinctions that matter:
-- **Credentials vs. data.** Your spouse can *see* your 401(k) in a shared
-  portfolio. She can never act on, reconnect, or unlink your brokerage
-  connection.
-- **Ownership vs. access.** "This account is hers" is a label (a *person*).
-  "She can edit this portfolio" is a role (a *member*). The two are
-  independent. You can label an account as belonging to someone with no login
-  (a child's 529), and an adviser can view without owning anything.
+| Term | What it is | Belongs to | Schema |
+|---|---|---|---|
+| **Drift account** | A person's login to Drift: email, password, sessions | One person. Never shared | `auth.users` |
+| **Household** | A group of Drift accounts that manage money together. Holds members, roles, and the list of people | Its members | `households`, `household_members` |
+| **Portfolio** | What Drift rebalances: a set of accounts plus one strategy (targets, placement, overrides). "Mine" and "Ours" are two portfolios | One household | `portfolios` (`state` = today's `AppState`) |
+| **Brokerage login** | One linking session with an institution: a SnapTrade connection. Can contain several brokerage accounts | The Drift account that linked it. Only they can reconnect or remove it | `brokerage_logins` |
+| **Brokerage account** | One real account at an institution (e.g. Schwab joint taxable ••1234, Schwab Roth IRA ••5678). Has its own owner(s) | Comes from one brokerage login. Assigned to **at most one portfolio** | `brokerage_accounts` |
+
+Two more terms are needed to keep these straight:
+- **Person**: an owner label ("Ryan", "Partner", "Kid"), kept per household.
+  It can be tied to a member's Drift account, or not (e.g. a child's 529).
+  Ownership is a label. It never controls access.
+- **Portfolio account**: the account entry inside a portfolio that the engine
+  rebalances (today's `Account` in `AppState`). A linked brokerage account maps
+  to one. CSV/manual portfolio accounts have no brokerage account behind them.
+  - **Naming collision:** `spec-account-linking.md` calls this a "Drift
+    account" (`drift_account_id`). That name now means the login, so the
+    linking spec must rename it to *portfolio account* (`portfolio_account_id`).
+
+```
+Drift account (login) ──member of──▶ Household ──contains──▶ Portfolio ("Ours")
+        │                              │                         │ strategy, targets
+        │ linked                       │ people: Ryan,           │
+        ▼                              │ Partner, Kid            ▼
+Brokerage login (Schwab) ──contains──▶ Brokerage account ──assigned to──▶ Portfolio account
+                                         owners: [Ryan, Partner]        (at most one portfolio)
+```
 
 ---
 
 ## 3. Requirements
 
-### R1 — Portfolios and membership
-1. A user can create several portfolios, name them, and switch between them.
-2. Every portfolio has at least one `owner`. The last owner can't leave without
-   deleting the portfolio or transferring ownership.
-3. Each role can do the following:
+### R1 — Households and membership
+1. A Drift account can belong to several households. Creating a Drift account
+   creates a personal household with one portfolio.
+2. Each member has a role in the household:
 
-   | Action | owner | editor | viewer |
+   | Action | owner | editor | viewer *(deferred, R7)* |
    |---|---|---|---|
-   | View accounts, holdings, results, history | ✓ | ✓ | ✓ |
-   | Edit strategy, targets, accounts, manual/CSV positions, mappings, overrides | ✓ | ✓ | — |
-   | Share own linked accounts into the portfolio | ✓ | ✓ | — |
-   | Trigger a sync of the portfolio's linked accounts | ✓ | ✓ | — |
-   | Invite or remove members, change roles | ✓ | — | — |
-   | Rename or delete the portfolio | ✓ | — | — |
+   | View the household's portfolios, accounts, holdings, results | ✓ | ✓ | ✓ |
+   | Create, rename, delete portfolios. Edit strategy, portfolio accounts, CSV/manual positions, mappings, overrides | ✓ | ✓ | — |
+   | Assign own brokerage accounts to the household's portfolios. Move accounts between its portfolios | ✓ | ✓ | — |
+   | Trigger a sync | ✓ | ✓ | — |
+   | Invite or remove members, change roles, rename or delete the household | ✓ | — | — |
 
-4. Every member can see the member list (names and emails, with roles), so
-   access is never invisible to the people whose data is shown.
+3. Every household has at least one owner. The last owner can't leave without
+   deleting the household or transferring ownership.
+4. Every member can see the member list (names, emails, roles).
+5. Access is household-wide: a member sees every portfolio in the household.
+   - A portfolio you want private ("mine") goes in a household where you are
+     the only member.
+   - Per-portfolio permissions are out of scope (§6).
 
 ### R2 — Invitations
-1. An owner invites by email and picks a role. The invite email has no
-   portfolio data (spec §7), only the inviter's name and a link.
-2. An invite works whether or not the invitee already has a Drift login. **A
-   portfolio invite also admits the invitee to the closed beta**, skipping the
-   waitlist. This partly answers spec §12 Q2: household invites are always
-   allowed, and general invite quotas stay a separate decision.
-3. Invites expire (default 7 days), are single-use, and can be revoked. The
-   token is stored hashed.
-4. Existing owners get an email when a member joins, leaves, or changes role.
+1. An owner invites someone by email. The invite form has a **role dropdown
+   that defaults to owner**. Editor is the other option; viewer joins the list
+   when R7 ships.
+2. The invite email contains no portfolio data (linking spec §7). It has the
+   inviter's name, the household name, and a link.
+3. An invite works whether or not the invitee already has a Drift account.
+   **A household invite also admits the invitee to the closed beta,** skipping
+   the waitlist.
+4. Invites expire (default 7 days), are single-use, and can be revoked. Tokens
+   are stored hashed.
+5. Owners get an email when a member joins, leaves, or changes role.
 
-### R3 — Account ownership labels
-1. Each portfolio has a `people` list. Each account has `ownerIds`: one person,
-   or two or more for joint. Accounts can also be unassigned.
-2. A person can be linked to a member's login. When that member shares a linked
-   account, it defaults to them as owner.
-3. The UI can filter or group by owner: "Ryan's accounts", "Joint", and so on.
-4. **The engine is unchanged.** It already treats each account as its own unit
-   and preserves its balance (`PRINCIPLES.md` constraint #3), so money never
-   moves between spouses' accounts. Ownership is for display and filtering in
-   this phase. §6 lists engine uses that may come later.
+### R3 — Brokerage logins, brokerage accounts, and ownership
+1. Each person links their own brokerage logins. The login belongs to its
+   Drift account, and other members never see its credentials or controls.
+2. **Ownership is set per brokerage account, not per login.** One Schwab login
+   might contain your joint taxable account (owners: you and your spouse) and
+   your Roth IRA (owner: you). After linking, each account defaults to "owned
+   by the person who linked it" and can be changed.
+3. CSV/manual portfolio accounts carry owner labels the same way.
+4. The UI can filter and group by owner ("Ryan", "Partner", "Joint").
+5. **The engine is unchanged.** It already keeps each account
+   balance-preserving (`PRINCIPLES.md` constraint #3), so money never moves
+   between spouses' accounts. Ownership is display and filtering in this
+   phase. Engine uses come later (§6).
 
-### R4 — Shared linked accounts
-1. Linking stays per user. Each spouse connects their own brokerages through
-   their own SnapTrade user.
-2. After linking, the user chooses which portfolios each account goes into,
-   **per account**. Nothing is shared by default, so a spouse can link an
-   account and keep it private.
-3. Any editor of the portfolio can map a shared account to a Drift account
-   (the mapping is per portfolio).
-4. The account's owner can withdraw it from a portfolio at any time. Its
-   holdings disappear from that portfolio immediately. Removing a member
-   withdraws all of that member's accounts from the portfolio.
-5. If a shared account's connection breaks, other members see "needs
-   reconnection by <name>". Only the connection owner sees the reconnect
-   button.
+### R4 — Assigning brokerage accounts to portfolios
+1. **A brokerage account belongs to at most one portfolio at a time.** The
+   database enforces this. Portfolios never overlap.
+2. After linking, the linker chooses a portfolio for each brokerage account,
+   or leaves it unassigned. Nothing is assigned by default. Unassigned
+   accounts are visible only to the linker, so a spouse can link an account
+   and keep it private.
+3. **Moving an account:**
+   - Any editor can move an account between portfolios in the same household.
+   - Only the linker can move it to a different household, or unassign it.
+   - A move clears its portfolio-account mapping, so the user maps it again in
+     the new portfolio.
+4. Any editor of the portfolio can map an assigned brokerage account to a
+   portfolio account.
+5. If a brokerage login needs reconnecting, other members see "needs
+   reconnection by <name>". Only the linker sees the reconnect button.
 
-### R5 — Overlapping portfolios ("mine" and "ours")
-1. The same linked account may belong to several portfolios.
-2. **The UI must warn** when an account is in more than one portfolio: "Also in
-   'Ours'. Trades suggested here may conflict with trades suggested there."
-   Each portfolio has its own strategy, so two portfolios containing one
-   account can recommend opposite trades for it.
-3. Manual and CSV accounts are per portfolio. Putting one in two portfolios
-   means keeping two copies. Known limitation; see open question Q1.
+### R5 — Duplicate detection
+Two spouses can each link the same real account (a joint account at the same
+institution) through their own brokerage logins. Drift then holds two
+brokerage-account records for one real account.
+
+1. **Candidates come only from different brokerage logins.** Accounts inside
+   one login are distinct by definition, even when they share an institution
+   or owner. This avoids false positives such as a joint taxable account and
+   a Roth IRA from the same Schwab login.
+2. A candidate pair has the same institution and the same mask (last 4),
+   across all brokerage accounts in the household. Account type and name
+   strengthen the match when available. If either mask is missing, Drift
+   makes no automatic suggestion.
+3. **Drift asks, never merges on its own:** "Schwab ••1234 linked by Partner
+   looks like Schwab ••1234 linked by you. Same account?"
+   - **Yes:** one record becomes primary and feeds holdings. The other is
+     marked a duplicate and can't be assigned to a portfolio. If the primary's
+     login breaks, Drift offers to switch to the duplicate.
+   - **No:** Drift remembers the answer and doesn't ask about that pair again.
+4. Users can also mark or unmark a duplicate by hand.
+5. The decision covers duplicate *brokerage accounts* only. Whether several
+   brokerage accounts may map to one portfolio account is still
+   [#234](https://github.com/rblumen/drift/issues/234).
 
 ### R6 — Concurrent editing
-1. Two editors may change the same portfolio. Saves keep optimistic
-   concurrency (spec §5.4). A conflict shows "<Name> updated this portfolio" and
-   offers reload, never a silent overwrite.
+1. Two editors may change the same portfolio.
+   - Saves use optimistic concurrency (linking spec §5.4).
+   - On a conflict, merge non-overlapping changes by section (strategy,
+     portfolio accounts, overrides).
+   - When both people changed the same section, show "<Name> updated this
+     portfolio" and let the user choose. Never overwrite silently.
 2. Record `updated_by` on each save and show "Last edited by <name>, <time>".
-3. Recommended: subscribe to portfolio changes (Supabase Realtime) so another
-   member's save appears without a reload. This makes conflicts rare.
+3. Recommended: Supabase Realtime pushes another member's save without a
+   reload. This needs `wss://<project>.supabase.co` in the CSP.
 
-### R7 — Viewer / adviser access
-1. A `viewer` sees everything in the portfolio (balances, holdings, masks,
-   results) and can export the report. Nothing else.
-2. A viewer sees only the portfolios they were invited to, never the inviting
-   user's other portfolios or unshared accounts.
-3. Optional expiry on viewer membership (e.g. "access for 30 days"), shown to
-   owners.
-4. Revocation takes effect on the viewer's next request, enforced by RLS. Copy
-   must say plainly that what a viewer already saw or exported can't be
-   recalled.
+### R7 — Viewer / adviser access (deferred)
+- The schema includes the `viewer` role, and the RLS role-matrix tests cover
+  it from the start, but the UI doesn't offer it until after the beta.
+- When it ships: read-only, scoped to one household, optional expiry, and
+  revocation that applies on the viewer's next request. Copy must say plainly
+  that data a viewer already exported can't be recalled.
 
 ### R8 — Leaving, removal, and deletion
-1. A member who leaves or is removed loses access immediately, and their
-   shared accounts are withdrawn (R4.4).
-2. The portfolio's decisions (`AppState`) stay with the remaining owners. The
-   departing member may **duplicate** the portfolio into one of their own
-   before leaving. Their own linked accounts come with them; others' do not.
-   This covers separation and divorce without anyone losing their own data.
-3. Deleting a user account (spec §5.7) removes their memberships, withdraws
-   their shares, and deletes portfolios where they were the sole owner. Other
-   members are notified.
+1. A member who leaves or is removed loses access immediately. Every brokerage
+   account they linked is unassigned from the household's portfolios. Those
+   accounts go with them, and the remaining members see the gap.
+2. Portfolios (strategy and `AppState`) stay with the household. Before
+   leaving, a member may **copy** a portfolio into one of their own
+   households. This covers separation without anyone losing their own data.
+3. Deleting a Drift account (linking spec §5.7) removes its memberships and
+   its brokerage logins. It also deletes households where it was the sole
+   member, and notifies the remaining members of shared households.
 
 ### R9 — Local-only mode
-- Unchanged and single-portfolio. People labels (R3) work locally too. Sharing
-  needs sign-in. On first sign-in, local data becomes the user's first
-  portfolio ("My portfolio").
+- Unchanged: one portfolio, no household.
+- Owner labels (R3.3) work locally, using a local list of people.
+- On first sign-in, local data becomes the first portfolio of the user's
+  personal household, and local people become household people.
 
 ### R10 — Security and testing
-- Authorization is enforced in Postgres RLS through membership, never only in
-  the UI or API.
-- The CI isolation job (spec §9) grows into a role matrix with five actors per
-  table and operation: non-member, viewer, editor, owner, and a former member.
+- Authorization is enforced in Postgres RLS through household membership,
+  never only in the UI or API. Roles are never put in JWT claims, since claims
+  go stale.
+- The CI isolation job grows into a role matrix: non-member, viewer, editor,
+  owner, and a former member, for every table and operation.
+- Membership, assignment, and duplicate decisions are logged in an
+  append-only `household_events` table that members can read.
 - No emails, names, or portfolio data in `sync_runs` or logs.
-- Invite and membership changes are recorded in an append-only
-  `portfolio_events` table (who, what, when) that members can read.
 
 ---
 
 ## 4. Data-model changes to `spec-account-linking.md` §4
 
-The linking spec keys everything by `user_id`. Sharing needs portfolio-keyed
-rows plus a membership check. **Make this change before M3 creates any
-tables.** It costs a few extra tables and policies now. Retrofitting it after
-the beta has data would mean migrating live rows and rewriting every RLS
-policy.
+The linking spec keys everything by `user_id`. **Restructure before M3 creates
+any tables.** It costs a few extra tables now. Retrofitting after the beta
+has data would mean migrating live rows and rewriting every RLS policy.
 
-| Table | Change |
+| Table | Purpose / change |
 |---|---|
-| `portfolios` | PK becomes `id uuid`. Add `name`, `created_by`, `updated_by`. Drop `user_id` |
-| `portfolio_members` *(new)* | `(portfolio_id, user_id)` PK, `role` (`owner`/`editor`/`viewer`), `expires_at` null, `created_at`, `invited_by` |
-| `portfolio_invites` *(new, server-only)* | `id`, `portfolio_id`, `email` citext, `role`, `token_hash`, `expires_at`, `invited_by`, `accepted_at`, `revoked_at` |
-| `portfolio_accounts` *(new)* | `(portfolio_id, broker_account_id)` PK, `drift_account_id` null, `shared_by`, `created_at`. Replaces `broker_accounts.drift_account_id` |
-| `portfolio_events` *(new)* | Append-only audit of membership and share changes |
-| `broker_accounts` | Drop `drift_account_id`. `user_id` keeps meaning *connection owner* |
-| `holdings` | Unchanged columns. RLS: select if own **or** the broker account is shared into a portfolio you're a current member of |
-| `sync_runs` | Add `portfolio_id` null (which portfolio triggered it) |
-| `AppState` | Add optional `people: {id, name, userId?}[]` and `Account.ownerIds?: string[]`. Optional with defaults, so no version bump |
+| `households` *(new)* | `id`, `name`, `created_by`, `created_at` |
+| `household_members` *(new)* | PK `(household_id, user_id)`. `role` (`owner`/`editor`/`viewer`), `invited_by`, `created_at`. Index on `user_id` |
+| `household_invites` *(new, server-only)* | `id`, `household_id`, `email` citext, `role`, `token_hash`, `expires_at`, `invited_by`, `accepted_at`, `revoked_at` |
+| `household_people` *(new)* | `id`, `household_id`, `name`, `user_id` null |
+| `household_events` *(new)* | Append-only audit log |
+| `portfolios` | PK becomes `id uuid`. Add `household_id`, `name`, `created_by`, `updated_by`. Drop `user_id` |
+| `brokerage_logins` *(new)* | `id` (SnapTrade authorization ID), `user_id` (linker), `institution`, `status`, `created_at`. `status` moves here from the account |
+| `brokerage_accounts` *(was `broker_accounts`)* | Drop `drift_account_id` and `authorization_id`. Add `login_id` → `brokerage_logins`. Keep `user_id` (linker), `institution`, `name`, `mask`, `last_synced_at`. Add `owner_person_ids uuid[]` |
+| `account_assignments` *(new)* | **PK `brokerage_account_id`**: one portfolio at most, enforced. Columns: `portfolio_id`, `portfolio_account_id` null, `assigned_by`, `assigned_at` |
+| `account_duplicates` *(new)* | PK `(brokerage_account_id, duplicate_of)`. `status` (`suggested`/`confirmed`/`rejected`), `decided_by`, `decided_at`. A check constraint keeps both sides in different brokerage logins |
+| `holdings` | Keyed on `security_id` (ticker nullable; stack-review risk #1). RLS: the linker, or a member of the household whose portfolio has the account assigned |
+| `sync_runs` | Add `portfolio_id` null |
+| `AppState` | `Account.ownerPersonIds?: string[]` for CSV/manual accounts. A `people` list for local-only mode only. Optional fields with defaults, so no version bump |
 
 RLS shape:
-- A `security definer` helper, `portfolio_role(portfolio_id) → role | null`,
-  reads `portfolio_members` for `auth.uid()` (ignoring expired rows). Every
-  policy calls it. This avoids recursive policies on `portfolio_members`.
-- `portfolios`: select if any role. Update (`state`, `name`) if editor or
-  above. Delete if owner.
-- `portfolio_accounts`: insert only if you own the broker account **and** are
-  an editor or above. Update `drift_account_id` if editor or above. Delete if
-  you shared it or are an owner.
-- Membership and invites are written only through `api/v1/` (service role).
-  They involve email and token handling, and an RLS bug there would be
-  privilege escalation.
+- A `security definer` helper in a private schema,
+  `private.household_role(household_id) → role | null`, reads
+  `household_members` for `auth.uid()`.
+  - Policies call it as `(select private.household_role(...))` so it runs once
+    per query, not once per row.
+  - This avoids recursive policies on `household_members`.
+- `portfolios`: select for any role; insert, update, and delete for editor
+  and above.
+- `account_assignments`:
+  - insert/delete only by the brokerage account's linker, who must be editor
+    or above in the target household;
+  - update `portfolio_id` within the same household, or
+    `portfolio_account_id`, by editor and above.
+- Households, membership, invites, and duplicates are written through
+  `api/v1/` using `security definer` functions. Email and token handling live
+  there, and an RLS bug there would be privilege escalation.
 
-`composePositions(state, linked)` doesn't change. `linked` becomes the
-portfolio's shared holdings joined with `portfolio_accounts.drift_account_id`.
+`composePositions(state, linked)` doesn't change shape. `linked` is the
+portfolio's assigned holdings, excluding confirmed duplicates, joined with
+`account_assignments.portfolio_account_id`.
 
-New API: `POST /portfolios/:id/invites`, `POST /invites/:token/accept`,
-`DELETE /portfolios/:id/members/:userId`, `PATCH …/members/:userId` (role),
-`POST /portfolios/:id/duplicate`.
+New API:
+- `POST /households/:id/invites`
+- `POST /invites/:token/accept`
+- `DELETE /households/:id/members/:userId`
+- `PATCH /households/:id/members/:userId` (role)
+- `POST /portfolios/:id/copy`
+- `POST /duplicates/:id/decide`
 
-**Cost note:** SnapTrade bills per connected *user*. A couple where both link
-accounts counts as two. Budget about $4/household/month on pay-as-you-go.
+**Cost note:** SnapTrade bills per connected *Drift account*. A couple where
+both link accounts counts as two, so budget about $4/household/month on
+pay-as-you-go.
 
 ---
 
@@ -206,47 +258,39 @@ accounts counts as two. Budget about $4/household/month on pay-as-you-go.
 
 | When | Scope |
 |---|---|
-| **Now (spec edit)** | Adopt the §4 data model in `spec-account-linking.md`. M3 creates portfolio-keyed tables, membership, and `portfolio_role()`. Only the `owner` role is used at first |
-| **M2 (pure modules)** | `people` and `ownerIds` in `appStateSchema`. Owner labels and filter in the UI, which also helps local-only users |
-| **M5 (linking)** | Account shares via `portfolio_accounts`. Per-account "add to portfolio" step after linking (one portfolio at first) |
-| **New M5b — Households** (after Gate 1, before M7) | Multiple portfolios and a switcher. Invites with owner and editor roles. Beta admission via portfolio invite. Conflict UX with `updated_by`. Realtime refresh. Leave, remove, and duplicate. Overlap warning. Role-matrix CI. **Exit:** you and your spouse each link your own accounts into one shared portfolio and both edit it from separate devices |
-| **M7 or after** | `viewer` role with expiry (adviser). Membership-change emails. `portfolio_events` view |
-| **Later** | §6 |
+| **Now (spec edit)** | Adopt §2 vocabulary and the §4 data model in `spec-account-linking.md`, including the *portfolio account* rename. Fold in the stack-review fixes |
+| **M2 (pure modules)** | `ownerPersonIds` and local `people` in `appStateSchema`. Owner labels and filter in the UI, which also helps local-only users |
+| **M3 (foundation)** | All §4 tables, `private.household_role()`, and the role-matrix CI. Each user has one personal household; only the owner role is used yet |
+| **M5 (linking)** | `brokerage_logins` and `brokerage_accounts`, per-account ownership, assignment to a portfolio |
+| **New M5b — Households** (after Gate 1, before M7) | Invites with role dropdown (owner default, editor), beta admission by invite, several portfolios and a switcher, moving accounts, duplicate detection and confirmation, section-merge conflict handling, `updated_by`, Realtime, leave/remove/copy. **Exit:** you and your spouse each link your own logins, confirm the shared joint account as one, and both edit "Ours" from separate devices |
+| **After the beta** | Viewer/adviser role (R7), membership-change emails if not done in M5b |
 
-Your spouse is the natural second beta user. Shipping M5b before M7 means the
-household path gets tested first, by the people it's for.
+Your spouse is the natural second beta user. M5b before M7 means the household
+path is tested first, by the people it's for.
 
 ---
 
 ## 6. Out of scope (designed for later)
 - **Engine use of ownership:** per-person contribution limits (IRA/401(k)
-  limits are per person), per-owner allocation views ("my share of the
-  household"), and per-person withdrawal and RMD planning. All of these need
-  `ownerIds`, which this design already captures.
-- Field-level privacy inside a shared portfolio (e.g. hide one account's
-  balance from a viewer).
-- Adviser-side features: one adviser managing many households, adviser
-  branding, notes.
+  limits are per person), "my share of the household", per-person withdrawal
+  and RMD planning. The owner labels this design captures are the input.
+- Per-portfolio permissions inside a household. Workaround: a separate
+  household.
+- Adviser features: one adviser across many households, notes, branding.
 - Household-level billing.
 
 ---
 
 ## 7. Open questions
 
-1. **"Mine and ours": separate portfolios, or one portfolio with owner views?**
-   Recommendation: support both (the model allows it). Steer most couples to
-   one shared portfolio with an owner filter, since overlapping portfolios
-   can give conflicting advice (R5.2). Should manual/CSV accounts ever be
-   shared across portfolios, or stay per-portfolio copies?
-2. **Can editors invite?** The spec says owners only. Some couples will want
-   both spouses as owners. Is that the default for a partner invite?
-3. **Adviser timing:** is the read-only adviser role needed in the beta, or
-   after it?
-4. **Joint accounts linked twice:** if both spouses link the same joint
-   account through their own logins, two broker accounts exist for one real
-   account. Detect duplicates (same institution and mask) and warn, or leave
-   it to the user? Related to
-   [#234](https://github.com/rblumen/drift/issues/234).
-5. **Regulatory:** sharing with an adviser is user-directed disclosure, so
-   it's likely fine under GLBA. Confirm that the privacy notice (M6) covers
-   sharing with other members.
+1. **Is the household the right access boundary?** This draft makes access
+   household-wide (R1.5), so a private "mine" portfolio lives in your personal
+   household rather than the shared one. The alternative is per-portfolio
+   membership inside one household. That's more flexible, but every policy and
+   the invite flow get more complex. Recommendation: household-wide.
+2. **Name for the account inside a portfolio.** This draft uses *portfolio
+   account*. The current UI just says "account". Keep "account" in the UI and
+   use *portfolio account* only in docs and schema?
+3. **Duplicate fallback.** When a confirmed duplicate's primary login breaks,
+   should Drift switch to the other copy automatically, or ask (current
+   draft)?
