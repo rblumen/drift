@@ -128,6 +128,17 @@ means another device saved first (§5.4).
 RLS: own rows for select. Owners may **update only `drift_account_id`**
 (column-level grant). All other writes are server-only.
 
+**One brokerage account ↔ one Drift account.** A partial unique index on
+`(user_id, drift_account_id) where drift_account_id is not null` stops two
+brokerage accounts from feeding the same Drift account. The engine treats each
+Drift account as one pool of cash whose trades must net to zero
+(`PRINCIPLES.md`, hard constraint #3). Two brokerage accounts don't share cash,
+so merging them would produce trades that can't be executed (a sell at one
+brokerage funding a buy at another) and a trade list that doesn't say where to
+act. Overlapping tickers across brokerage accounts are fine; each brokerage
+account simply maps to its own Drift account. Grouping accounts for display is
+a possible later feature that doesn't merge them for the engine.
+
 ### `holdings` — current positions per linked account
 | Column | Type | Notes |
 |---|---|---|
@@ -175,10 +186,23 @@ RLS enabled with **no policies**: the browser can't read or write it.
 |---|---|---|
 | `email` | `citext` PK | |
 | `note` | `text` | Optional "which brokerages do you use?" |
+| `heard_from` | `text` | Optional: `friend_family`, `search`, `social`, `other` |
+| `heard_from_detail` | `text` | Optional free text |
+| `referral_code` | `text` → `referral_codes(code)` | Set when they arrived through a referral link |
 | `created_at` | `timestamptz` not null default `now()` | |
 | `invited_at` | `timestamptz` | Set when you invite them |
 
 RLS with no policies; written only by `POST /api/v1/waitlist`.
+
+### `referral_codes` (added in M7)
+| Column | Type | Notes |
+|---|---|---|
+| `code` | `text` PK | Random, URL-safe; reveals nothing about the referrer |
+| `user_id` | `uuid` not null unique → `auth.users(id)` on delete cascade | One code per user |
+| `created_at` | `timestamptz` not null default `now()` | |
+
+RLS: owners can select their own code; writes are server-only. On account
+deletion the code is deleted and `waitlist.referral_code` is set to null.
 
 ### `AppState` changes
 - **None to the schema version.** Account mappings live in
@@ -199,9 +223,10 @@ export function composePositions(
   linked: LinkedHolding[],   // holdings joined with drift_account_id
 ): Position[]
 ```
-- A Drift account with any linked broker account takes its positions **only**
-  from `holdings` (summed by ticker if several broker accounts map to it).
-  `AppState.positions` rows for that account are ignored.
+- A Drift account with a linked broker account takes its positions **only**
+  from that account's `holdings`. `AppState.positions` rows for that account
+  are ignored. (At most one broker account per Drift account; see
+  `broker_accounts`.)
 - Other accounts use `AppState.positions` (CSV/manual), as today.
 - `lastUpdatedAt` = the holding's `as_of`, so the existing freshness indicator
   (`src/ingest/freshness.ts`) shows real sync times.
@@ -218,8 +243,8 @@ export function composePositions(
 - The sign-in page:
   - states that Drift accounts are in **closed beta**, invite-only;
   - offers email + password, "Email me a sign-in link," and "Forgot password";
-  - links new visitors to **Join the waitlist** (email + optional brokerage
-    note).
+  - links new visitors to **Join the waitlist**: email, plus optional "Which
+    brokerages do you use?" and "How did you hear about Drift?"
 - Invited users get an email; the link lands on a "Set your password" page.
 - All auth links use the PKCE flow and land on `<domain>`. The app exchanges the
   code and **strips it from the URL**, as it does with `?demo` today.
@@ -230,7 +255,20 @@ export function composePositions(
   per-IP rate limit. Add Cloudflare Turnstile only if spam shows up.
 - No confirmation email in the beta, so nothing to send or track.
 - You invite from the waitlist through the Supabase dashboard or an admin
-  script that sets `invited_at`.
+  script that sets `invited_at`. The admin view lists referred signups first.
+
+### 5.2a Referrals (M7, once beta users exist)
+- Each signed-in user sees a personal link, `https://<domain>/join?ref=<code>`,
+  under Settings → "Invite a friend."
+- The link opens the waitlist form with the code attached; the signup is
+  stored with `referral_code`. "How did you hear" is pre-set to
+  `friend_family`.
+- Referral **does not auto-invite**. You still choose whom to invite, which
+  keeps control of SnapTrade connections and cost. Referred people are
+  prioritized in your invite list.
+- No rewards in the beta.
+- The `ref` parameter is stripped from the URL on load (like `?demo` and auth
+  codes) so it never reaches analytics.
 
 ### 5.3 First sign-in: migrating local data
 - No `portfolios` row and a local portfolio present: offer "Upload this
@@ -258,7 +296,10 @@ A new "Linked accounts" source in `src/ui/PositionsPanel.tsx`:
    without a second request.
 3. **Mapping:** any broker account with no `drift_account_id` goes through the
    existing "Map accounts" UI; the choice is saved to
-   `broker_accounts.drift_account_id`. Later syncs need no mapping.
+   `broker_accounts.drift_account_id`. Later syncs need no mapping. Options per
+   broker account: an existing Drift account that isn't already linked, or
+   "Create a new Drift account" (pre-filled with institution and name; the user
+   confirms the account type).
 4. **Auto-sync on open:** if signed in and the oldest linked `last_synced_at`
    is over 12 hours old, sync once in the background.
 5. **Connection list:** brokerage, status (including "needs
@@ -362,8 +403,10 @@ reports, MX for Cloudflare Email Routing. Sending from a subdomain
 - **Unit (Vitest):**
   - `normalizeSnapTrade` with synthetic fixtures (several accounts, cash,
     missing cost basis, bad rows). Fixtures are synthetic only.
-  - `composePositions`: linked vs CSV accounts, several broker accounts mapped
-    to one Drift account, overrides, freshness timestamps.
+  - `composePositions`: linked vs CSV accounts, overrides, freshness
+    timestamps.
+  - Mapping UI refuses a Drift account that already has a linked broker
+    account.
   - `remoteStore` save/conflict/retry with a mocked Supabase client.
   - URL scrubbing and the analytics `beforeSend` filter.
   - `api/_lib/crypto.ts` round-trip and tamper detection.
@@ -404,6 +447,21 @@ reports, MX for Cloudflare Email Routing. Sending from a subdomain
 Each milestone is one PR to `main` on a `feat/<issue>-…` branch, per
 `CLAUDE.md`. Issue numbers are created when work starts.
 
+### M0a — Domain spike
+- Shortlist 5–10 names. For each, check:
+  - availability and price, **including renewal price** (some registries
+    charge premium renewals);
+  - TLD reputation for email delivery (prefer `.com`, `.app`, `.io`; avoid
+    TLDs with poor spam reputation such as `.xyz`, `.top`);
+  - `.app` and `.dev` force HTTPS (HSTS-preloaded), which is fine since Vercel
+    serves HTTPS;
+  - a USPTO trademark search (TESS) for conflicts in finance/software;
+  - an existing site, company, or app with a confusingly similar name;
+  - matching social handles, if you'll want them for recruiting beta users.
+- Register at Cloudflare Registrar (at-cost pricing, and DNS needs to be on
+  Cloudflare anyway for D12/D13). Enable auto-renew and registrar lock.
+- **Exit:** domain registered; `<domain>` filled in throughout this spec.
+
 ### M0 — Spike (throwaway; not merged)
 - SnapTrade **Personal** key, local script under `/private/` (git-ignored),
   fetch your real holdings, hand-normalize, run `rebalance()`, compare with a
@@ -426,7 +484,7 @@ Each milestone is one PR to `main` on a `feat/<issue>-…` branch, per
 - **Exit:** tests green; no runtime behavior change.
 
 ### M3 — Domain, email, backend foundation
-- Register `<domain>`; Cloudflare DNS; point it at Vercel.
+- Cloudflare DNS for `<domain>` (registered in M0a); point it at Vercel.
 - Resend account; SPF/DKIM/DMARC; Supabase custom SMTP; custom auth templates.
 - `support@<domain>` via Cloudflare Email Routing.
 - Supabase project; `supabase/migrations/` with all tables, RLS, and the
@@ -472,6 +530,8 @@ $0 plus the domain. Check `sync_runs` for errors and call volume.
 - Supabase Pro (backups, no pausing); Vercel Pro if hosting must be
   commercial-safe.
 - Invite from the waitlist; SnapTrade pay-as-you-go after 5 connections.
+- Referrals (§5.2a): `referral_codes` table, "Invite a friend" link,
+  `/join?ref=` handling, referred-first ordering in the admin view.
 - Confirm a database backup restores.
 - **Exit:** invited users can sign up, link, and sync; costs track the
   ~$45–95/mo estimate.
@@ -484,8 +544,6 @@ start public-launch work.
 
 ## 12. Open questions
 
-1. Which domain?
-2. Waitlist: is email + optional brokerage note enough, or do you want more
-   (e.g. how they heard about Drift)?
-3. Is a summed position per ticker acceptable when two broker accounts map to
-   one Drift account, or should that mapping be disallowed?
+1. Which domain? Settled by the M0a spike.
+2. Should beta users also be able to invite directly (a small invite quota),
+   or does every invite stay with you? (Spec assumes you invite everyone.)
