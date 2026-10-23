@@ -718,8 +718,7 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
             (Large Cap 67%, Mid Cap 25%, Small Cap 8%) if you want to return to the standard split.
           </HelpDef>
           <HelpDef term="Fixed Income (20% default)">
-            Held as NY tax-free muni bonds (e.g. MUNY) in the taxable account by default. This target
-            also sets the threshold for the REVISIT_PLACEMENT flag — see below.
+            Held as NY tax-free muni bonds (e.g. MUNY) in the taxable account by default.
           </HelpDef>
           <HelpDef term="Alternatives (2.5% default)">
             Crypto, precious metals, and similar. Routed to tax-advantaged accounts because these assets
@@ -746,12 +745,10 @@ export function StrategyPanel({ strategy, setStrategy, accounts, currentWeights,
             taxable account is nearly as tax-efficient as holding them in an IRA — and it frees the
             tax-advantaged space for equities, where long-term compounding is most valuable.
           </HelpDef>
-          <HelpDef term="The REVISIT_PLACEMENT trigger">
-            This strategy has a built-in expiry: once the taxable account grows larger than the fixed-income
-            sleeve, it can no longer be bonds-only. The engine fires a <strong>REVISIT_PLACEMENT</strong>{' '}
-            flag when <em>taxable share &gt; Fixed Income target</em>. When you see it, consider adding
-            Taxable as a 2nd-choice bucket for equities, so equity spillover goes to the taxable account
-            instead of generating a NO_ELIGIBLE_ACCOUNT error.
+          <HelpDef term="When taxable outgrows the bond sleeve">
+            Once the taxable accounts hold more than the Fixed Income target, they can no longer be
+            bonds-only — something else has to fill the remainder. Adding Taxable as a 2nd-choice bucket
+            for equities makes that overflow land where you expect it.
           </HelpDef>
         </HelpSection>
 

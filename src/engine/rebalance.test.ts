@@ -111,11 +111,6 @@ describe('Goal 4: base case â€” Â§9 worked example (greenfield $1M)', () 
     expect(near(accountSum(r.trades, 'k401'),   500_000)).toBe(true);
   });
 
-  it('REVISIT_PLACEMENT does not fire (taxable 20% = FI target, not >)', () => {
-    const r = rebalance(BASE_ACCOUNTS, NO_POSITIONS, ZERO_TOL_STRATEGY);
-    expect(r.flags.find(f => f.kind === 'REVISIT_PLACEMENT')).toBeUndefined();
-  });
-
   it('no PLACEMENT_SPILLOVER', () => {
     const r = rebalance(BASE_ACCOUNTS, NO_POSITIONS, ZERO_TOL_STRATEGY);
     expect(r.flags.filter(f => f.kind === 'PLACEMENT_SPILLOVER')).toHaveLength(0);
@@ -131,14 +126,6 @@ describe('Goal 6: spillover case â€” taxable > FI target', () => {
     { id: 'ira',    name: 'Fidelity Trad IRA',   institution: 'Fidelity', type: 'TRADITIONAL_IRA', newCash: 300_000 },
     { id: 'k401',   name: 'Empower 401k',        institution: 'Empower',  type: 'FOUR_OH_ONE_K',   newCash: 400_000 },
   ];
-
-  it('REVISIT_PLACEMENT fires with taxableShare = 0.30', () => {
-    const r = rebalance(ACCOUNTS_300K_TAXABLE, NO_POSITIONS, ZERO_TOL_STRATEGY);
-    const flag = r.flags.find(f => f.kind === 'REVISIT_PLACEMENT');
-    expect(flag).toBeDefined();
-    expect(flag?.kind === 'REVISIT_PLACEMENT' && flag.taxableShare).toBeCloseTo(0.3, 5);
-    expect(flag?.kind === 'REVISIT_PLACEMENT' && flag.fixedIncomeTarget).toBe(0.2);
-  });
 
   it('some equity class spills into TAXABLE bucket', () => {
     // After Russell redistribution, US equity is placed as LC â†’ MC â†’ SC.
@@ -1586,8 +1573,7 @@ describe('Goal 4: post-trade accuracy â€” stress scenarios', () => {
 
   // â”€â”€ S3: greenfield with spillover â€” targets still met despite non-preferred placement
   it('S3: placement spillover (taxable > FI target) â€” no PROJECTED_OFF_TARGET', () => {
-    // Taxable = 30% of household, FI target = 20% â†’ REVISIT_PLACEMENT fires and
-    // equities spill into taxable, but all class targets are still reachable.
+    // Taxable = 30% of household, FI target = 20% â†’ equities spill into taxable, but all class targets are still reachable.
     const accts: Account[] = [
       { id: 'schwab', name: 'Schwab', institution: 'Schwab',   type: 'TAXABLE',         newCash: 300_000 },
       { id: 'ira',    name: 'IRA',    institution: 'Fidelity', type: 'TRADITIONAL_IRA', newCash: 300_000 },
@@ -1595,7 +1581,6 @@ describe('Goal 4: post-trade accuracy â€” stress scenarios', () => {
     ];
     const strategy = { ...ZERO_TOL_STRATEGY, toleranceAbs: 0.01 };
     const r = rebalance(accts, NO_POSITIONS, strategy);
-    expect(r.flags.some(f => f.kind === 'REVISIT_PLACEMENT')).toBe(true);
     assertAllOnTarget(r, strategy);
   });
 

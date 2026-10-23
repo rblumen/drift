@@ -58,29 +58,28 @@ afterEach(async () => {
 });
 
 describe('FlagStrip (#194 flag strips)', () => {
-  const revisit: Flag = { kind: 'REVISIT_PLACEMENT', taxableShare: 0.25, fixedIncomeTarget: 0.20 };
+  const sale: Flag = { kind: 'TAXABLE_SALE', accountId: 'schwab', assetClass: 'US_LARGE_CAP', amountUsd: 12_345 };
 
   it('renders the short tracking tag for the flag kind', async () => {
-    const el = await render(revisit);
-    expect(el.textContent).toContain(FLAG_META.REVISIT_PLACEMENT.tag); // "PLACEMENT"
+    const el = await render(sale);
+    expect(el.textContent).toContain(FLAG_META.TAXABLE_SALE.tag); // "GAIN"
   });
 
   it('collapses the full message behind a "See reasoning" control', async () => {
-    const el = await render(revisit);
+    const el = await render(sale);
     // Collapsed: the toggle is present and the full sentence is NOT yet shown.
     const btn = [...el.querySelectorAll('button')].find(b => /See reasoning/.test(b.textContent ?? ''));
     expect(btn).toBeTruthy();
-    expect(el.textContent).not.toContain('Revisit placement strategy');
+    expect(el.textContent).not.toContain('may trigger a capital gain');
   });
 
   it('reveals the full advisory message when expanded (no information lost)', async () => {
-    const el = await render(revisit);
+    const el = await render(sale);
     const btn = [...el.querySelectorAll('button')].find(b => /See reasoning/.test(b.textContent ?? ''))!;
     await act(async () => { btn.click(); });
     // The complete FlagBanner text — figures and all — is now reachable.
-    expect(el.textContent).toContain('Revisit placement strategy');
-    expect(el.textContent).toContain('25.0%');
-    expect(el.textContent).toContain('20.0%');
+    expect(el.textContent).toContain('may trigger a capital gain');
+    expect(el.textContent).toContain('12,345');
   });
 
   it('maps a danger-severity flag to its own tag', async () => {

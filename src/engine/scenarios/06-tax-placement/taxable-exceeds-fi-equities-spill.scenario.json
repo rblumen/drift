@@ -1,6 +1,6 @@
 {
-  "name": "taxable-exceeds-fi-revisit-placement",
-  "description": "Goal 6: when taxable capacity exceeds the fixed-income target, equities spill into taxable and REVISIT_PLACEMENT fires",
+  "name": "taxable-exceeds-fi-equities-spill",
+  "description": "Goal 6: when taxable capacity exceeds the fixed-income target, equities spill into taxable",
   "principle": 6,
   "accounts": [
     { "id": "schwab", "name": "Schwab Brokerage", "institution": "Schwab", "type": "TAXABLE", "newCash": 300000 },
@@ -37,7 +37,6 @@
   },
   "expected": {
     "flags": [
-      { "kind": "REVISIT_PLACEMENT", "taxableShare": 0.3, "fixedIncomeTarget": 0.2 },
       { "kind": "PLACEMENT_SPILLOVER", "bucket": "TAXABLE" }
     ]
   }

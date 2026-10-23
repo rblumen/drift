@@ -222,20 +222,6 @@ describe('Goal 6: subdivided fixed income places by tax treatment', () => {
   });
 });
 
-// ─── REVISIT_PLACEMENT sums FI children ──────────────────────────────────────────
-
-describe('Goal 6: REVISIT_PLACEMENT uses the summed fixed-income target', () => {
-  it('does not fire when the subdivided FI target covers the taxable share', () => {
-    // All wealth in a taxable account; FI target expressed at the child level summing to 1.0.
-    const accounts: Account[] = [{ id: 'tax', name: 'Taxable', institution: 'S', type: 'TAXABLE' }];
-    const positions: Position[] = [{ accountId: 'tax', ticker: 'MUNY', marketValue: 100_000 }];
-    const r = rebalance(accounts, positions, strat({ MUNI_BOND: 0.6, US_TREASURY: 0.4 }));
-    const revisit = r.flags.find(f => f.kind === 'REVISIT_PLACEMENT');
-    // taxableShare (1.0) ≤ fixedIncomeTarget (0.6 + 0.4 = 1.0) → no flag.
-    expect(revisit).toBeUndefined();
-  });
-});
-
 // ─── robustness: partial targets must not zero out trades ─────────────────────────
 
 describe('Hierarchy (supports Goal 4): rebalance is robust to a partial targets object', () => {

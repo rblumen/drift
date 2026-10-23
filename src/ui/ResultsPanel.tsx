@@ -103,7 +103,6 @@ type FlagSeverity = 'danger' | 'warn' | 'info';
 // WITHIN_TOLERANCE aren't surfaced through this list (wash-sale has its own
 // banner; within-tolerance isn't shown), but are mapped for completeness.
 export const FLAG_META: Record<Flag['kind'], { tag: string; severity: FlagSeverity }> = {
-  REVISIT_PLACEMENT:               { tag: 'PLACEMENT',   severity: 'warn'   },
   TAXABLE_SALE:                    { tag: 'GAIN',        severity: 'warn'   },
   TAXABLE_REBALANCE_AVOIDABLE:     { tag: 'AVOIDABLE',   severity: 'warn'   },
   PLACEMENT_SPILLOVER:             { tag: 'SPILLOVER',   severity: 'info'   },
@@ -162,16 +161,6 @@ export function FlagStrip({ flag, accounts }: { flag: Flag; accounts: Account[] 
 function FlagBanner({ flag, accounts }: { flag: Flag; accounts: Account[] }) {
   const acctName = (id: string) => accounts.find(a => a.id === id)?.name ?? id;
 
-  if (flag.kind === 'REVISIT_PLACEMENT') {
-    return (
-      <div className="bg-warn-bg border border-warn-banner-border rounded-lg px-4 py-3 text-[11px] text-warn-banner-text">
-        <strong>Revisit placement strategy.</strong>{' '}
-        Taxable accounts hold {fmtPct(flag.taxableShare)} of household value, which exceeds
-        the {fmtPct(flag.fixedIncomeTarget)} fixed-income target.
-        Consider updating your placement rules.
-      </div>
-    );
-  }
   if (flag.kind === 'TAXABLE_SALE') {
     return (
       <div className="bg-warn-bg border border-warn-banner-border rounded-lg px-4 py-3 text-[11px] text-warn-banner-text">
@@ -854,7 +843,6 @@ export function ResultsPanel({
     ...flags.filter(f => f.kind === 'WITHDRAWAL_SHORTFALL'),
     ...flags.filter(f => f.kind === 'NO_ELIGIBLE_ACCOUNT'),
     ...flags.filter(f => f.kind === 'PROJECTED_OFF_TARGET'),
-    ...flags.filter(f => f.kind === 'REVISIT_PLACEMENT'),
     ...flags.filter(f => f.kind === 'FIVE_TWENTY_NINE_REBALANCE_LIMIT'),
     ...flags.filter(f => f.kind === 'UNMAPPED_HOLDING'),
     ...flags.filter(f => f.kind === 'TAXABLE_REBALANCE_AVOIDABLE'),

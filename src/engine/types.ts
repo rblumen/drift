@@ -32,7 +32,7 @@ export type AccountType =
 
 // Placement buckets group account types by tax treatment. This coarse triple is the
 // engine's *tax-treatment* vocabulary: what `accountBucket()` returns and what the
-// tax-sale logic, withdrawal eligibility, and REVISIT_PLACEMENT key on. Unchanged by #89.
+// tax-sale logic and withdrawal eligibility key on. Unchanged by #89.
 export type PlacementBucket = 'TAXABLE' | 'TAX_ADVANTAGED' | 'EDUCATION';
 
 // A specific-account placement leaf (issue #89 Phase 2): `account:<accountId>`. Kept as a
@@ -318,7 +318,6 @@ export type Flag =
    *  class's own placement occupies the preferred bucket. */
   | { kind: 'PLACEMENT_SPILLOVER'; assetClass: AssetClass; bucket: PlacementTarget; amountUsd: number;
       preferredBucket?: PlacementTarget; occupiedBy?: SpilloverOccupant[] }
-  | { kind: 'REVISIT_PLACEMENT'; taxableShare: number; fixedIncomeTarget: number }
   | { kind: 'NO_ELIGIBLE_ACCOUNT'; assetClass: AssetClass; amountUsd: number }
   | { kind: 'EXCESS_CASH'; amountUsd: number }
   /** Emitted when tax-advantaged-first rebalancing is disabled and a taxable sale

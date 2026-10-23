@@ -98,7 +98,7 @@ type AccountType =
 type PlacementBucket = 'TAXABLE' | 'TAX_ADVANTAGED' | 'EDUCATION';
 // TAXABLE → TAXABLE; FIVE_TWENTY_NINE → EDUCATION; all others → TAX_ADVANTAGED.
 // This coarse triple is the engine's *tax-treatment* vocabulary (accountBucket(),
-// tax-sale logic, withdrawal eligibility, REVISIT_PLACEMENT). Unchanged by #89.
+// tax-sale logic, withdrawal eligibility). Unchanged by #89.
 
 // A placement *preference* (issue #89) generalizes PlacementBucket into a tree node:
 // a broad tax-treatment bucket, an intermediate bucket, a specific account type, or
@@ -120,7 +120,6 @@ type Flag =
   | { kind: 'TAXABLE_SALE'; accountId: string; assetClass: AssetClass; amountUsd: number }
   | { kind: 'UNMAPPED_HOLDING'; ticker: string }
   | { kind: 'PLACEMENT_SPILLOVER'; assetClass: AssetClass; bucket: PlacementTarget; amountUsd: number }
-  | { kind: 'REVISIT_PLACEMENT'; taxableShare: number; fixedIncomeTarget: number }
   | { kind: 'NO_ELIGIBLE_ACCOUNT'; assetClass: AssetClass; amountUsd: number }
   | { kind: 'EXCESS_CASH'; amountUsd: number }
   | { kind: 'TAXABLE_REBALANCE_AVOIDABLE'; accountId: string; assetClass: AssetClass; amountUsd: number }
@@ -160,17 +159,6 @@ See the README's [Flags reference](README.md#flags-reference) for a user-facing,
 | CASH | `TAXABLE`, then `TAX_ADVANTAGED` |
 
 **Other defaults:** `toleranceAbs = 0.05`, `toleranceRel = 0.25` (Bogleheads 5/25 rule — the engine uses whichever band is tighter per class), `minTradeUsd = 250`.
-
-### The REVISIT_PLACEMENT heads-up
-
-Placement preferences are user-configurable per asset class (and per account); the defaults above keep taxable focused on tax-free munis while concentrating growth assets in tax-advantaged accounts. Independent of that configuration, the engine emits a heads-up keyed on account values vs. the Fixed Income target:
-
-```
-if (taxableValue / householdValue) > strategy.targets.FIXED_INCOME
-    → emit REVISIT_PLACEMENT { taxableShare, fixedIncomeTarget }
-```
-
-When taxable assets outgrow the fixed-income sleeve, bonds can no longer fill it exclusively and equities must begin landing in taxable. The flag is an automatic, measurable prompt to revisit the placement rules.
 
 ---
 

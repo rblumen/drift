@@ -71,7 +71,6 @@ const TIERS: {
 ];
 
 const FLAGS: { name: string; color: string; meaning: string }[] = [
-  { name: 'REVISIT_PLACEMENT', color: 'text-accent-ink', meaning: 'Taxable share of the household exceeds the fixed-income target weight. Bonds-only taxable is no longer feasible — update placement rules.' },
   { name: 'TAXABLE_SALE', color: 'text-warn', meaning: 'A recommended sell is in a taxable account. May trigger a capital gain — review before executing.' },
   { name: 'PLACEMENT_SPILLOVER', color: 'text-info', meaning: 'An asset class filled its preferred bucket and spilled into a secondary one. Informational only.' },
   { name: 'NO_ELIGIBLE_ACCOUNT', color: 'text-danger', meaning: 'No account has capacity for a given asset class. Check account restrictions in the Accounts tab.' },
