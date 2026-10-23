@@ -1,6 +1,6 @@
 # Requirements: Households and Shared Portfolios
 
-**Status:** Draft for review (revision 2) · **Builds on:**
+**Status:** Draft for review (revision 3) · **Builds on:**
 [`spec-account-linking.md`](spec-account-linking.md) (closed-beta stack:
 Supabase, Vercel Functions, SnapTrade).
 
@@ -77,8 +77,11 @@ Brokerage login (Schwab) ──contains──▶ Brokerage account ──assigne
    deleting the household or transferring ownership.
 4. Every member can see the member list (names, emails, roles).
 5. Access is household-wide: a member sees every portfolio in the household.
-   - A portfolio you want private ("mine") goes in a household where you are
-     the only member.
+   Mine/hers/joint is a label (R3), never an access boundary.
+   - **A hard privacy boundary is a separate household** under the same Drift
+     account, with no other members. Example: a private "Mine" portfolio sits
+     outside the shared household.
+   - Switching between households and portfolios is one switcher.
    - Per-portfolio permissions are out of scope (§6).
 
 ### R2 — Invitations
@@ -196,57 +199,26 @@ brokerage-account records for one real account.
 
 ---
 
-## 4. Data-model changes to `spec-account-linking.md` §4
+## 4. Data model
 
-The linking spec keys everything by `user_id`. **Restructure before M3 creates
-any tables.** It costs a few extra tables now. Retrofitting after the beta
-has data would mean migrating live rows and rewriting every RLS policy.
+The schema, RLS, and database functions now live in
+[`spec-account-linking.md`](spec-account-linking.md) §4, which is the single
+source of truth. In summary:
 
-| Table | Purpose / change |
-|---|---|
-| `households` *(new)* | `id`, `name`, `created_by`, `created_at` |
-| `household_members` *(new)* | PK `(household_id, user_id)`. `role` (`owner`/`editor`/`viewer`), `invited_by`, `created_at`. Index on `user_id` |
-| `household_invites` *(new, server-only)* | `id`, `household_id`, `email` citext, `role`, `token_hash`, `expires_at`, `invited_by`, `accepted_at`, `revoked_at` |
-| `household_people` *(new)* | `id`, `household_id`, `name`, `user_id` null |
-| `household_events` *(new)* | Append-only audit log |
-| `portfolios` | PK becomes `id uuid`. Add `household_id`, `name`, `created_by`, `updated_by`. Drop `user_id` |
-| `brokerage_logins` *(new)* | `id` (SnapTrade authorization ID), `user_id` (linker), `institution`, `status`, `created_at`. `status` moves here from the account |
-| `brokerage_accounts` *(was `broker_accounts`)* | Drop `drift_account_id` and `authorization_id`. Add `login_id` → `brokerage_logins`. Keep `user_id` (linker), `institution`, `name`, `mask`, `last_synced_at`. Add `owner_person_ids uuid[]` |
-| `account_assignments` *(new)* | **PK `brokerage_account_id`**: one portfolio at most, enforced. Columns: `portfolio_id`, `portfolio_account_id` null, `assigned_by`, `assigned_at` |
-| `account_duplicates` *(new)* | PK `(brokerage_account_id, duplicate_of)`. `status` (`suggested`/`confirmed`/`rejected`), `decided_by`, `decided_at`. A check constraint keeps both sides in different brokerage logins |
-| `holdings` | Keyed on `security_id` (ticker nullable; stack-review risk #1). RLS: the linker, or a member of the household whose portfolio has the account assigned |
-| `sync_runs` | Add `portfolio_id` null |
-| `AppState` | `Account.ownerPersonIds?: string[]` for CSV/manual accounts. A `people` list for local-only mode only. Optional fields with defaults, so no version bump |
-
-RLS shape:
-- A `security definer` helper in a private schema,
-  `private.household_role(household_id) → role | null`, reads
-  `household_members` for `auth.uid()`.
-  - Policies call it as `(select private.household_role(...))` so it runs once
-    per query, not once per row.
-  - This avoids recursive policies on `household_members`.
-- `portfolios`: select for any role; insert, update, and delete for editor
-  and above.
-- `account_assignments`:
-  - insert/delete only by the brokerage account's linker, who must be editor
-    or above in the target household;
-  - update `portfolio_id` within the same household, or
-    `portfolio_account_id`, by editor and above.
-- Households, membership, invites, and duplicates are written through
-  `api/v1/` using `security definer` functions. Email and token handling live
-  there, and an RLS bug there would be privilege escalation.
-
-`composePositions(state, linked)` doesn't change shape. `linked` is the
-portfolio's assigned holdings, excluding confirmed duplicates, joined with
-`account_assignments.portfolio_account_id`.
-
-New API:
-- `POST /households/:id/invites`
-- `POST /invites/:token/accept`
-- `DELETE /households/:id/members/:userId`
-- `PATCH /households/:id/members/:userId` (role)
-- `POST /portfolios/:id/copy`
-- `POST /duplicates/:id/decide`
+- **Households and access:** `households`, `household_members` (role per
+  household), `household_invites`, `household_people`, and
+  `household_events`. Every policy checks `private.household_role()`.
+- **Portfolios** belong to a household (`portfolios.household_id`).
+- **Brokerage data:** `brokerage_logins` and `brokerage_accounts` are
+  server-written and owned by the linker.
+- **Assignments:** `account_assignments` has its primary key on the brokerage
+  account (at most one portfolio). It holds the portfolio-account mapping and
+  the owner labels (`owner_person_ids`). Labels live on the assignment because
+  `household_people` are scoped to a household.
+- **Duplicates:** `account_duplicates`, with a trigger that requires the two
+  accounts to come from different brokerage logins.
+- **User-side writes** go through role-checking RPCs (`save_portfolio`,
+  `assign_account`, `move_account`, …).
 
 **Cost note:** SnapTrade bills per connected *Drift account*. A couple where
 both link accounts counts as two, so budget about $4/household/month on
@@ -256,14 +228,15 @@ pay-as-you-go.
 
 ## 5. Phasing
 
-| When | Scope |
-|---|---|
-| **Now (spec edit)** | Adopt §2 vocabulary and the §4 data model in `spec-account-linking.md`, including the *portfolio account* rename. Fold in the stack-review fixes |
-| **M2 (pure modules)** | `ownerPersonIds` and local `people` in `appStateSchema`. Owner labels and filter in the UI, which also helps local-only users |
-| **M3 (foundation)** | All §4 tables, `private.household_role()`, and the role-matrix CI. Each user has one personal household; only the owner role is used yet |
-| **M5 (linking)** | `brokerage_logins` and `brokerage_accounts`, per-account ownership, assignment to a portfolio |
-| **New M5b — Households** (after Gate 1, before M7) | Invites with role dropdown (owner default, editor), beta admission by invite, several portfolios and a switcher, moving accounts, duplicate detection and confirmation, section-merge conflict handling, `updated_by`, Realtime, leave/remove/copy. **Exit:** you and your spouse each link your own logins, confirm the shared joint account as one, and both edit "Ours" from separate devices |
-| **After the beta** | Viewer/adviser role (R7), membership-change emails if not done in M5b |
+See [`spec-account-linking.md`](spec-account-linking.md) §11. In short:
+
+- **M2:** owner labels for CSV/manual accounts, including local-only mode.
+- **M3:** the full household schema and role-matrix CI. Each Drift account
+  gets one personal household; only the owner role is used yet.
+- **M5:** linking with per-account assignment.
+- **M5b (after Gate 1, before M7):** everything else in R1–R8 except the
+  viewer role.
+- **After the beta:** the viewer/adviser role (R7).
 
 Your spouse is the natural second beta user. M5b before M7 means the household
 path is tested first, by the people it's for.
@@ -283,11 +256,9 @@ path is tested first, by the people it's for.
 
 ## 7. Open questions
 
-1. **Is the household the right access boundary?** This draft makes access
-   household-wide (R1.5), so a private "mine" portfolio lives in your personal
-   household rather than the shared one. The alternative is per-portfolio
-   membership inside one household. That's more flexible, but every policy and
-   the invite flow get more complex. Recommendation: household-wide.
+1. ~~Is the household the right access boundary?~~ **Resolved:** yes.
+   Ownership is a label. A hard privacy boundary is a separate household under
+   the same Drift account (R1.5).
 2. **Name for the account inside a portfolio.** This draft uses *portfolio
    account*. The current UI just says "account". Keep "account" in the UI and
    use *portfolio account* only in docs and schema?
