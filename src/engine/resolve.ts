@@ -1,6 +1,6 @@
 import type { AssetClass, FundDecomposition, Position, ResolvedTrade, Trade } from './types';
 import type { ClassifyFn } from './classify';
-import { CLASS_HIERARCHY, PARENT_CLASS, synthesizeImplicitDecompositions } from './hierarchy';
+import { CLASS_HIERARCHY, PARENT_CLASS, isChildClass, synthesizeImplicitDecompositions } from './hierarchy';
 
 // Returns every asset class a ticker can satisfy a trade for, accounting for the
 // hierarchy and explicit decompositions. A ticker covers its whole class *family*:
@@ -51,6 +51,9 @@ function coveredClasses(
 // A trade is left without a ticker when:
 //   - No position in the account covers the class (greenfield buy — user picks fund).
 //   - Multiple positions in the account cover the class (ambiguous — user decides).
+//     Exception (#228): for a sub-class trade, if exactly one unlocked, non-blended
+//     holding is classified as the trade's exact class, it wins over funds that
+//     only cover the class via the hierarchy.
 //
 // strategyTargets — when provided, gates greenfield-buy promotion: child-class
 // buys are only collapsed to the parent when the strategy targets the parent
@@ -84,6 +87,12 @@ export function resolveTradeVehicles(
   for (const [accountId, accountTrades] of byAccount) {
     // For each unique ticker in this account, compute which classes it covers.
     const tickerCoverage = new Map<string, AssetClass[]>();
+    // Tickers with at least one unlocked position in this account. A ticker held
+    // only as locked positions must not win the #228 exact-class preference —
+    // locked positions are frozen (Goal 1).
+    const tradeable = new Set(
+      positions.filter(p => p.accountId === accountId && !p.locked).map(p => p.ticker),
+    );
     const seen = new Set<string>();
     for (const pos of positions) {
       if (pos.accountId !== accountId || seen.has(pos.ticker)) continue;
@@ -120,6 +129,24 @@ export function resolveTradeVehicles(
       if (trade.excludeTickers && trade.excludeTickers.length > 0) {
         const ex = new Set(trade.excludeTickers);
         tickers = tickers.filter(t => !ex.has(t));
+      }
+      // Issue #228 — a parent-class fund (SCHB → US_TOTAL_MARKET) covers its cap
+      // children only via the hierarchy, and buying/selling it moves every sleeve
+      // at once (#215). When a direct holding of the trade's exact sub-class is
+      // also present (VO for a US_MID_CAP sell), that holding is the only
+      // executable vehicle — prefer it rather than dropping the ticker as ambiguous.
+      // Limited to:
+      //   • sub-class trades — a parent-level trade (FIXED_INCOME with BND + MUNY)
+      //     is a genuine choice between sleeves, e.g. munis in taxable;
+      //   • non-blended, unlocked candidates — a blended fund (explicit or #215
+      //     implicit) moves other sleeves too, and a locked position is frozen.
+      if (tickers.length > 1 && isChildClass(trade.assetClass)) {
+        const exact = tickers.filter(t =>
+          classify(t) === trade.assetClass &&
+          !decompositions[t.toUpperCase()] &&
+          tradeable.has(t),
+        );
+        if (exact.length === 1) tickers = exact;
       }
       if (tickers.length === 1) {
         if (!tickerTrades.has(tickers[0])) tickerTrades.set(tickers[0], []);

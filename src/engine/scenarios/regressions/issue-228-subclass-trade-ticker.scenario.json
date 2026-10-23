@@ -1,0 +1,33 @@
+{
+  "name": "issue-228-subclass-trade-ticker",
+  "description": "Issue #228: a 401(k) holds a total-market fund (SCHB) alongside sub-class funds (VOO large cap, VO mid cap) and the target exits mid cap. SCHB covers every cap sleeve via the hierarchy, so the pre-fix resolver saw [SCHB, VO] / [SCHB, VOO] as ambiguous and emitted bare 'US Mid Cap · SELL' and 'US Large Cap · BUY' rows with no ticker. The fixed resolver prefers the single exact-class holding: the mid-cap sell executes via VO and both large-cap buys merge into one VOO buy. Only the small-cap buy (no small-cap fund held) stays ticker-less.",
+  "principle": [4, 10],
+  "accounts": [
+    { "id": "k401", "name": "401(k)", "institution": "Fidelity", "type": "FOUR_OH_ONE_K" }
+  ],
+  "holdings": [
+    { "accountId": "k401", "ticker": "SCHB", "marketValue": 26000 },
+    { "accountId": "k401", "ticker": "VOO",  "marketValue": 25000 },
+    { "accountId": "k401", "ticker": "VO",   "marketValue": 6000 },
+    { "accountId": "k401", "ticker": "GLD",  "marketValue": 16000 }
+  ],
+  "strategy": {
+    "targets": {
+      "US_TOTAL_MARKET": 0, "US_LARGE_CAP": 0.75, "US_MID_CAP": 0, "US_SMALL_CAP": 0.03,
+      "DEVELOPED_INTL": 0, "EMERGING_INTL": 0, "FIXED_INCOME": 0, "ALTERNATIVES": 0.22, "CASH": 0
+    },
+    "placement": {},
+    "toleranceAbs": 0.05,
+    "toleranceRel": 0.25,
+    "minTradeUsd": 100
+  },
+  "expected": {
+    "resolvedTrades": [
+      { "accountId": "k401", "ticker": "SCHB", "assetClass": "US_TOTAL_MARKET", "deltaUsd": -26000 },
+      { "accountId": "k401", "ticker": "VO",   "assetClass": "US_MID_CAP",      "deltaUsd": -6000 },
+      { "accountId": "k401", "ticker": "VOO",  "assetClass": "US_LARGE_CAP",    "deltaUsd": 29920 },
+      { "accountId": "k401", "ticker": null,   "assetClass": "US_SMALL_CAP",    "deltaUsd": 2080 }
+    ],
+    "netByAccount": { "k401": 0 }
+  }
+}

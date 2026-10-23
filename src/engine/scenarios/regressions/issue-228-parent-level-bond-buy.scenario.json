@@ -1,0 +1,69 @@
+{
+  "name": "issue-228-parent-level-bond-buy",
+  "description": "Issue #228 review: the exact-class preference applies only to sub-class trades. A taxable account holds BND (fixed income), MUNY (muni bonds) and VOO, with fixed income targeted at the parent level. The FIXED_INCOME buy is a genuine choice between sleeves — munis are usually the right taxable vehicle (Goal 6) — so it stays ticker-less rather than defaulting to BND. The first #228 fix named BND here.",
+  "principle": [
+    4,
+    6
+  ],
+  "accounts": [
+    {
+      "id": "tax",
+      "name": "Brokerage",
+      "institution": "Schwab",
+      "type": "TAXABLE"
+    }
+  ],
+  "holdings": [
+    {
+      "accountId": "tax",
+      "ticker": "BND",
+      "marketValue": 10000
+    },
+    {
+      "accountId": "tax",
+      "ticker": "MUNY",
+      "marketValue": 10000
+    },
+    {
+      "accountId": "tax",
+      "ticker": "VOO",
+      "marketValue": 80000
+    }
+  ],
+  "strategy": {
+    "targets": {
+      "US_LARGE_CAP": 0.5,
+      "US_MID_CAP": 0,
+      "US_SMALL_CAP": 0,
+      "FIXED_INCOME": 0.5,
+      "US_TOTAL_MARKET": 0,
+      "DEVELOPED_INTL": 0,
+      "EMERGING_INTL": 0,
+      "ALTERNATIVES": 0,
+      "CASH": 0
+    },
+    "placement": {},
+    "toleranceAbs": 0.05,
+    "toleranceRel": 0.25,
+    "minTradeUsd": 100
+  },
+  "expected": {
+    "resolvedTrades": [
+      {
+        "accountId": "tax",
+        "ticker": "VOO",
+        "assetClass": "US_LARGE_CAP",
+        "deltaUsd": -30000
+      },
+      {
+        "accountId": "tax",
+        "ticker": null,
+        "assetClass": "FIXED_INCOME",
+        "deltaUsd": 30000
+      }
+    ],
+    "netByAccount": {
+      "tax": 0
+    }
+  }
+}

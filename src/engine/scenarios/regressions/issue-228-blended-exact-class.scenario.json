@@ -1,0 +1,79 @@
+{
+  "name": "issue-228-blended-exact-class",
+  "description": "Issue #228 review: a fund the user marked as blended must not win the exact-class preference just because its built-in class matches. VOO carries a custom {60% large cap, 40% bonds} decomposition, held with SCHB and BND. A plain large-cap buy can't execute through VOO without also buying bonds, and SCHB moves every cap sleeve — so the buy stays ticker-less. The first #228 fix named VOO here (and, separately, BND for the parent-level bond sell).",
+  "principle": [
+    4
+  ],
+  "accounts": [
+    {
+      "id": "k401",
+      "name": "401(k)",
+      "institution": "Fidelity",
+      "type": "FOUR_OH_ONE_K"
+    }
+  ],
+  "holdings": [
+    {
+      "accountId": "k401",
+      "ticker": "SCHB",
+      "marketValue": 40000
+    },
+    {
+      "accountId": "k401",
+      "ticker": "VOO",
+      "marketValue": 30000
+    },
+    {
+      "accountId": "k401",
+      "ticker": "BND",
+      "marketValue": 30000
+    }
+  ],
+  "decompositions": {
+    "VOO": {
+      "US_LARGE_CAP": 0.6,
+      "FIXED_INCOME": 0.4
+    }
+  },
+  "strategy": {
+    "targets": {
+      "US_LARGE_CAP": 0.6,
+      "US_MID_CAP": 0.1,
+      "US_SMALL_CAP": 0.1,
+      "FIXED_INCOME": 0.2,
+      "US_TOTAL_MARKET": 0,
+      "DEVELOPED_INTL": 0,
+      "EMERGING_INTL": 0,
+      "ALTERNATIVES": 0,
+      "CASH": 0
+    },
+    "placement": {},
+    "toleranceAbs": 0.05,
+    "toleranceRel": 0.25,
+    "minTradeUsd": 100
+  },
+  "expected": {
+    "resolvedTrades": [
+      {
+        "accountId": "k401",
+        "ticker": "SCHB",
+        "deltaUsd": 6800
+      },
+      {
+        "accountId": "k401",
+        "ticker": null,
+        "assetClass": "FIXED_INCOME",
+        "deltaUsd": -22000
+      },
+      {
+        "accountId": "k401",
+        "ticker": null,
+        "assetClass": "US_LARGE_CAP",
+        "deltaUsd": 15200
+      }
+    ],
+    "netByAccount": {
+      "k401": 0
+    }
+  }
+}

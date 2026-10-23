@@ -1,0 +1,80 @@
+{
+  "name": "issue-228-locked-exact-class",
+  "description": "Issue #228 review: the exact-class preference must not route a trade to a locked position. A 401(k) holds SCHB, VOO, BND and a LOCKED VO; the engine buys mid cap. Candidates are [SCHB, VO], but VO is frozen (Goal 1) and SCHB is a blended unit — so the mid-cap buy stays ticker-less for the user to choose a vehicle. The first #228 fix named VO here.",
+  "principle": [
+    1,
+    4
+  ],
+  "accounts": [
+    {
+      "id": "k401",
+      "name": "401(k)",
+      "institution": "Fidelity",
+      "type": "FOUR_OH_ONE_K"
+    }
+  ],
+  "holdings": [
+    {
+      "accountId": "k401",
+      "ticker": "SCHB",
+      "marketValue": 20000
+    },
+    {
+      "accountId": "k401",
+      "ticker": "VOO",
+      "marketValue": 60000
+    },
+    {
+      "accountId": "k401",
+      "ticker": "VO",
+      "marketValue": 2000,
+      "locked": true
+    },
+    {
+      "accountId": "k401",
+      "ticker": "BND",
+      "marketValue": 18000
+    }
+  ],
+  "strategy": {
+    "targets": {
+      "US_LARGE_CAP": 0.5,
+      "US_MID_CAP": 0.25,
+      "US_SMALL_CAP": 0.05,
+      "FIXED_INCOME": 0.2,
+      "US_TOTAL_MARKET": 0,
+      "DEVELOPED_INTL": 0,
+      "EMERGING_INTL": 0,
+      "ALTERNATIVES": 0,
+      "CASH": 0
+    },
+    "placement": {},
+    "toleranceAbs": 0.05,
+    "toleranceRel": 0.25,
+    "minTradeUsd": 100
+  },
+  "expected": {
+    "resolvedTrades": [
+      {
+        "accountId": "k401",
+        "ticker": "SCHB",
+        "deltaUsd": 3528
+      },
+      {
+        "accountId": "k401",
+        "ticker": "VOO",
+        "assetClass": "US_LARGE_CAP",
+        "deltaUsd": -22118
+      },
+      {
+        "accountId": "k401",
+        "ticker": null,
+        "assetClass": "US_MID_CAP",
+        "deltaUsd": 18590
+      }
+    ],
+    "netByAccount": {
+      "k401": 0
+    }
+  }
+}

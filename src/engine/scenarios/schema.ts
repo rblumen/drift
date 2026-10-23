@@ -29,6 +29,19 @@ const expectedTradeSchema = z
   })
   .strict();
 
+// An expected trade *after vehicle resolution* (resolveTradeVehicles — what the
+// trade list shows). Matched on accountId + ticker; `ticker: null` asserts a
+// ticker-less row (greenfield / ambiguous), which is then matched on assetClass.
+// assetClass is optional for ticker'd rows and asserted when present.
+const expectedResolvedTradeSchema = z
+  .object({
+    accountId: z.string().min(1),
+    ticker: z.string().min(1).nullable(),
+    assetClass: ASSET_CLASS.optional(),
+    deltaUsd: z.number(),
+  })
+  .strict();
+
 // An expected flag. `kind` is required; any flag-specific fields (assetClass,
 // amountUsd, taxableShare, …) are matched when present. Extra scalar fields are
 // allowed so each flag kind can carry its own shape, but values are type-checked.
@@ -46,6 +59,10 @@ const expectedSchema = z
     // tolerance). Use to pin a specific trade in a large set without
     // enumerating all of them — the complement of forbiddenTrades.
     requiredTrades: z.array(expectedTradeSchema).optional(),
+    // Exhaustive: the trade list as displayed (after resolveTradeVehicles merges
+    // per-class trades onto held tickers). Zero-dollar rows are ignored. Use to
+    // assert which fund a trade executes against (issue #228).
+    resolvedTrades: z.array(expectedResolvedTradeSchema).optional(),
     // Presence (subset): each listed flag must appear in the result. Other flags
     // the engine emits (e.g. WITHIN_TOLERANCE) are not asserted against.
     flags: z.array(expectedFlagSchema).optional(),
@@ -139,4 +156,5 @@ export const scenarioSchema = z
 
 export type Scenario = z.infer<typeof scenarioSchema>;
 export type ExpectedTrade = z.infer<typeof expectedTradeSchema>;
+export type ExpectedResolvedTrade = z.infer<typeof expectedResolvedTradeSchema>;
 export type ExpectedFlag = z.infer<typeof expectedFlagSchema>;
