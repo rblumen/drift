@@ -8,6 +8,8 @@
 import { describe, it, expect } from 'vitest';
 import { scenarioSchema, type Scenario, type ExpectedFlag } from './schema';
 import { rebalance } from '../rebalance';
+import { resolveTradeVehicles } from '../resolve';
+import { makeClassifier } from '../classify';
 import { ALL_ASSET_CLASSES } from '../types';
 import type { Account, Position, Strategy, AssetClass, RebalanceResult } from '../types';
 
@@ -94,6 +96,55 @@ function assertScenario(s: Scenario, result: RebalanceResult): void {
         hit?.inTaxableAccount,
         `inTaxableAccount for ${et.accountId}/${et.assetClass} — ${s.description}`,
       ).toBe(et.inTaxableAccount);
+    }
+  }
+
+  // ── resolvedTrades — exhaustive, as the trade list displays them (#228) ────
+  if (expected.resolvedTrades) {
+    // Mirror App.tsx: resolve the engine's trades against the original holdings.
+    const resolved = resolveTradeVehicles(
+      result.trades,
+      s.holdings as Position[],
+      s.decompositions ?? {},
+      makeClassifier(s.tickerOverrides ?? {}),
+      s.strategy.targets,
+    );
+    const norm = (t: { accountId: string; ticker?: string | null; assetClass?: string; deltaUsd: number }) => ({
+      accountId: t.accountId,
+      ticker: t.ticker ?? null,
+      // Ticker'd rows are identified by ticker; class only disambiguates ticker-less rows.
+      assetClass: t.ticker ? undefined : t.assetClass,
+      deltaUsd: Math.round(t.deltaUsd),
+    });
+    const key = (t: ReturnType<typeof norm>) => `${t.accountId}|${t.ticker ?? ''}|${t.assetClass ?? ''}`;
+    const actual = resolved.map(norm).filter(t => t.deltaUsd !== 0);
+    const want = expected.resolvedTrades.map(norm);
+    const fmt = (ts: ReturnType<typeof norm>[]) =>
+      ts.map(t => `${key(t)} ${t.deltaUsd}`).sort().join('\n    ');
+    // One-to-one: each actual row can satisfy only one expected row, so two
+    // ticker-less rows of the same class can't both match the same actual row.
+    const unmatched = [...actual];
+    const ok =
+      actual.length === want.length &&
+      want.every(w => {
+        const i = unmatched.findIndex(a =>
+          key(a) === key(w) &&
+          Math.abs(a.deltaUsd - w.deltaUsd) <= Math.max(1, Math.abs(w.deltaUsd) * 0.005));
+        if (i < 0) return false;
+        unmatched.splice(i, 1);
+        return true;
+      });
+    if (!ok) {
+      throw new Error(
+        `resolvedTrades mismatch — ${s.description}\n` +
+          `  expected:\n    ${fmt(want)}\n  actual:\n    ${fmt(actual)}`,
+      );
+    }
+    // Ticker'd rows may also pin their displayed class.
+    for (const w of expected.resolvedTrades) {
+      if (!w.ticker || !w.assetClass) continue;
+      const hit = resolved.find(r => r.accountId === w.accountId && r.ticker === w.ticker);
+      expect(hit?.assetClass, `resolved class for ${w.accountId}/${w.ticker} — ${s.description}`).toBe(w.assetClass);
     }
   }
 
