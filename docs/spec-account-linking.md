@@ -1,7 +1,7 @@
 # Spec & Implementation Plan: Account Linking (Closed Beta)
 
-**Status:** Draft for review (revision 3: households data model and stack-review
-fixes folded in) · **Target:** Appendix A of
+**Status:** Draft for review (revision 4: households data model, stack-review
+fixes, and unified vocabulary) · **Target:** Appendix A of
 [`plan-account-linking.md`](plan-account-linking.md) (closed beta, invited
 friends & family, web-hosted) · **Background and rationale:** see that doc ·
 **Household requirements:** [`spec-households.md`](spec-households.md).
@@ -10,16 +10,19 @@ This document turns the exploration into something buildable. It records the
 decisions, specifies what gets built, and breaks it into PR-sized milestones
 with exit criteria. `<domain>` stands for the custom domain, not yet chosen.
 
-**Vocabulary** (defined in [`spec-households.md`](spec-households.md) §2):
+**Vocabulary.** These terms are defined in
+[`spec-households.md`](spec-households.md) §2 and mean the same thing in the
+docs, the UI, and the schema:
 
 | Term | Meaning |
 |---|---|
-| Drift user | A person's login |
+| Drift user | A person who signs in to Drift |
+| Profile | A Drift user's own settings, preferences, and info. Never "account" |
 | Household | A group of Drift users that share access to portfolios |
 | Portfolio | Accounts plus one strategy (today's `AppState`) |
-| Portfolio account | An `Account` inside a portfolio, which the engine rebalances |
-| Brokerage login | One SnapTrade connection |
-| Brokerage account | One real account inside a brokerage login |
+| Account | A brokerage account as it appears in a portfolio (`Account` in `AppState`), e.g. "Schwab Roth IRA" |
+| Linked account | An account whose holdings sync from a brokerage login (table `linked_accounts`). Otherwise the account is *manual* (CSV or hand entry) |
+| Brokerage login | One SnapTrade connection to an institution; can contain several linked accounts |
 
 ---
 
@@ -61,8 +64,8 @@ with exit criteria. `<domain>` stands for the custom domain, not yet chosen.
 | D3 | Aggregator | **SnapTrade**, Commercial key. Free tier (5 connected users) during the personal phase, pay-as-you-go (~$2 per connected Drift user/month) after. The Personal key is used only for the throwaway spike. **Conditional on M0 showing workplace 401(k) coverage**; see D20 |
 | D4 | Brokerage access | Read-only holdings, balances, and positions. No trading endpoints are called, and the code must not include them |
 | D5 | Login | **Email + password, plus magic link** (Supabase Auth). Password reset by email. **TOTP MFA available as an opt-in during the beta** (free in Supabase, and expected by the FTC Safeguards Rule; exploration §8). Required MFA is a public-launch decision |
-| D6 | Invite gating | Public signups disabled in Supabase. Users are invited by email, either by you from the waitlist or by a household owner into their household (`spec-households.md` R2). The invite link lets them set a password. Non-invited visitors can join a **waitlist** |
-| D7 | Who writes what | **One writer per column.** The server alone writes synced brokerage data (`brokerage_logins`, `brokerage_accounts`, `holdings`, `sync_runs`). Users write their decisions (portfolio state, account assignments, owner labels), always through the database functions in §4.3 that check household role. No table row has two writers |
+| D6 | Invite gating | Public signups disabled in Supabase. Only two kinds of invite exist: **you** invite from the waitlist, and a **household owner** invites members into their own household (`spec-households.md` R2). Beta users can't invite anyone else; they can refer friends (§5.2a), and you decide whom to invite. The invite link lets them set a password. Non-invited visitors can join a **waitlist** |
+| D7 | Who writes what | **One writer per column.** The server alone writes synced brokerage data (`brokerage_logins`, `linked_accounts`, `holdings`, `sync_runs`). Users write their decisions (portfolio state, account assignments, owner labels), always through the database functions in §4.3 that check household role. No table row has two writers |
 | D8 | Composing positions | A shared **pure** function combines a portfolio's `AppState` with its assigned holdings into the engine's `Position[]`. Runs in the browser now; importable by server code for later features |
 | D9 | Engine location | Browser for the interactive loop, unchanged. Server code must be able to import it (it's already pure) for scheduled syncs and MCP later |
 | D10 | Secrets at rest | SnapTrade `userSecret` encrypted at the application level (AES-256-GCM) with a **versioned keyring** (`TOKEN_ENC_KEYS`), so the key can be rotated. Holdings stay plain rows, protected by RLS and Supabase's disk encryption, so they remain queryable. Threat model in §8 |
@@ -73,7 +76,7 @@ with exit criteria. `<domain>` stands for the custom domain, not yet chosen.
 | D15 | Budget ceiling | $0/mo during the personal phase (plus domain ~$1/mo); up to ~$100/mo during the beta |
 | D16 | Households | Access is granted per **household** (owner / editor / viewer). A Drift user can belong to several households. A hard privacy boundary means a separate household under the same Drift user. Mine/hers/joint is a label, never an access boundary. Requirements: `spec-households.md` |
 | D17 | Supabase keys & tokens | Use the **new API keys** (`sb_publishable_…` in the browser, `sb_secret_…` on the server) and **asymmetric JWT signing keys** from day one. The legacy `anon`/`service_role` keys are being retired and can't be rotated. Functions verify access tokens locally against the project's JWKS (`jose`) |
-| D18 | Least privilege on the server | Functions act **as the user** (a Supabase client carrying the caller's token, so RLS applies). The secret key is used only for `snaptrade_users`, `waitlist`, rate limits, and account deletion |
+| D18 | Least privilege on the server | Functions act **as the user** (a Supabase client carrying the caller's token, so RLS applies). The secret key is used only for `snaptrade_users`, `waitlist`, rate limits, and Drift-user deletion |
 | D19 | Environments | Two Supabase projects: **staging** (local dev and Vercel preview deploys) and **production** (production deploys only). Preview URLs are allowed as auth redirects in staging only. Real brokerage data only in production |
 | D20 | Aggregator fallback | **Plaid Investments** is the named second adapter, triggered if M0 shows SnapTrade can't read your workplace 401(k) (Empower, Fidelity NetBenefits). The pure-adapter design (§6.1) keeps this to a new adapter plus server routes. Until then, uncovered accounts stay on CSV |
 | D21 | Error monitoring | **Sentry for `api/` only**, with `sendDefaultPii: false`, no request or response bodies, and a `beforeSend` that keeps only route, status, error type, and stack. No client-side SDK in the beta |
@@ -208,7 +211,7 @@ RLS: the linker can select. Household members can select logins that have an
 account assigned in their household, so they can show "needs reconnection by
 <name>". Writes server-only.
 
-#### `brokerage_accounts` — one row per real account (server-written)
+#### `linked_accounts` — one row per real account (server-written)
 | Column | Type | Notes |
 |---|---|---|
 | `id` | `text` PK | SnapTrade account ID |
@@ -222,13 +225,13 @@ account assigned in their household, so they can show "needs reconnection by
 
 RLS: same visibility as `brokerage_logins`. Writes server-only.
 
-#### `account_assignments` — which portfolio a brokerage account feeds (user-written)
+#### `account_assignments` — which portfolio a linked account feeds (user-written)
 | Column | Type | Notes |
 |---|---|---|
-| `brokerage_account_id` | `text` → `brokerage_accounts(id)` on delete cascade | PK part |
-| `household_id` | `uuid` → `households(id)` on delete cascade | PK part. PK `(brokerage_account_id, household_id)` enforces **at most one portfolio per household**; the same account may be in several households |
+| `linked_account_id` | `text` → `linked_accounts(id)` on delete cascade | PK part |
+| `household_id` | `uuid` → `households(id)` on delete cascade | PK part. PK `(linked_account_id, household_id)` enforces **at most one portfolio per household**; the same account may be in several households |
 | `portfolio_id` | `uuid` not null | Composite FK `(portfolio_id, household_id)` → `portfolios(id, household_id)`, so the portfolio must belong to that household |
-| `portfolio_account_id` | `text` null | The `Account.id` inside that portfolio's `AppState` that this feeds; null until mapped |
+| `account_id` | `text` null | The `Account.id` inside that portfolio's `AppState` that this feeds; null until mapped |
 | `owner_person_ids` | `uuid[]` not null default `{}` | Owner labels (`household_people`); several ids means joint |
 | `assigned_by` / `assigned_at` | | |
 
@@ -239,11 +242,11 @@ RLS: select if any role in the portfolio's household. Writes only through
   The linker can add it to every household they edit, one portfolio in each.
 - Any editor can move an account between portfolios of the same household,
   map it, or change its owner labels.
-- A move clears `portfolio_account_id`.
+- A move clears `account_id`.
 - Assignments in different households are independent rows. Nothing in one
   household's rows reveals the account's other households to its members.
 
-Whether several brokerage accounts may map to one portfolio account is an open
+Whether several linked accounts may map to one account is an open
 general import question, tracked in
 [#234](https://github.com/rblumen/drift/issues/234). Linking follows whatever
 that issue decides for CSV import.
@@ -252,9 +255,9 @@ that issue decides for CSV import.
 | Column | Type | Notes |
 |---|---|---|
 | `household_id` | `uuid` → `households(id)` on delete cascade | PK part. Detection and decisions are per household |
-| `brokerage_account_id` | `text` → `brokerage_accounts(id)` on delete cascade | PK part; the duplicate |
-| `duplicate_of` | `text` → `brokerage_accounts(id)` on delete cascade | PK part; the primary |
-| `status` | `text` not null | `suggested`, `confirmed`, `rejected` |
+| `linked_account_id` | `text` → `linked_accounts(id)` on delete cascade | PK part |
+| `other_linked_account_id` | `text` → `linked_accounts(id)` on delete cascade | PK part |
+| `status` | `text` not null | `suggested` or `rejected` ("not the same account") |
 | `decided_by` / `decided_at` | | |
 
 Detection rules are in `spec-households.md` R5:
@@ -263,15 +266,19 @@ Detection rules are in `spec-households.md` R5:
   trigger enforces both. Unassigned accounts, and accounts in other
   households, are never compared.
 - A match needs the same institution and the same mask.
-- A `confirmed` duplicate's assignment in that household is excluded from
-  composition. Its assignments in other households are unaffected.
+- **Confirming removes the duplicate.** The user picks which copy to keep
+  (default: the one already mapped). The other copy's assignment in that
+  household is deleted in the same transaction, and the suggestion row goes
+  with it. A `household_events` row records the decision. The removed copy's
+  assignments in other households, and the linker's own record, are
+  unaffected. No backup copy is kept.
 
 RLS: select by members of that household. Decisions go through `api/v1/`.
 
-#### `holdings` — current positions per brokerage account (server-written)
+#### `holdings` — current positions per linked account (server-written)
 | Column | Type | Notes |
 |---|---|---|
-| `brokerage_account_id` | `text` not null → `brokerage_accounts(id)` on delete cascade | PK part |
+| `linked_account_id` | `text` not null → `linked_accounts(id)` on delete cascade | PK part |
 | `security_id` | `text` not null | PK part. SnapTrade's security ID, or `CASH:<currency>` for cash balances |
 | `ticker` | `text` **null** | Many 401(k) funds (collective trusts) have none |
 | `cusip` | `text` null | When available |
@@ -338,13 +345,13 @@ atomically.
 |---|---|---|
 | `create_household(name)` | user | Household + owner membership + a "Me" person |
 | `create_portfolio(household_id, name, state)` | editor+ | |
-| `save_portfolio(portfolio_id, seen_revision, state, mappings jsonb)` | editor+ | Updates `state` only if `revision = seen_revision`, applies mapping changes (`portfolio_account_id` per brokerage account), sets `updated_by`, increments revision. Returns the new revision, or a conflict carrying the current row. Creating a portfolio account and mapping to it are one call, so no mapping is orphaned |
-| `assign_account(brokerage_account_id, portfolio_id, owner_person_ids)` / `unassign_account(…)` | linker, editor+ in target | |
-| `move_account(brokerage_account_id, portfolio_id)` | editor+ (same household) or linker | |
-| `replace_holdings(brokerage_account_id, rows jsonb, as_of)` | server (user's token) | Checks the caller is the linker. Deletes the account's holdings and inserts the new set in one transaction |
+| `save_portfolio(portfolio_id, seen_revision, state, mappings jsonb)` | editor+ | Updates `state` only if `revision = seen_revision`, applies mapping changes (`account_id` per linked account), sets `updated_by`, increments revision. Returns the new revision, or a conflict carrying the current row. Creating an account and mapping to it are one call, so no mapping is orphaned |
+| `assign_account(linked_account_id, portfolio_id, owner_person_ids)` / `unassign_account(…)` | linker, editor+ in target | |
+| `move_account(linked_account_id, portfolio_id)` | editor+ (same household) or linker | |
+| `replace_holdings(linked_account_id, rows jsonb, as_of)` | server (user's token) | Checks the caller is the linker. Deletes the account's holdings and inserts the new set in one transaction |
 | `begin_sync(trigger, portfolio_id)` / `finish_sync(run_id, …)` | server (user's token) | Returns an existing unexpired `running` run instead of starting another |
 
-`composePositions` treats a `portfolio_account_id` that no longer exists in
+`composePositions` treats a `account_id` that no longer exists in
 `AppState` as unmapped. The account reappears in the mapping UI and isn't
 dropped silently.
 
@@ -355,8 +362,8 @@ None to the schema version. All of these are optional with defaults:
 // Per-position overrides on linked accounts (synced positions aren't in AppState.positions).
 linkedPositionOverrides: z.record(z.string(), z.object({ locked: z.boolean() }))
   .optional().default({}),
-  // key: `${portfolioAccountId}:${tickerOrSecKey}`
-// Owner labels for CSV/manual portfolio accounts (linked ones use account_assignments).
+  // key: `${accountId}:${tickerOrSecKey}`
+// Owner labels for manual accounts (linked ones use account_assignments).
 // On accountSchema:
 ownerPersonIds: z.array(z.string()).optional(),
 // Local-only mode's list of people; signed-in mode uses household_people.
@@ -367,14 +374,13 @@ people: z.array(z.object({ id: z.string(), name: z.string() })).optional().defau
 ```ts
 export function composePositions(
   state: AppState,
-  linked: LinkedHolding[],   // the portfolio's assigned holdings (confirmed duplicates
-                             // excluded), joined with portfolio_account_id
+  linked: LinkedHolding[],   // the portfolio's assigned holdings, joined with account_id
 ): Position[]
 ```
-- A portfolio account with linked brokerage accounts takes its positions
+- An account with linked accounts takes its positions
   **only** from their `holdings`. `AppState.positions` rows for that account
-  are ignored. Behavior when several brokerage accounts map to one portfolio
-  account follows #234.
+  are ignored. Behavior when several linked accounts map to one account
+  follows #234.
 - Other accounts use `AppState.positions` (CSV/manual), as today.
 - `lastUpdatedAt` = the holding's `as_of`, so the existing freshness indicator
   (`src/ingest/freshness.ts`) shows real sync times.
@@ -387,8 +393,9 @@ export function composePositions(
 ## 5. Client behavior
 
 ### 5.1 Landing page and sign-in
-- The landing page (`src/ui/LandingPage.tsx`) keeps "Use Drift without an
-  account" as today and adds **Sign in**.
+- The landing page (`src/ui/LandingPage.tsx`) relabels "Use Drift without an
+  account" to "Use Drift without signing in", since "account" now means a
+  brokerage account in a portfolio, and adds **Sign in**.
 - The sign-in page:
   - states that Drift is in **closed beta**, invite-only;
   - offers email + password, "Email me a sign-in link," and "Forgot password";
@@ -399,11 +406,11 @@ export function composePositions(
   Household invites then land in that household.
 - All auth links use the PKCE flow and land on `<domain>`. The app exchanges
   the code and **strips it from the URL**, as it does with `?demo` today.
-- Settings → Security: enable/disable an authenticator app (TOTP).
+- Profile → Security: enable/disable an authenticator app (TOTP).
 
 ### 5.2 Waitlist
 - `POST /api/v1/waitlist` stores the email.
-  - Duplicate emails succeed silently (no account-existence leak).
+  - Duplicate emails succeed silently (no user-existence leak).
   - Spam protection: a hidden honeypot field and a per-IP rate limit
     (`rate_limits` table). Add Cloudflare Turnstile only if spam shows up.
 - No confirmation email in the beta, so nothing to send or track.
@@ -412,7 +419,7 @@ export function composePositions(
 
 ### 5.2a Referrals (M7, once beta users exist)
 - Each signed-in user sees a personal link, `https://<domain>/join?ref=<code>`,
-  under Settings → "Invite a friend."
+  under Profile → "Invite a friend."
 - The link opens the waitlist form with the code attached; the signup is
   stored with `referral_code`. "How did you hear" is pre-set to
   `friend_family`.
@@ -460,7 +467,7 @@ export function composePositions(
 A new "Linked accounts" source in `src/ui/PositionsPanel.tsx`:
 1. **Connect a brokerage:** call `POST /api/v1/snaptrade/connect`, open the
    returned SnapTrade portal URL. On return, call sync.
-2. **Assign:** each new brokerage account starts unassigned and is visible only
+2. **Assign:** each new linked account starts unassigned and is visible only
    to the linker. For each one, the user picks at most one portfolio in each
    household they edit, sets owner labels (default: themselves), or leaves it
    unassigned. The linker sees everywhere an account is assigned; other
@@ -468,14 +475,14 @@ A new "Linked accounts" source in `src/ui/PositionsPanel.tsx`:
 3. **Sync now:** call `POST /api/v1/snaptrade/sync`. The server stores holdings
    and returns the updated accounts and holdings, so the panel updates without
    a second request.
-4. **Mapping:** any assigned account with no `portfolio_account_id` goes
-   through the existing "Map accounts" UI. Options are an existing portfolio
-   account, or "Create a new account" (pre-filled with institution and name;
+4. **Mapping:** any assigned account with no `account_id` goes
+   through the existing "Map accounts" UI. Options are an existing account
+   in the portfolio, or "Create a new account" (pre-filled with institution and name;
    the user confirms the account type). Saved through `save_portfolio`, so
    creating and mapping are atomic. Later syncs need no mapping.
 5. **Duplicates:** when a suggested duplicate exists, show "Schwab ••1234
-   linked by <name> looks like this one. Same account?" (`spec-households.md`
-   R5).
+   linked by <name> looks like this one. Same account?" Yes asks which copy to
+   keep and removes the other from this household (`spec-households.md` R5).
 6. **Auto-sync on open:** if signed in and the oldest `last_synced_at` among
    the user's own logins is over 12 hours old, sync once in the background.
 7. **Connection list:** the user's brokerage logins with status ("needs
@@ -483,7 +490,7 @@ A new "Linked accounts" source in `src/ui/PositionsPanel.tsx`:
    broken logins show "needs reconnection by <name>" with no actions.
 
 CSV import stays available for accounts SnapTrade doesn't cover. Accounts with
-a linked brokerage account show "Synced" instead of CSV import.
+a linked account show "Synced" instead of CSV import.
 
 ### 5.6 Households and portfolios
 Portfolio switcher, household settings (members, invite form with role
@@ -496,11 +503,11 @@ drift, suggested trades) to the clipboard. Built next to
 `src/ui/exportReport.ts`. Works in local-only and signed-in modes; nothing is
 sent anywhere by Drift.
 
-### 5.8 Account deletion
-Settings gets "Delete my Drift user account." `DELETE /api/v1/account`:
+### 5.8 Deleting a Drift user
+Profile gets "Delete my Drift user and all my data." `DELETE /api/v1/me`:
 1. deletes the SnapTrade user, which removes all brokerage connections and
    stops billing;
-2. removes the user's memberships, so their brokerage accounts leave every
+2. removes the user's memberships, so their linked accounts leave every
    portfolio;
 3. deletes households where they were the only member;
 4. deletes the Supabase auth user, which cascades their remaining rows.
@@ -509,7 +516,7 @@ Settings gets "Delete my Drift user account." `DELETE /api/v1/account`:
 - If the SnapTrade call fails, the request fails and nothing else is deleted,
   so the user can retry.
 - A pending-deletion flag records the attempt. A daily job retries flagged
-  deletions, so no account stays half-deleted and SnapTrade doesn't keep
+  deletions, so no Drift user stays half-deleted and SnapTrade doesn't keep
   billing.
 
 `localStorage` is untouched.
@@ -530,17 +537,17 @@ All endpoints except waitlist:
 | Endpoint | Behavior |
 |---|---|
 | `POST /snaptrade/connect` | Ensure a `snaptrade_users` row (register + store encrypted secret if missing; secret key). Return `{ url }` for the SnapTrade portal, read-only connection |
-| `POST /snaptrade/sync` | `begin_sync`; list the caller's logins and accounts; fetch holdings/balances (accounts in parallel, max 4 at a time); normalize (§6.1); upsert `brokerage_logins`/`brokerage_accounts` (server-written columns only); `replace_holdings` per account; refresh duplicate suggestions; `finish_sync`. Return `{ accounts, holdings, run }`. If the time budget (§6.2) runs out, finish as `partial`; the next run picks up the rest |
+| `POST /snaptrade/sync` | `begin_sync`; list the caller's logins and accounts; fetch holdings/balances (accounts in parallel, max 4 at a time); normalize (§6.1); upsert `brokerage_logins`/`linked_accounts` (server-written columns only); `replace_holdings` per account; refresh duplicate suggestions; `finish_sync`. Return `{ accounts, holdings, run }`. If the time budget (§6.2) runs out, finish as `partial`; the next run picks up the rest |
 | `GET /snaptrade/connections` | The caller's brokerage logins with status |
 | `DELETE /snaptrade/connections/:id` | Remove a login at SnapTrade, then delete its rows (cascades accounts, assignments, holdings) |
 | `POST /households/:id/invites` | Owner only. Create invite (hashed token), send email. Body: `email`, `role` |
 | `DELETE /households/:id/invites/:inviteId` | Owner only. Revoke |
 | `POST /invites/accept` | Body: token. Validates, adds membership, admits to the beta if the user is new |
 | `PATCH /households/:id/members/:userId` | Owner only. Change role (not the last owner) |
-| `DELETE /households/:id/members/:userId` | Owner, or self (leave). Unassigns the member's brokerage accounts |
+| `DELETE /households/:id/members/:userId` | Owner, or self (leave). Unassigns the member's linked accounts |
 | `POST /portfolios/:id/copy` | Copy a portfolio's state into a household the caller edits |
-| `POST /duplicates/decide` | Confirm or reject a duplicate suggestion |
-| `DELETE /account` | Full deletion (§5.8) |
+| `POST /duplicates/decide` | Confirm (body names the copy to keep; the other is removed from the household) or reject a suggestion |
+| `DELETE /me` | Full deletion of the caller's Drift user (§5.8) |
 | `POST /waitlist` | Unauthenticated; honeypot + rate limit; insert into `waitlist` |
 | `GET /health` | Verifies the token; also the target of a daily Vercel Cron ping |
 
@@ -556,7 +563,7 @@ aggregator adapter. Imported by `api/`.
 ```ts
 export function normalizeSnapTrade(
   accounts: SnapTradeAccountHoldings[],
-): { logins: BrokerageLoginRow[]; accounts: BrokerageAccountRow[];
+): { logins: BrokerageLoginRow[]; accounts: LinkedAccountRow[];
      holdings: HoldingRow[]; errors: string[] }
 ```
 
@@ -633,7 +640,7 @@ raise it if needed.
     cash in two currencies, multiple lots, ticker-less fund, missing cost
     basis, bad rows. Fixtures are synthetic only.
   - `composePositions`: linked vs CSV accounts, overrides, `SEC:` keys,
-    excluded duplicates, stale `portfolio_account_id`, freshness timestamps.
+    stale `account_id`, freshness timestamps.
   - `src/sync/merge.ts`: disjoint sections merge, same-section conflict
     surfaces, offline queue replay.
   - `remoteStore` save/conflict/retry with a mocked Supabase client.
@@ -648,7 +655,7 @@ raise it if needed.
     `spec-households.md` R1.
   - Nobody reads `snaptrade_users`, `waitlist`, `household_invites`, or
     `rate_limits`.
-  - A brokerage account can't be assigned to two portfolios in one household,
+  - A linked account can't be assigned to two portfolios in one household,
     but can be assigned in two households.
   - Duplicates from the same login, or spanning households, are rejected.
   - A member of one household can't detect another household's assignment of
@@ -665,7 +672,7 @@ raise it if needed.
   - Link → assign → sync → map → rebalance on desktop and phone.
   - Check the network tab and `localStorage` for secrets.
   - Check that auth emails pass SPF, DKIM, and DMARC.
-  - Delete the account and confirm the SnapTrade user is gone.
+  - Delete the Drift user and confirm the SnapTrade user is gone.
   - Before M7: the household flow in M5b's exit criteria.
 
 ---
@@ -808,7 +815,7 @@ Each milestone is one PR to `main` on a `feat/<issue>-…` branch, per
   - a killed sync doesn't block the next one past its lease.
 
 ### M6 — Deletion, notices, copy, AI summary
-- `DELETE /api/v1/account` (idempotent, retried) and the Settings control.
+- `DELETE /api/v1/me` (idempotent, retried) and the Profile control.
 - SnapTrade inactive-user admin script.
 - Privacy notice (including sharing with household members) and ToS; landing
   and README copy so "no account required" describes local-only mode
@@ -817,9 +824,9 @@ Each milestone is one PR to `main` on a `feat/<issue>-…` branch, per
 - Breach-response note in `docs/`, including the encryption-key rotation
   procedure.
 - **Exit:**
-  - account deletion removes the auth user, all of the user's rows, their
+  - deleting a Drift user removes the auth user, all of the user's rows, their
     shares, and the SnapTrade user;
-  - a forced SnapTrade failure leaves the account intact and retryable.
+  - a forced SnapTrade failure leaves the Drift user intact and retryable.
 
 ### Gate 1 — Personal phase (you only)
 Only your email invited. Use it for a few weeks on desktop and phone. Cost
@@ -834,7 +841,7 @@ volume.
 - Moving accounts between portfolios of a household; adding an account to
   several households.
 - Owner labels on linked accounts (`household_people`, `owner_person_ids`).
-- Duplicate detection and the confirm/reject prompt.
+- Duplicate detection; confirming removes the other copy from the household.
 - "Last edited by"; `household_events` view.
 - **Exit:** you and your spouse each link your own logins into one shared
   household, confirm the joint account as one, and both edit "Ours" from
@@ -861,9 +868,9 @@ adviser role), or start public-launch work.
 ## 12. Open questions
 
 1. Which domain? Settled by the M0a spike.
-2. Should beta users get a small quota of **non-household** invites, or does
-   every non-household invite stay with you? (Household invites are always
-   allowed.)
+2. ~~Invite quotas for beta users?~~ **Resolved:** beta users invite
+   household members only. Everyone else comes through referral and your
+   invite (D6).
 3. Does SnapTrade cover your workplace 401(k)? Settled by M0. If not, decide
    on Plaid (D20) or CSV.
 4. Household open questions: `spec-households.md` §7.
