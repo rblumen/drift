@@ -1,14 +1,15 @@
-# Spec & Implementation Plan: Account Linking (Closed Beta)
+# Spec: Account Linking (Closed Beta)
 
-**Status:** Draft for review (revision 4: households data model, stack-review
-fixes, and unified vocabulary) · **Target:** Appendix A of
-[`plan-account-linking.md`](plan-account-linking.md) (closed beta, invited
-friends & family, web-hosted) · **Background and rationale:** see that doc ·
-**Household requirements:** [`spec-households.md`](spec-households.md).
+**Status:** Draft for review · **Scope:** the product for the closed beta
+(invited friends & family, web-hosted) · **Background and rationale:**
+[`study-account-linking.md`](study-account-linking.md) · **Household
+requirements:** [`spec-households.md`](spec-households.md) · **How it gets
+built:** [`build-plan-account-linking.md`](build-plan-account-linking.md).
 
-This document turns the exploration into something buildable. It records the
-decisions, specifies what gets built, and breaks it into PR-sized milestones
-with exit criteria. `<domain>` stands for the custom domain, not yet chosen.
+This document specifies what Drift becomes: decisions, data model, behavior,
+API, and security requirements. Sequencing and ownership live in the build
+plan. Milestone IDs mentioned here (M0a–M8) refer to it. `<domain>` stands for
+the custom domain, not yet chosen.
 
 **Vocabulary.** These terms are defined in
 [`spec-households.md`](spec-households.md) §2 and mean the same thing in the
@@ -39,7 +40,7 @@ docs, the UI, and the schema:
    drift alerts, LLM access) can work without a browser open.
 5. Rollout in order: **you alone → you and your spouse as a household →
    invited friends & family**, with no re-architecture between steps.
-6. **Local-only mode keeps working** exactly as today for anyone who doesn't
+6. **Guest mode (no signup) keeps working** exactly as today for anyone who doesn't
    sign in.
 
 ### Non-goals (this spec)
@@ -68,7 +69,7 @@ docs, the UI, and the schema:
 | D6 | Invite gating | Public signups disabled in Supabase. Only two kinds of invite exist: **you** invite from the waitlist, and a **household owner** invites members into their own household (`spec-households.md` R2). Beta users can't invite anyone else; they can refer friends (§5.2a), and you decide whom to invite. The invite link lets them set a password. Non-invited visitors can join a **waitlist** |
 | D7 | Who writes what | **One writer per column.** The server alone writes synced brokerage data (`brokerage_logins`, `linked_accounts`, `holdings`, `sync_runs`). Users write their decisions (portfolio state, account assignments, owner labels), always through the database functions in §4.3 that check household role. No table row has two writers |
 | D8 | Composing positions | A shared **pure** function combines a portfolio's `AppState` with its assigned holdings into the engine's `Position[]`. Runs in the browser now; importable by server code for later features |
-| D9 | Engine location | **One engine, one implementation, run in the browser.** `src/engine/` is pure TypeScript with no DOM or Node APIs. The browser bundles it; server code imports **the same module from the same commit** only when a §10 feature needs it, never a copy or a port. Browser because: local-only mode needs it; interactive edits recompute in milliseconds, where a server round-trip would add ~100–500 ms per edit (more on cold starts); and it works offline. Guards against the two runtimes diverging: (1) CI fails if `src/engine/` imports anything environment-specific; (2) the scenario suite already runs in Node via Vitest, which is the server runtime; (3) browser bundle and functions deploy atomically from one commit, and server-computed results record the engine's git SHA; (4) an open tab on an older bundle gets a "new version — reload" prompt |
+| D9 | Engine location | **One engine, one implementation, run in the browser.** `src/engine/` is pure TypeScript with no DOM or Node APIs. The browser bundles it; server code imports **the same module from the same commit** only when a §10 feature needs it, never a copy or a port. Browser because: guest mode needs it; interactive edits recompute in milliseconds, where a server round-trip would add ~100–500 ms per edit (more on cold starts); and it works offline. Guards against the two runtimes diverging: (1) CI fails if `src/engine/` imports anything environment-specific; (2) the scenario suite already runs in Node via Vitest, which is the server runtime; (3) browser bundle and functions deploy atomically from one commit, and server-computed results record the engine's git SHA; (4) an open tab on an older bundle gets a "new version — reload" prompt |
 | D10 | Secrets at rest | SnapTrade `userSecret` encrypted at the application level (AES-256-GCM) with a **versioned keyring** (`TOKEN_ENC_KEYS`), so the key can be rotated. Holdings stay plain rows, protected by RLS and Supabase's disk encryption, so they remain queryable. Threat model in §8 |
 | D11 | Outgoing email | **Resend** as Supabase Auth's custom SMTP and for app email. SPF, DKIM, and DMARC on `<domain>`. **No portfolio data in any email**; open/click tracking off |
 | D12 | Incoming email | **Cloudflare Email Routing** forwards `support@<domain>` to your inbox (free). Upgrade to a real mailbox if replying as support becomes awkward |
@@ -90,7 +91,7 @@ docs, the UI, and the schema:
 
 ```
 Browser (existing SPA)
- ├─ Local-only mode: unchanged, localStorage only
+ ├─ Guest mode: unchanged, localStorage only
  └─ Signed-in mode:
      ├─ Supabase JS client (publishable key + user session)
      │    ├─ read households, portfolios, assigned holdings (RLS by membership)
@@ -169,6 +170,7 @@ RLS: members can select all rows of their households. Writes only through
 | `user_id` | `uuid` PK → `auth.users(id)` on delete cascade | |
 | `display_name` | `text` not null | Shown to household members |
 | `announcements_opt_in` | `boolean` not null default false | Beta news email (§7.1) |
+| `terms_version` / `terms_accepted_at` | `text` / `timestamptz` null | Last accepted beta terms and privacy notice (§5.11) |
 | `created_at` | `timestamptz` not null default `now()` | |
 
 The Drift user's own settings and info (the **profile**). RLS: own row for
@@ -387,7 +389,7 @@ linkedPositionOverrides: z.record(z.string(), z.object({ locked: z.boolean() }))
 // Owner labels for manual accounts (linked ones use account_assignments).
 // On accountSchema:
 ownerPersonIds: z.array(z.string()).optional(),
-// Local-only mode's list of people; signed-in mode uses household_people.
+// Guest mode's list of people; signed-in mode uses household_people.
 people: z.array(z.object({ id: z.string(), name: z.string() })).optional().default([]),
 ```
 
@@ -414,9 +416,9 @@ export function composePositions(
 ## 5. Client behavior
 
 ### 5.1 Landing page and sign-in
-- The landing page (`src/ui/LandingPage.tsx`) relabels "Use Drift without an
-  account", since "account" now means a brokerage account in a portfolio.
-  Wording is open (§12 Q5). It also adds **Sign in**.
+- The landing page (`src/ui/LandingPage.tsx`) replaces "Use Drift without an
+  account" with **"Continue as guest — no signup, your data stays in this
+  browser"** (guest mode), and adds **Sign in**.
 - The sign-in page:
   - states that Drift is in **closed beta**, invite-only;
   - offers email + password, "Email me a sign-in link," and "Forgot password";
@@ -521,7 +523,7 @@ filters. Full requirements: `spec-households.md` R1–R8. Built in M5b.
 ### 5.7 "Copy summary for AI"
 A Results-tab button that copies a plain-text summary (allocation vs targets,
 drift, suggested trades) to the clipboard. Built next to
-`src/ui/exportReport.ts`. Works in local-only and signed-in modes; nothing is
+`src/ui/exportReport.ts`. Works in guest and signed-in modes; nothing is
 sent anywhere by Drift.
 
 ### 5.8 Deleting a Drift user profile
@@ -560,7 +562,7 @@ Drift's record of the person, not the person. `DELETE /api/v1/me`:
   script.
 - The snapshot is a valid fixture for the app's **↑ Load** button. The
   engine is deterministic, so the problem reproduces locally.
-- **Local-only mode sends nothing.** There the report is a downloadable file
+- **Guest mode sends nothing.** There the report is a downloadable file
   the user can email to support@ if they choose.
 - Every API error shown in the UI carries a short reference ("Error ref
   7F3K"). That is the request ID in server logs and Sentry, so a user's
@@ -582,6 +584,38 @@ Drift's record of the person, not the person. `DELETE /api/v1/me`:
 - New screens (M4–M6) are built mobile-first. M6b brings the existing screens
   up to the same bar.
 - CI runs a Playwright smoke test of the key flows at a phone viewport.
+
+### 5.11 Terms and consent
+- A web service doesn't need a separate EULA. Its **Terms of Service** do
+  that job. The beta has short **Beta Terms** plus a **Privacy Notice**, both
+  linked from the landing page, sign-in, and Profile.
+- **Signed in:** on first sign-in, and whenever either document's version
+  changes, the user must accept before continuing. `profiles.terms_version`
+  and `terms_accepted_at` record it.
+- **Guest mode:** a footer link ("By using Drift you agree to the Terms").
+  Nothing is recorded, since nothing is sent.
+- **Clauses the Beta Terms must cover:**
+  - **Not investment, tax, or legal advice.** Drift is a calculator, and the
+    user decides and places every trade. This also supports the publisher
+    framing in the study's regulatory section.
+  - Provided **as is**, with no warranty.
+  - Beta software: features may change, break, or end, with notice where
+    practical.
+  - **Limitation of liability**, especially for trading decisions.
+  - The user verifies all numbers before acting.
+  - The beta is free and may become paid, with notice.
+  - Acceptable use: one person per Drift user; no scraping; no reverse
+    engineering of the service.
+  - Data handling by reference to the Privacy Notice: what's stored,
+    household sharing, SnapTrade, Resend, problem reports and support
+    access, deletion.
+  - US-only; governing law of your state.
+  - Feedback may be used to improve Drift.
+- **Native app (M8):** the App Store's standard EULA plus a link to the same
+  terms. No custom EULA unless review requires one.
+- Drafted from a reputable template. A lawyer review is recommended before a
+  public launch, and optional for a friends-and-family beta. This spec is
+  not legal advice.
 
 ---
 
@@ -719,7 +753,7 @@ raise it if needed.
 | Support access | D22: user-initiated problem reports; consent-gated, logged snapshot access; no impersonation |
 | Environments | Real data only in the production Supabase project; previews use staging (D19) |
 | Cost hygiene | `snaptrade_users.last_active_at`. An admin script lists or deletes SnapTrade users inactive for 60+ days (with notice), since each connected user is billed until deleted |
-| Light beta posture | Privacy notice (accounts, households and sharing with members, waitlist, SnapTrade, email and Resend, problem reports and support access) and short ToS (the beta is free and may become paid, with notice); US-only; free; breach-response note in `docs/` |
+| Light beta posture | Beta Terms accepted at sign-in (§5.11); Privacy notice (accounts, households and sharing with members, waitlist, SnapTrade, email and Resend, problem reports and support access) and short ToS (the beta is free and may become paid, with notice); US-only; free; breach-response note in `docs/` |
 
 ---
 
@@ -798,217 +832,16 @@ raise it if needed.
 
 ---
 
-## 11. Implementation plan
+## 11. Open questions
 
-Each milestone is one PR to `main` on a `feat/<issue>-…` branch, per
-`CLAUDE.md`. Issue numbers are created when work starts.
-
-### M0a — Domain spike
-- Shortlist 5–10 names. For each, check:
-  - availability and price, **including renewal price** (some registries
-    charge premium renewals);
-  - TLD reputation for email delivery (prefer `.com`, `.app`, `.io`; avoid
-    TLDs with poor spam reputation such as `.xyz`, `.top`);
-  - Cloudflare Registrar supports the TLD;
-  - `.app` and `.dev` force HTTPS (HSTS-preloaded), which is fine since Vercel
-    serves HTTPS;
-  - a USPTO trademark search for conflicts in finance/software;
-  - an existing site, company, or app with a confusingly similar name;
-  - matching social handles, if you'll want them for recruiting beta users.
-- Register at Cloudflare Registrar (at-cost pricing; DNS needs to be on
-  Cloudflare anyway for D12/D13). Enable auto-renew and registrar lock.
-- **Exit:** domain registered; `<domain>` filled in throughout this spec.
-
-### M0 — Spike (throwaway; not merged)
-- SnapTrade **Personal** key, local script under `/private/` (git-ignored).
-  Fetch your real holdings, hand-normalize, run `rebalance()`, and compare with
-  a CSV import.
-- **Pass/fail criteria, each recorded:**
-  1. Schwab brokerage and IRA accounts: holdings, cash, cost basis.
-  2. Fidelity brokerage/IRA accounts.
-  3. **Empower workplace 401(k)** (recordkeeping, not Empower Personal
-     Dashboard).
-  4. **Fidelity NetBenefits** 401(k), if applicable.
-  5. How ticker-less funds (collective trusts) come through: security ID,
-     CUSIP, description.
-  6. Whether any of your institutions must be enabled per developer account
-     (search results mention ~2 business days), and the lead time.
-- Read SnapTrade's developer terms and Commercial agreement for storage,
-  display, and consent requirements.
-- **Exit:** a coverage table. If 3 or 4 fails, decide: CSV for those accounts
-  in the beta, or a Plaid Investments spike (D20) before M5.
-
-### M1 — Guardrails and docs update
-- Amend `CLAUDE.md`, `IMPLEMENTATION_PLAN.md`, and `README.md`:
-  - *local-only mode sends nothing;*
-  - *signed-in mode stores the user's portfolios, linked holdings, and
-    SnapTrade credentials server-side, encrypted where sensitive;*
-  - *data is visible only to members of the household it's assigned to.*
-- **Changes rules `CLAUDE.md` calls inviolable: needs your explicit sign-off.
-  No backend code merges before it.**
-- **Exit:** docs merged; CHANGELOG notes the policy change.
-
-### M2 — Pure modules
-- `src/ingest/adapters/snaptrade.ts`, `src/ingest/compose.ts`,
-  `src/sync/merge.ts`, synthetic fixtures, tests.
-- Add `linkedPositionOverrides`, `Account.ownerPersonIds`, and `people` to
-  `appStateSchema`.
-- Owner labels and filter in the UI. This works in local-only mode.
-- **Exit:** tests green; local-only behavior unchanged apart from the optional
-  owner labels.
-
-### M3 — Domain, email, backend foundation
-- Cloudflare DNS for `<domain>` (DNS-only records to Vercel).
-- Resend account; SPF/DKIM/DMARC; Supabase custom SMTP and its rate limit;
-  custom auth templates.
-- `support@<domain>` via Cloudflare Email Routing.
-- Supabase **staging** and **production** projects, in the same region as the
-  Vercel functions.
-  - New API keys and asymmetric JWT signing keys.
-  - Public signups disabled.
-  - Preview-URL redirects allowed in staging only.
-- `supabase/migrations/`: every §4 table, `private.household_role`, all §4.3
-  RPCs, RLS. Each Drift user gets a personal household; only the owner role
-  is used yet.
-- `api/v1/` scaffolding:
-  - `_lib/` helpers (JWKS auth, user-scoped client, admin client, crypto
-    keyring, rate limit, Sentry);
-  - `GET /health`.
-- Vercel env vars per environment. CSP update. `vercel.json` rewrite excludes
-  `api/`. Daily Vercel Cron ping to `/health` keeps the free-tier database from
-  pausing.
-- Confirm the Vercel plan's function duration limit.
-- CI: database + API role-matrix job; `dist/` secret scan; secret-key import
-  check.
-- **Exit:**
-  - role-matrix tests pass;
-  - a test auth email lands in the inbox with SPF/DKIM/DMARC passing;
-  - mail to support@ arrives;
-  - a preview deploy talks to staging, not production.
-
-### M4 — Sign-in and cross-device sync
-- `src/sync/`.
-- Sign-in UI: landing-page Sign in; sign-in page with closed-beta message,
-  password, magic link, forgot password; set-password page; optional TOTP
-  enrollment.
-- Waitlist form (with the unchecked "Email me Drift news" box) and
-  `POST /api/v1/waitlist`.
-- URL scrubbing; analytics `beforeSend`.
-- Remote save/load via `save_portfolio` with section merge; Realtime refresh;
-  local upload on first sign-in; "Not synced" badge.
-- **Exit:**
-  - a portfolio edited on desktop shows up on a phone;
-  - a forced conflict merges disjoint edits and asks on overlapping ones;
-  - local-only mode unchanged (existing app tests pass);
-  - waitlist entries arrive.
-- Useful on its own: cross-device Drift with CSV import.
-
-### M5 — Linking
-- `api/v1/snaptrade/*` with sync leases, the time budget, and `sync_runs`
-  logging.
-- Positions tab "Linked accounts": connect, assign, sync, mapping, auto-sync on
-  open, connection list, reconnect.
-- Engine input switches to `composePositions(state, linked)`.
-- **Exit:**
-  - link → assign → sync → map → rebalance works end to end;
-  - a second sync needs no mapping;
-  - a broken connection shows "needs re-authentication";
-  - holdings are in the database after a sync even if the browser is closed
-    right after;
-  - a killed sync doesn't block the next one past its lease.
-
-### M6 — Deletion, notices, copy, AI summary
-- `DELETE /api/v1/me` (idempotent, retried) and the Profile control.
-- SnapTrade inactive-user admin script.
-- Privacy notice (including sharing with household members) and ToS; landing
-  and README copy so "no account required" describes local-only mode
-  accurately.
-- "Copy summary for AI" button.
-- Report a problem (§5.9): report builder, `POST /api/v1/support/reports`,
-  admin read script with `support_access_log`, error references in the UI.
-- Breach-response note in `docs/`, including the encryption-key rotation
-  procedure.
-- **Exit:**
-  - deleting a Drift user profile removes the auth user, all of the user's rows, their
-    shares, and the SnapTrade user;
-  - a forced SnapTrade failure leaves the profile intact and retryable.
-
-### M6b — Mobile web pass
-- Apply §5.10 to the existing screens (Results, Positions, Strategy,
-  Classify, Accounts, charts). Today's UI has few responsive breakpoints and
-  several wide tables.
-- PWA manifest, icons, and an assets-only service worker; CSP update.
-- Playwright phone-viewport smoke tests in CI.
-- **Exit:** the whole Gate 1 loop works on a real iPhone and Android phone:
-  sign in, link, sync, map, read results, edit strategy, report a problem.
-
-### Gate 1 — Personal phase (you only)
-Only your email invited. Use it for a few weeks on desktop and phone. Cost up
-to $20/mo (D15). Check `sync_runs` and Sentry for errors and call
-volume.
-
-### M5b — Households (`spec-households.md`)
-- Multiple households and portfolios with a switcher.
-- Household settings: member list, invites with a role dropdown (owner
-  default, editor), revoke, leave/remove, last-owner guard, copy portfolio.
-- Invite endpoints and emails; beta admission via household invite.
-- Moving accounts between portfolios of a household; adding an account to
-  several households.
-- Owner labels on linked accounts (`household_people`, `owner_person_ids`).
-- Duplicate detection; confirming removes the other copy from the household.
-- "Last edited by"; `household_events` view.
-- **Exit:** you and your spouse each link your own logins into one shared
-  household, confirm the joint account as one, and both edit "Ours" from
-  separate devices. Your private portfolio stays in your personal household,
-  invisible to your spouse.
-
-### M7 — Open the closed beta
-- Supabase Pro on production (backups, no pausing); Vercel Pro if hosting must
-  be commercial-safe.
-- Invite from the waitlist; SnapTrade pay-as-you-go after 5 connected users.
-- Referrals (§5.2a): `referral_codes` table, "Invite a friend" link,
-  `/join?ref=` handling, referred-first ordering in the admin view.
-- Announcements: `news.<domain>` DNS, Resend Audiences,
-  `sync-audiences.ts`, postal address, Profile → Email toggle, support@
-  "Send mail as".
-- Confirm a database backup restores.
-- **Exit:** invited users can sign up, link, and sync; costs track the
-  ~$45–95/mo estimate (about $2 per Drift user that links, so about $4 per
-  two-linker household).
-
-### M8 — Native mobile app (secondary priority; before any paid launch)
-- Confirm the approach (D23). The default is Capacitor around the same app;
-  React Native only if Capacitor falls short.
-- Deep links (universal links / app links) for magic links and PKCE.
-- The SnapTrade portal opens in an in-app browser (SFSafariViewController /
-  Custom Tabs) and returns by deep link.
-- Session tokens in Keychain/Keystore. No more local data caching than the
-  web app does.
-- Store listings: Apple's privacy label and Google's data-safety form, from
-  the same data inventory as the privacy notice. Apple Developer $99/yr,
-  Google Play $25 once. Expect extra review scrutiny for finance apps.
-- **Exit:** beta households use a TestFlight / internal-testing build.
-
-### Gate 2 — Beta review
-Decide among: stay closed, build §10 features (scheduled sync, alerts, MCP,
-adviser role), or start public-launch and billing work.
-
----
-
-## 12. Open questions
-
-1. Which domain? Settled by the M0a spike.
+1. Which domain? Settled by the domain spike (build plan M0a).
 2. ~~Invite quotas for beta users?~~ **Resolved:** beta users invite
    household members only. Everyone else comes through referral and your
    invite (D6).
-3. Does SnapTrade cover your workplace 401(k)? Settled by M0. If not, decide
-   on Plaid (D20) or CSV.
+3. Does SnapTrade cover your workplace 401(k)? Settled by the SnapTrade spike
+   (build plan M0). If not, decide on Plaid (D20) or CSV.
 4. Household open questions: `spec-households.md` §7.
-5. **Label for signed-out mode.** Proposed: "Use Drift incognito — no signup
-   needed." The concern is that "incognito" is well known for meaning
-   *nothing is kept after you close the window*. Drift's signed-out mode does
-   the opposite: it keeps your data in this browser. And if someone actually
-   opens Drift in an incognito window, their data is lost when they close it.
-   Alternative: "Continue as guest — no signup, your data stays in this
-   browser." Whichever label wins, rename "local-only mode" in the docs to
-   match (e.g. "guest mode").
+5. ~~Label for signed-out mode~~ **Resolved:** **guest mode**. The landing
+   page says "Continue as guest — no signup, your data stays in this
+   browser." ("Incognito" was rejected: in browsers it means nothing is kept
+   after you close the window, which is the opposite of guest mode.)

@@ -1,9 +1,13 @@
-# Roadmap: Account Linking & the Server-Backed Stage of Drift
+# Study: Account Linking & the Server-Backed Stage of Drift
 
-> **Status:** Exploration complete. The chosen direction is Appendix A (closed
-> beta), started with you as the only user on the same multi-user stack. The
-> buildable spec and milestones are in
-> [`spec-account-linking.md`](spec-account-linking.md).
+> **Status:** Exploratory study, complete. Kept as the record of options and
+> rationale. The chosen direction is Appendix A (closed beta), started with
+> you as the only user on the same multi-user stack. What gets built is in
+> [`spec-account-linking.md`](spec-account-linking.md) and
+> [`spec-households.md`](spec-households.md); how and in what order is in
+> [`build-plan-account-linking.md`](build-plan-account-linking.md). Where this
+> study's terms or choices differ from the spec, the spec wins (e.g. "guest
+> mode" for local-only mode; "Drift user", "profile", "account").
 
 ## Context
 

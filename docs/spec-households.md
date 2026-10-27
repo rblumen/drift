@@ -204,9 +204,9 @@ accounts for one real account.
    its brokerage logins. It also deletes households where it was the sole
    member, and notifies the remaining members of shared households.
 
-### R9 — Local-only mode
+### R9 — Guest mode
 - Unchanged: one portfolio, no household.
-- Owner labels (R3.3) work locally, using a local list of people.
+- Owner labels (R3.3) work in guest mode, using a local list of people.
 - On first sign-in, local data becomes the first portfolio of the user's
   personal household, and local people become household people.
 
@@ -254,18 +254,11 @@ pay-as-you-go.
 
 ## 5. Phasing
 
-See [`spec-account-linking.md`](spec-account-linking.md) §11. In short:
-
-- **M2:** owner labels for CSV/manual accounts, including local-only mode.
-- **M3:** the full household schema and role-matrix CI. Each Drift user
-  gets one personal household; only the owner role is used yet.
-- **M5:** linking with per-account assignment.
-- **M5b (after Gate 1, before M7):** everything else in R1–R8 except the
-  viewer role.
-- **After the beta:** the viewer/adviser role (R7).
-
-Your spouse is the natural second beta user. M5b before M7 means the household
-path is tested first, by the people it's for.
+Sequencing and ownership are in
+[`build-plan-account-linking.md`](build-plan-account-linking.md). In short:
+owner labels arrive in M2, the household schema in M3, per-account assignment
+with linking in M5, and the rest of R1–R8 in **M5b**, after Gate 1 and before
+the beta opens (M7). The viewer/adviser role (R7) comes after the beta.
 
 ---
 
