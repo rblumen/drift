@@ -38,7 +38,7 @@ docs, the UI, and the schema:
    manage one household's portfolios.
 4. The server owns synced brokerage data, so later features (scheduled syncs,
    drift alerts, LLM access) can work without a browser open.
-5. Rollout in order: **you alone → you and your spouse as a household →
+5. Rollout in order: **the developer alone → the developer's household →
    invited friends & family**, with no re-architecture between steps.
 6. **Guest mode (no signup) keeps working** exactly as today for anyone who doesn't
    sign in.
@@ -80,7 +80,7 @@ docs, the UI, and the schema:
 | D17 | Supabase keys & tokens | Use the **new API keys** (`sb_publishable_…` in the browser, `sb_secret_…` on the server) and **asymmetric JWT signing keys** from day one. The legacy `anon`/`service_role` keys are being retired and can't be rotated. Functions verify access tokens locally against the project's JWKS (`jose`) |
 | D18 | Least privilege on the server | Functions act **as the user** (a Supabase client carrying the caller's token, so RLS applies). The secret key is used only for `snaptrade_users`, `waitlist`, rate limits, and profile deletion |
 | D19 | Environments | Two Supabase projects: **staging** (local dev and Vercel preview deploys) and **production** (production deploys only). Preview URLs are allowed as auth redirects in staging only. Real brokerage data only in production |
-| D20 | Aggregator fallback | **Plaid Investments** is the named second adapter, triggered if M0 shows SnapTrade can't read your workplace 401(k) (Empower, Fidelity NetBenefits). The pure-adapter design (§6.1) keeps this to a new adapter plus server routes. Until then, uncovered accounts stay on CSV |
+| D20 | Aggregator fallback | **Plaid Investments** is the named second adapter, triggered if M0 shows SnapTrade can't read workplace 401(k)s at the major recordkeepers (e.g. Empower, Fidelity NetBenefits). The pure-adapter design (§6.1) keeps this to a new adapter plus server routes. Until then, uncovered accounts stay on CSV |
 | D21 | Error monitoring | **Sentry for `api/` only**, with `sendDefaultPii: false`, no request or response bodies, and a `beforeSend` that keeps only route, status, error type, and stack. No client-side SDK in the beta |
 | D22 | Support access | **No routine access to user data.** Bugs are investigated from logs and `sync_runs` (IDs, codes, timings only) and from **user-initiated problem reports** (§5.9) that the user reviews before sending. As Supabase project owner you can technically read the database; the policy is to do so only with the user's consent for a specific report, logged in `support_access_log`, and the privacy notice says so. No impersonation or "view as user" feature |
 | D23 | Mobile | **Mobile web first:** every beta flow works in a phone browser and the app is installable as a PWA (§5.10). A **native app** is in beta scope as a secondary priority (M8). Default approach: wrap the same React app with Capacitor for iOS and Android, so there is one UI codebase; confirmed at the start of M8 |
@@ -144,7 +144,7 @@ are never stored in JWT claims, since claims go stale.
 | Column | Type | Notes |
 |---|---|---|
 | `id` | `uuid` PK | |
-| `name` | `text` not null | e.g. "Ryan & Partner", "Ryan (private)" |
+| `name` | `text` not null | e.g. "Alex & Sam", "Alex (private)" |
 | `created_by` | `uuid` → `auth.users(id)` on delete set null | |
 | `created_at` | `timestamptz` not null default `now()` | |
 
@@ -186,7 +186,7 @@ RLS with no policies. Owners list pending invites through `api/v1/`.
 |---|---|---|
 | `id` | `uuid` PK | |
 | `household_id` | `uuid` → `households(id)` on delete cascade | |
-| `name` | `text` not null | "Ryan", "Partner", "Kid" |
+| `name` | `text` not null | "Alex", "Sam", "Kid" |
 | `user_id` | `uuid` null | When the person is a member |
 
 Owner labels for accounts. RLS: select if any role; writes by editor or above.
@@ -838,7 +838,7 @@ raise it if needed.
 2. ~~Invite quotas for beta users?~~ **Resolved:** beta users invite
    household members only. Everyone else comes through referral and your
    invite (D6).
-3. Does SnapTrade cover your workplace 401(k)? Settled by the SnapTrade spike
+3. Does SnapTrade cover workplace 401(k)s? Settled by the SnapTrade spike
    (build plan M0). If not, decide on Plaid (D20) or CSV.
 4. Household open questions: `spec-households.md` §7.
 5. ~~Label for signed-out mode~~ **Resolved:** **guest mode**. The landing

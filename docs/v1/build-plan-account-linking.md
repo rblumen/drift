@@ -47,6 +47,9 @@ The split comes from a few hard lines, not from difficulty:
    inventing behavior. Spec changes are separate, reviewed doc edits.
 7. Nothing that loosens `CLAUDE.md`'s guardrails merges before M1 is signed
    off.
+8. **The repo is public.** No personal details in docs, code, commits, or PRs:
+   not the developer's institutions, household members, or account details.
+   Use generic examples ("Alex", "Sam", "Brokerage A").
 
 ---
 
@@ -72,6 +75,8 @@ steps, settings, and DNS records for each.
 | 13 | **Supabase Pro** on production; **Vercel Pro** if needed; SnapTrade pay-as-you-go billing | M7 | ~$25 + $20/mo + usage |
 | 14 | **Postal address** for announcement emails (PO box or virtual mailbox) | M7 | ~$5–15/mo |
 | 15 | `news.<domain>` in Resend; Gmail **"Send mail as" support@** via Resend SMTP | M7 | Free |
+| 16a | **GitHub:** secret scanning and push protection on; `production` environment with you as required reviewer for the migration workflow | Now / M3 | Free (public repo) |
+| 16b | **Vercel Deployment Protection** on preview deployments (preview URLs are posted publicly on PRs) | M3 | Free tier |
 | 16 | **Apple Developer** ($99/yr) and **Google Play Console** ($25 once) accounts | M8 | ~$9/mo |
 
 ---
@@ -99,10 +104,10 @@ its topic but comes after Gate 1.
 | 👤 | SnapTrade developer account and Personal key (checklist 4) |
 | 🤖 | Write a probe script: reads the key from env, connects via the SnapTrade portal, and prints a **coverage report** with structure and field names only. Amounts, names, and masks are masked by default |
 | 👤 | Run it locally against your real accounts. Keep any raw output under `/private/` (git-ignored) |
-| 👤 | Fill in pass/fail: (1) Schwab brokerage and IRA: holdings, cash, cost basis; (2) Fidelity brokerage/IRA; (3) **Empower workplace 401(k)**; (4) **Fidelity NetBenefits** 401(k), if applicable; (5) how ticker-less funds come through (security ID, CUSIP, description); (6) whether institutions need per-developer enablement, and the lead time |
+| 👤 | Fill in pass/fail per institution on your private coverage list (kept under `/private/`, not in the repo): (1) taxable brokerage and IRA accounts: holdings, cash, cost basis; (2) **workplace 401(k)s** at each recordkeeper; (3) how ticker-less funds come through (security ID, CUSIP, description); (6) whether institutions need per-developer enablement, and the lead time |
 | 🤝 | Agent summarizes SnapTrade's public developer terms (storage, display, consent obligations); you read and accept the actual terms |
-| 👤 | If (3) or (4) fails, decide: CSV for those accounts, or a Plaid Investments spike (D20) before M5 |
-| 🤖 | Record the coverage table (masked) and the decision in the spec |
+| 👤 | If (2) fails, decide: CSV for those accounts, or a Plaid Investments spike (D20) before M5 |
+| 🤖 | Record the decision in the spec, naming no institutions tied to you (the repo is public) |
 
 **Exit:** coverage table and the 401(k) decision.
 
@@ -228,12 +233,12 @@ Use it for a few weeks on desktop and phone. Cost up to $20/mo (D15). Review
 | 🤖 | Duplicate detection; confirming removes the other copy |
 | 🤖 | "Last edited by"; `household_events` view |
 | 🤖 | Role-matrix tests for editor and former member |
-| 👤 | Invite your spouse; both of you run the exit scenario |
+| 👤 | Invite a second member of your household; both of you run the exit scenario |
 
-**Exit:** 👤 you and your spouse each link your own logins into one shared
-household, confirm the joint account as one, and both edit "Ours" from
+**Exit:** 👤 you and the second member each link your own logins into one
+shared household, confirm a joint account as one, and both edit "Ours" from
 separate devices. Your private portfolio stays in your personal household,
-invisible to your spouse.
+invisible to them.
 
 ### M7 — Open the closed beta
 | Owner | Task |

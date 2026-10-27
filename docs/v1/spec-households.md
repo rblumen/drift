@@ -12,9 +12,9 @@ data-model changes they force on the account-linking spec, and a phased plan.
 
 ## 1. User story
 
-> I sign up and start importing and linking accounts. I invite my spouse; she
-> creates her own login and can view and manage our finances with me. She
-> links her 401(k). We mark each account as mine, hers, or joint. I might keep
+> I sign up and start importing and linking accounts. I invite my partner;
+> they create their own login and can view and manage our finances with me. They
+> link their 401(k). We mark each account as mine, theirs, or joint. I might keep
 > two portfolios, "mine" and "ours". Later, our financial planner gets a
 > read-only login to see the full picture.
 
@@ -39,7 +39,7 @@ portfolio, never for a Drift sign-in.
 | **Linked account** | An account whose holdings sync from a brokerage login (e.g. Schwab joint taxable ••1234). Has its own owner(s) | The Drift user who linked it. At most one portfolio per household | `linked_accounts` + `account_assignments` |
 | **Manual account** | An account kept up to date by CSV import or hand entry | One portfolio | `Account` in `AppState` |
 | **Brokerage login** | One connection to an institution through SnapTrade. Can contain several linked accounts | The Drift user who linked it. Only they can reconnect or remove it | `brokerage_logins` |
-| **Person** | An owner label ("Ryan", "Partner", "Kid"), kept per household. Can be tied to a member's Drift user, or not (a child's 529). Never controls access | One household | `household_people` |
+| **Person** | An owner label ("Alex", "Sam", "Kid"), kept per household. Can be tied to a member's Drift user, or not (a child's 529). Never controls access | One household | `household_people` |
 
 UI wording follows the table:
 - "Delete my Drift user profile" lives under **Profile**. It deletes Drift's
@@ -54,11 +54,11 @@ Earlier drafts used "Drift account", meaning the account in a portfolio
 
 ```
 Drift user ──member of──▶ Household ──contains──▶ Portfolio ("Ours")
-     │                       │ people: Ryan,          │ strategy, targets
-     │ connects              │ Partner, Kid           ▼
+     │                       │ people: Alex,          │ strategy, targets
+     │ connects              │ Sam, Kid           ▼
      ▼                                              Accounts ◀── manual (CSV / hand entry)
 Brokerage login (Schwab) ──contains──▶ Linked account ──feeds──▶ Account
-                                         owners: [Ryan, Partner]   (≤ 1 portfolio per household)
+                                         owners: [Alex, Sam]   (≤ 1 portfolio per household)
 ```
 
 ---
@@ -108,15 +108,15 @@ Brokerage login (Schwab) ──contains──▶ Linked account ──feeds─�
 ### R3 — Brokerage logins, linked accounts, and ownership
 1. Each person links their own brokerage logins. The login belongs to its
    Drift user, and other members never see its credentials or controls.
-2. **Ownership is set per linked account, not per login.** One Schwab login
-   might contain your joint taxable account (owners: you and your spouse) and
+2. **Ownership is set per linked account, not per login.** One brokerage login
+   might contain your joint taxable account (owners: you and your partner) and
    your Roth IRA (owner: you). After linking, each account defaults to "owned
    by the person who linked it" and can be changed.
 3. Manual accounts carry owner labels the same way.
-4. The UI can filter and group by owner ("Ryan", "Partner", "Joint").
+4. The UI can filter and group by owner ("Alex", "Sam", "Joint").
 5. **The engine is unchanged.** It already keeps each account
    balance-preserving (`PRINCIPLES.md` constraint #3), so money never moves
-   between spouses' accounts. Ownership is display and filtering in this
+   between partners' accounts. Ownership is display and filtering in this
    phase. Engine uses come later (§6).
 
 ### R4 — Assigning linked accounts to portfolios
@@ -133,7 +133,7 @@ Brokerage login (Schwab) ──contains──▶ Linked account ──feeds─�
      the two portfolios may suggest different trades for it.
 2. After linking, the linker chooses a portfolio for each linked account,
    or leaves it unassigned. Nothing is assigned by default. Unassigned
-   accounts are visible only to the linker, so a spouse can link an account
+   accounts are visible only to the linker, so a partner can link an account
    and keep it private.
 3. **Moving an account:**
    - Any editor can move an account between portfolios in the same household.
@@ -146,14 +146,14 @@ Brokerage login (Schwab) ──contains──▶ Linked account ──feeds─�
    reconnection by <name>". Only the linker sees the reconnect button.
 
 ### R5 — Duplicate detection
-Two spouses can each link the same real account (a joint account at the same
+Two partners can each link the same real account (a joint account at the same
 institution) through their own brokerage logins. Drift then holds two linked
 accounts for one real account.
 
 1. **Candidates come only from different brokerage logins.** Accounts inside
    one login are distinct by definition, even when they share an institution
    or owner. This avoids false positives such as a joint taxable account and
-   a Roth IRA from the same Schwab login.
+   a Roth IRA from the same brokerage login.
 2. **Detection never crosses a privacy boundary.** It compares only accounts
    assigned within the same household. Unassigned accounts and other
    households' assignments are never compared, and a suggestion never
@@ -162,7 +162,7 @@ accounts for one real account.
    among the accounts assigned in that household. Account type and name
    strengthen the match when available. If either mask is missing, Drift
    makes no automatic suggestion.
-4. **Drift asks, never merges on its own:** "Schwab ••1234 linked by Partner
+4. **Drift asks, never merges on its own:** "Schwab ••1234 linked by Sam
    looks like Schwab ••1234 linked by you. Same account?"
    - **Yes:** the user picks which copy to keep (default: the one already
      mapped). **The other copy is removed from this household.** No backup
