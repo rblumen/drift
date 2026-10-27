@@ -44,13 +44,14 @@ docs, the UI, and the schema:
 
 ### Non-goals (this spec)
 - Trading or any write action against a brokerage. Holdings are **read-only**.
-- Public signup, billing, or charging money.
+- Public signup, billing, or charging money. These are post-beta (§10).
 - Scheduled server syncs, drift alerts, email reminders, and the MCP server.
   These are planned follow-ups (§10); the design must keep them easy.
 - The read-only viewer/adviser role in the UI (the schema supports it; see
   `spec-households.md` R7).
-- Native mobile apps. "Mobile" means the existing web app working well on a
-  phone browser.
+- A native mobile app **in the early beta**. It is in beta scope as a secondary
+  priority (M8): after the other milestones, before any paid launch. Until
+  then, "mobile" means the web app working well in a phone browser (§5.10).
 - Users outside the US (no GDPR program yet).
 
 ---
@@ -67,19 +68,21 @@ docs, the UI, and the schema:
 | D6 | Invite gating | Public signups disabled in Supabase. Only two kinds of invite exist: **you** invite from the waitlist, and a **household owner** invites members into their own household (`spec-households.md` R2). Beta users can't invite anyone else; they can refer friends (§5.2a), and you decide whom to invite. The invite link lets them set a password. Non-invited visitors can join a **waitlist** |
 | D7 | Who writes what | **One writer per column.** The server alone writes synced brokerage data (`brokerage_logins`, `linked_accounts`, `holdings`, `sync_runs`). Users write their decisions (portfolio state, account assignments, owner labels), always through the database functions in §4.3 that check household role. No table row has two writers |
 | D8 | Composing positions | A shared **pure** function combines a portfolio's `AppState` with its assigned holdings into the engine's `Position[]`. Runs in the browser now; importable by server code for later features |
-| D9 | Engine location | Browser for the interactive loop, unchanged. Server code must be able to import it (it's already pure) for scheduled syncs and MCP later |
+| D9 | Engine location | **One engine, one implementation, run in the browser.** `src/engine/` is pure TypeScript with no DOM or Node APIs. The browser bundles it; server code imports **the same module from the same commit** only when a §10 feature needs it, never a copy or a port. Browser because: local-only mode needs it; interactive edits recompute in milliseconds, where a server round-trip would add ~100–500 ms per edit (more on cold starts); and it works offline. Guards against the two runtimes diverging: (1) CI fails if `src/engine/` imports anything environment-specific; (2) the scenario suite already runs in Node via Vitest, which is the server runtime; (3) browser bundle and functions deploy atomically from one commit, and server-computed results record the engine's git SHA; (4) an open tab on an older bundle gets a "new version — reload" prompt |
 | D10 | Secrets at rest | SnapTrade `userSecret` encrypted at the application level (AES-256-GCM) with a **versioned keyring** (`TOKEN_ENC_KEYS`), so the key can be rotated. Holdings stay plain rows, protected by RLS and Supabase's disk encryption, so they remain queryable. Threat model in §8 |
 | D11 | Outgoing email | **Resend** as Supabase Auth's custom SMTP and for app email. SPF, DKIM, and DMARC on `<domain>`. **No portfolio data in any email**; open/click tracking off |
 | D12 | Incoming email | **Cloudflare Email Routing** forwards `support@<domain>` to your inbox (free). Upgrade to a real mailbox if replying as support becomes awkward |
 | D13 | Domain & DNS | Custom `<domain>` with DNS on Cloudflare; app served by Vercel. Records pointing at Vercel are **DNS-only** (Cloudflare proxy off). Auth emails link to `<domain>`, not `supabase.co` |
 | D14 | LLM readiness | No MCP in the beta. Versioned server API (`/api/v1/…`), server-owned holdings, and server-importable compose/engine make a read-only MCP server a thin layer later. A client-side "Copy summary for AI" ships in the beta |
-| D15 | Budget ceiling | $0/mo during the personal phase (plus domain ~$1/mo); up to ~$100/mo during the beta |
+| D15 | Budget ceiling | Up to **$20/mo** during the personal phase (domain, plus room for a paid tier if a free one pauses or limits); up to ~$100/mo during the beta |
 | D16 | Households | Access is granted per **household** (owner / editor / viewer). A Drift user can belong to several households. A hard privacy boundary means a separate household under the same Drift user. Mine/hers/joint is a label, never an access boundary. Requirements: `spec-households.md` |
 | D17 | Supabase keys & tokens | Use the **new API keys** (`sb_publishable_…` in the browser, `sb_secret_…` on the server) and **asymmetric JWT signing keys** from day one. The legacy `anon`/`service_role` keys are being retired and can't be rotated. Functions verify access tokens locally against the project's JWKS (`jose`) |
 | D18 | Least privilege on the server | Functions act **as the user** (a Supabase client carrying the caller's token, so RLS applies). The secret key is used only for `snaptrade_users`, `waitlist`, rate limits, and profile deletion |
 | D19 | Environments | Two Supabase projects: **staging** (local dev and Vercel preview deploys) and **production** (production deploys only). Preview URLs are allowed as auth redirects in staging only. Real brokerage data only in production |
 | D20 | Aggregator fallback | **Plaid Investments** is the named second adapter, triggered if M0 shows SnapTrade can't read your workplace 401(k) (Empower, Fidelity NetBenefits). The pure-adapter design (§6.1) keeps this to a new adapter plus server routes. Until then, uncovered accounts stay on CSV |
 | D21 | Error monitoring | **Sentry for `api/` only**, with `sendDefaultPii: false`, no request or response bodies, and a `beforeSend` that keeps only route, status, error type, and stack. No client-side SDK in the beta |
+| D22 | Support access | **No routine access to user data.** Bugs are investigated from logs and `sync_runs` (IDs, codes, timings only) and from **user-initiated problem reports** (§5.9) that the user reviews before sending. As Supabase project owner you can technically read the database; the policy is to do so only with the user's consent for a specific report, logged in `support_access_log`, and the privacy notice says so. No impersonation or "view as user" feature |
+| D23 | Mobile | **Mobile web first:** every beta flow works in a phone browser and the app is installable as a PWA (§5.10). A **native app** is in beta scope as a secondary priority (M8). Default approach: wrap the same React app with Capacitor for iOS and Android, so there is one UI codebase; confirmed at the start of M8 |
 
 ---
 
@@ -159,6 +162,17 @@ RLS: select if any role. Rename by owner (through an RPC). Created through
 
 RLS: members can select all rows of their households. Writes only through
 `api/v1/` membership endpoints. A trigger blocks removing the last owner.
+
+#### `profiles`
+| Column | Type | Notes |
+|---|---|---|
+| `user_id` | `uuid` PK → `auth.users(id)` on delete cascade | |
+| `display_name` | `text` not null | Shown to household members |
+| `announcements_opt_in` | `boolean` not null default false | Beta news email (§7.1) |
+| `created_at` | `timestamptz` not null default `now()` | |
+
+The Drift user's own settings and info (the **profile**). RLS: own row for
+select and update; household members can select `display_name`.
 
 #### `household_invites` (server-only)
 `id`, `household_id`, `email` citext, `role`, `token_hash` (SHA-256),
@@ -322,7 +336,14 @@ RLS: own rows for select. No dollar amounts or tickers.
   - `user_secret_enc` (`v<n>:` + base64 of iv + ciphertext + tag);
   - `created_at`, `last_active_at`.
 - `waitlist`: `email` citext PK, `note`, `heard_from`, `heard_from_detail`,
-  `referral_code`, `created_at`, `invited_at`.
+  `referral_code`, `updates_opt_in` (default false), `created_at`,
+  `invited_at`.
+- `support_reports` (§5.9): `id`, `user_id`, `created_at`, `description`,
+  `diagnostics` jsonb (no amounts or names), `portfolio_snapshot_enc` null
+  (encrypted with the D10 keyring; present only if the user opted in),
+  `status`, `closed_at`. Deleted 30 days after closing, or on request.
+- `support_access_log`: `id`, `report_id`, `accessed_at`, `reason`. Written
+  by the admin script whenever a snapshot is decrypted.
 - `referral_codes` (M7): `code` PK, `user_id` unique, `created_at`. Owners can
   select their own.
 - `rate_limits`: `key` (route + hashed IP), `window_start`, `count`. Updated by
@@ -394,8 +415,8 @@ export function composePositions(
 
 ### 5.1 Landing page and sign-in
 - The landing page (`src/ui/LandingPage.tsx`) relabels "Use Drift without an
-  account" to "Use Drift without signing in", since "account" now means a
-  brokerage account in a portfolio, and adds **Sign in**.
+  account", since "account" now means a brokerage account in a portfolio.
+  Wording is open (§12 Q5). It also adds **Sign in**.
 - The sign-in page:
   - states that Drift is in **closed beta**, invite-only;
   - offers email + password, "Email me a sign-in link," and "Forgot password";
@@ -522,6 +543,46 @@ Drift's record of the person, not the person. `DELETE /api/v1/me`:
 
 `localStorage` is untouched.
 
+### 5.9 Reporting a problem
+- **Help → Report a problem**, in both modes.
+- Signed in, it builds a report in the browser and **shows it to the user
+  before sending**:
+  - **Always included:** app and engine git SHA, browser/OS, current tab,
+    recent client errors (messages and stacks, no values), request IDs of
+    recent failed API calls, and the user's recent `sync_runs`.
+  - **Optional, unchecked by default:** "Include my portfolio data so you can
+    reproduce the problem." This adds the selected portfolio's `AppState` and
+    linked holdings. Account names become "Account 1…", masks and household
+    names are dropped, and amounts are kept, since results depend on them.
+  - A free-text description.
+- Sent to `POST /api/v1/support/reports` and stored in `support_reports`. You
+  get an email ("New report #123", no contents) and read it with an admin
+  script.
+- The snapshot is a valid fixture for the app's **↑ Load** button. The
+  engine is deterministic, so the problem reproduces locally.
+- **Local-only mode sends nothing.** There the report is a downloadable file
+  the user can email to support@ if they choose.
+- Every API error shown in the UI carries a short reference ("Error ref
+  7F3K"). That is the request ID in server logs and Sentry, so a user's
+  screenshot is enough to find the failing request.
+
+### 5.10 Mobile web
+- Target iPhone Safari and Android Chrome, from 375 px wide.
+- Every beta flow works at phone width: sign-in, the household and portfolio
+  switcher, Results (allocation and trades), Positions (linked accounts,
+  mapping, CSV import), Strategy, household settings, Profile.
+- Tables either reflow into cards or scroll inside their own container. The
+  page itself never scrolls sideways.
+- Touch targets are at least 44 px. Nothing depends on hover.
+- The SnapTrade portal opens as a full-page navigation and returns to the
+  app, with no pop-ups (mobile browsers block them).
+- **Installable PWA:** web manifest and icons. The service worker caches only
+  static assets, never API or Supabase responses, so portfolio data stays out
+  of the cache. CSP gains `manifest-src 'self'` and `worker-src 'self'`.
+- New screens (M4–M6) are built mobile-first. M6b brings the existing screens
+  up to the same bar.
+- CI runs a Playwright smoke test of the key flows at a phone viewport.
+
 ---
 
 ## 6. Server API (`api/v1/`)
@@ -548,6 +609,7 @@ All endpoints except waitlist:
 | `DELETE /households/:id/members/:userId` | Owner, or self (leave). Unassigns the member's linked accounts |
 | `POST /portfolios/:id/copy` | Copy a portfolio's state into a household the caller edits |
 | `POST /duplicates/decide` | Confirm (body names the copy to keep; the other is removed from the household) or reject a suggestion |
+| `POST /support/reports` | Store a problem report (§5.9); rate-limited |
 | `DELETE /me` | Delete the caller's Drift user profile and all their data (§5.8) |
 | `POST /waitlist` | Unauthenticated; honeypot + rate limit; insert into `waitlist` |
 | `GET /health` | Verifies the token; also the target of a daily Vercel Cron ping |
@@ -599,17 +661,43 @@ Exact SnapTrade field names are confirmed during the spike (M0).
 | Invite (beta or household), magic link, password reset, email change | Supabase Auth via Resend SMTP; household invites via Resend API | Custom templates on `<domain>`. Auth links use `{{ .TokenHash }}` to `<domain>/auth/confirm`. Household invites name the inviter and household only |
 | Membership changes (join, leave, role) | Server via Resend API | Names and household name only |
 | Reminders, drift alerts (later, §10) | Server via Resend API | "Open Drift to review." Never dollar amounts, tickers, or account names |
-| Support | Inbound to `support@<domain>` | Cloudflare Email Routing → your inbox |
+| Announcements (beta news, waitlist updates) | Resend Broadcasts to an Audience, from `news.<domain>` | Product news only. Unsubscribe link and postal address (CAN-SPAM). Never portfolio data |
+| Support | Inbound to `support@<domain>` | Cloudflare Email Routing → your inbox. Replies go out as support@ (§7.1) |
 
 DNS (Cloudflare):
 - SPF and DKIM for Resend.
 - DMARC starting at `p=none` with reports.
 - MX for Cloudflare Email Routing.
-- Sending from a subdomain (`mail.<domain>`) keeps app email reputation
-  separate from support mail.
+- Separate sending subdomains: `mail.<domain>` for transactional email and
+  `news.<domain>` for announcements. A spam complaint about news then can't
+  hurt sign-in email.
 
 Check Supabase Auth's per-hour email rate limit with custom SMTP during M3, and
 raise it if needed.
+
+### 7.1 Sending email yourself
+- **Transactional email** (auth, invites, membership changes) is automatic.
+  Users can't unsubscribe from it, because the service needs it.
+- **Announcements** to the waitlist or beta users:
+  - You write and send them in the Resend dashboard (Broadcasts).
+  - An admin script, `scripts/admin/sync-audiences.ts`, keeps two Resend
+    Audiences current: **Waitlist** (entries with `updates_opt_in`) and
+    **Beta users** (profiles with `announcements_opt_in`).
+  - Only the email address and display name go to Resend.
+  - Before each sync, the script pulls Resend's unsubscribes and writes them
+    back to the database, so an opt-out sticks.
+  - Opt-in points: an unchecked "Email me Drift news" box on the waitlist
+    form, and Profile → Email.
+  - Waitlist sign-up alone covers only the invite email itself.
+- **CAN-SPAM** for announcements:
+  - a physical postal address (a PO box or virtual mailbox is fine);
+  - a working unsubscribe, honored within 10 business days;
+  - honest From and subject lines.
+- **One-to-one email** (support replies, a note to one user): from your own
+  inbox, **as support@**. Add support@ in Gmail as a "Send mail as" address,
+  using Resend's SMTP. Same vendor, nothing new to run.
+- Resend is a processor of email addresses and names. The privacy notice
+  says so.
 
 ---
 
@@ -627,10 +715,11 @@ raise it if needed.
 | CSP | `connect-src 'self' https://<project>.supabase.co wss://<project>.supabase.co`. SnapTrade portal opens as top-level navigation. `form-action 'none'` and `frame-ancestors 'none'` stay |
 | Analytics stays page-only | URL scrubbed after auth callbacks and invite links; `<Analytics beforeSend>` drops query strings and hashes; reported path stays `/` |
 | Email | No portfolio data; tracking off (§7) |
-| Logs and errors | No bodies, emails, or amounts. Sentry on `api/` only, scrubbed (D21) |
+| Logs and errors | Structured JSON logs per request: request ID, route, status, duration, user ID, error code. No bodies, emails, amounts, or tickers. Sentry on `api/` only, scrubbed (D21). Vercel's built-in log retention is short (confirm in M3), so `sync_runs`, Sentry, and problem reports are the durable record; add a log drain only if needed |
+| Support access | D22: user-initiated problem reports; consent-gated, logged snapshot access; no impersonation |
 | Environments | Real data only in the production Supabase project; previews use staging (D19) |
 | Cost hygiene | `snaptrade_users.last_active_at`. An admin script lists or deletes SnapTrade users inactive for 60+ days (with notice), since each connected user is billed until deleted |
-| Light beta posture | Privacy notice (accounts, households and sharing with members, waitlist, SnapTrade, email) and short ToS; US-only; free; breach-response note in `docs/` |
+| Light beta posture | Privacy notice (accounts, households and sharing with members, waitlist, SnapTrade, email and Resend, problem reports and support access) and short ToS (the beta is free and may become paid, with notice); US-only; free; breach-response note in `docs/` |
 
 ---
 
@@ -692,8 +781,20 @@ raise it if needed.
   - a privacy rule update, because portfolio data then goes to an AI provider.
 - **Viewer/adviser role** in the UI (`spec-households.md` R7).
 - **Holdings history:** snapshot table for performance and drift over time.
-- **Public launch:** required MFA, abuse protection, legal review (exploration
-  doc Phase 3).
+- **Public launch:** public signup, required MFA, abuse protection, legal
+  review (exploration doc Phase 3).
+- **Billing (post-beta).** Deferred. Expect an **additive** migration, with
+  nothing to build now.
+  - Billing attaches to a household or a Drift user (decide then; both work)
+    through new tables: `billing_customers` (payer, Stripe customer ID) and
+    `subscriptions` (mirrored from Stripe webhooks). Entitlements derive from
+    the plan.
+  - Today's schema already holds what pricing is likely to depend on:
+    connected Drift users per household (`brokerage_logins`) and sync volume
+    (`sync_runs`).
+  - Beta grandfathering can key off `profiles.created_at`.
+  - The only thing needed now is the ToS line that the beta is free and may
+    become paid with notice (M6).
 
 ---
 
@@ -790,7 +891,8 @@ Each milestone is one PR to `main` on a `feat/<issue>-…` branch, per
 - Sign-in UI: landing-page Sign in; sign-in page with closed-beta message,
   password, magic link, forgot password; set-password page; optional TOTP
   enrollment.
-- Waitlist form and `POST /api/v1/waitlist`.
+- Waitlist form (with the unchecked "Email me Drift news" box) and
+  `POST /api/v1/waitlist`.
 - URL scrubbing; analytics `beforeSend`.
 - Remote save/load via `save_portfolio` with section merge; Realtime refresh;
   local upload on first sign-in; "Not synced" badge.
@@ -822,6 +924,8 @@ Each milestone is one PR to `main` on a `feat/<issue>-…` branch, per
   and README copy so "no account required" describes local-only mode
   accurately.
 - "Copy summary for AI" button.
+- Report a problem (§5.9): report builder, `POST /api/v1/support/reports`,
+  admin read script with `support_access_log`, error references in the UI.
 - Breach-response note in `docs/`, including the encryption-key rotation
   procedure.
 - **Exit:**
@@ -829,9 +933,18 @@ Each milestone is one PR to `main` on a `feat/<issue>-…` branch, per
     shares, and the SnapTrade user;
   - a forced SnapTrade failure leaves the profile intact and retryable.
 
+### M6b — Mobile web pass
+- Apply §5.10 to the existing screens (Results, Positions, Strategy,
+  Classify, Accounts, charts). Today's UI has few responsive breakpoints and
+  several wide tables.
+- PWA manifest, icons, and an assets-only service worker; CSP update.
+- Playwright phone-viewport smoke tests in CI.
+- **Exit:** the whole Gate 1 loop works on a real iPhone and Android phone:
+  sign in, link, sync, map, read results, edit strategy, report a problem.
+
 ### Gate 1 — Personal phase (you only)
-Only your email invited. Use it for a few weeks on desktop and phone. Cost
-about $0 plus the domain. Check `sync_runs` and Sentry for errors and call
+Only your email invited. Use it for a few weeks on desktop and phone. Cost up
+to $20/mo (D15). Check `sync_runs` and Sentry for errors and call
 volume.
 
 ### M5b — Households (`spec-households.md`)
@@ -855,14 +968,30 @@ volume.
 - Invite from the waitlist; SnapTrade pay-as-you-go after 5 connected users.
 - Referrals (§5.2a): `referral_codes` table, "Invite a friend" link,
   `/join?ref=` handling, referred-first ordering in the admin view.
+- Announcements: `news.<domain>` DNS, Resend Audiences,
+  `sync-audiences.ts`, postal address, Profile → Email toggle, support@
+  "Send mail as".
 - Confirm a database backup restores.
 - **Exit:** invited users can sign up, link, and sync; costs track the
   ~$45–95/mo estimate (about $2 per Drift user that links, so about $4 per
   two-linker household).
 
+### M8 — Native mobile app (secondary priority; before any paid launch)
+- Confirm the approach (D23). The default is Capacitor around the same app;
+  React Native only if Capacitor falls short.
+- Deep links (universal links / app links) for magic links and PKCE.
+- The SnapTrade portal opens in an in-app browser (SFSafariViewController /
+  Custom Tabs) and returns by deep link.
+- Session tokens in Keychain/Keystore. No more local data caching than the
+  web app does.
+- Store listings: Apple's privacy label and Google's data-safety form, from
+  the same data inventory as the privacy notice. Apple Developer $99/yr,
+  Google Play $25 once. Expect extra review scrutiny for finance apps.
+- **Exit:** beta households use a TestFlight / internal-testing build.
+
 ### Gate 2 — Beta review
 Decide among: stay closed, build §10 features (scheduled sync, alerts, MCP,
-adviser role), or start public-launch work.
+adviser role), or start public-launch and billing work.
 
 ---
 
@@ -875,3 +1004,11 @@ adviser role), or start public-launch work.
 3. Does SnapTrade cover your workplace 401(k)? Settled by M0. If not, decide
    on Plaid (D20) or CSV.
 4. Household open questions: `spec-households.md` §7.
+5. **Label for signed-out mode.** Proposed: "Use Drift incognito — no signup
+   needed." The concern is that "incognito" is well known for meaning
+   *nothing is kept after you close the window*. Drift's signed-out mode does
+   the opposite: it keeps your data in this browser. And if someone actually
+   opens Drift in an incognito window, their data is lost when they close it.
+   Alternative: "Continue as guest — no signup, your data stays in this
+   browser." Whichever label wins, rename "local-only mode" in the docs to
+   match (e.g. "guest mode").
