@@ -17,7 +17,7 @@ docs, the UI, and the schema:
 | Term | Meaning |
 |---|---|
 | Drift user | A person who signs in to Drift |
-| Profile | A Drift user's own settings, preferences, and info. Never "account" |
+| Profile | Drift's record of a Drift user: sign-in identity, settings, preferences, and info. What gets deleted when someone leaves Drift. Never "account" |
 | Household | A group of Drift users that share access to portfolios |
 | Portfolio | Accounts plus one strategy (today's `AppState`) |
 | Account | A brokerage account as it appears in a portfolio (`Account` in `AppState`), e.g. "Schwab Roth IRA" |
@@ -76,7 +76,7 @@ docs, the UI, and the schema:
 | D15 | Budget ceiling | $0/mo during the personal phase (plus domain ~$1/mo); up to ~$100/mo during the beta |
 | D16 | Households | Access is granted per **household** (owner / editor / viewer). A Drift user can belong to several households. A hard privacy boundary means a separate household under the same Drift user. Mine/hers/joint is a label, never an access boundary. Requirements: `spec-households.md` |
 | D17 | Supabase keys & tokens | Use the **new API keys** (`sb_publishable_…` in the browser, `sb_secret_…` on the server) and **asymmetric JWT signing keys** from day one. The legacy `anon`/`service_role` keys are being retired and can't be rotated. Functions verify access tokens locally against the project's JWKS (`jose`) |
-| D18 | Least privilege on the server | Functions act **as the user** (a Supabase client carrying the caller's token, so RLS applies). The secret key is used only for `snaptrade_users`, `waitlist`, rate limits, and Drift-user deletion |
+| D18 | Least privilege on the server | Functions act **as the user** (a Supabase client carrying the caller's token, so RLS applies). The secret key is used only for `snaptrade_users`, `waitlist`, rate limits, and profile deletion |
 | D19 | Environments | Two Supabase projects: **staging** (local dev and Vercel preview deploys) and **production** (production deploys only). Preview URLs are allowed as auth redirects in staging only. Real brokerage data only in production |
 | D20 | Aggregator fallback | **Plaid Investments** is the named second adapter, triggered if M0 shows SnapTrade can't read your workplace 401(k) (Empower, Fidelity NetBenefits). The pure-adapter design (§6.1) keeps this to a new adapter plus server routes. Until then, uncovered accounts stay on CSV |
 | D21 | Error monitoring | **Sentry for `api/` only**, with `sendDefaultPii: false`, no request or response bodies, and a `beforeSend` that keeps only route, status, error type, and stack. No client-side SDK in the beta |
@@ -503,8 +503,9 @@ drift, suggested trades) to the clipboard. Built next to
 `src/ui/exportReport.ts`. Works in local-only and signed-in modes; nothing is
 sent anywhere by Drift.
 
-### 5.8 Deleting a Drift user
-Profile gets "Delete my Drift user and all my data." `DELETE /api/v1/me`:
+### 5.8 Deleting a Drift user profile
+Profile gets "Delete my Drift user profile and all my data." This deletes
+Drift's record of the person, not the person. `DELETE /api/v1/me`:
 1. deletes the SnapTrade user, which removes all brokerage connections and
    stops billing;
 2. removes the user's memberships, so their linked accounts leave every
@@ -516,7 +517,7 @@ Profile gets "Delete my Drift user and all my data." `DELETE /api/v1/me`:
 - If the SnapTrade call fails, the request fails and nothing else is deleted,
   so the user can retry.
 - A pending-deletion flag records the attempt. A daily job retries flagged
-  deletions, so no Drift user stays half-deleted and SnapTrade doesn't keep
+  deletions, so no profile stays half-deleted and SnapTrade doesn't keep
   billing.
 
 `localStorage` is untouched.
@@ -547,7 +548,7 @@ All endpoints except waitlist:
 | `DELETE /households/:id/members/:userId` | Owner, or self (leave). Unassigns the member's linked accounts |
 | `POST /portfolios/:id/copy` | Copy a portfolio's state into a household the caller edits |
 | `POST /duplicates/decide` | Confirm (body names the copy to keep; the other is removed from the household) or reject a suggestion |
-| `DELETE /me` | Full deletion of the caller's Drift user (§5.8) |
+| `DELETE /me` | Delete the caller's Drift user profile and all their data (§5.8) |
 | `POST /waitlist` | Unauthenticated; honeypot + rate limit; insert into `waitlist` |
 | `GET /health` | Verifies the token; also the target of a daily Vercel Cron ping |
 
@@ -672,7 +673,7 @@ raise it if needed.
   - Link → assign → sync → map → rebalance on desktop and phone.
   - Check the network tab and `localStorage` for secrets.
   - Check that auth emails pass SPF, DKIM, and DMARC.
-  - Delete the Drift user and confirm the SnapTrade user is gone.
+  - Delete the Drift user profile and confirm the SnapTrade user is gone.
   - Before M7: the household flow in M5b's exit criteria.
 
 ---
@@ -824,9 +825,9 @@ Each milestone is one PR to `main` on a `feat/<issue>-…` branch, per
 - Breach-response note in `docs/`, including the encryption-key rotation
   procedure.
 - **Exit:**
-  - deleting a Drift user removes the auth user, all of the user's rows, their
+  - deleting a Drift user profile removes the auth user, all of the user's rows, their
     shares, and the SnapTrade user;
-  - a forced SnapTrade failure leaves the Drift user intact and retryable.
+  - a forced SnapTrade failure leaves the profile intact and retryable.
 
 ### Gate 1 — Personal phase (you only)
 Only your email invited. Use it for a few weeks on desktop and phone. Cost

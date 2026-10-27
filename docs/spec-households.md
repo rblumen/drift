@@ -32,7 +32,7 @@ portfolio, never for a Drift sign-in.
 | Term | What it is | Belongs to | Schema |
 |---|---|---|---|
 | **Drift user** | A person who signs in to Drift: email, password, sessions | One person. Never shared | `auth.users` |
-| **Profile** | A Drift user's own settings, preferences, and info (display name, MFA, referral link, delete) | The Drift user | `auth.users` + profile fields |
+| **Profile** | Drift's record of a Drift user: sign-in identity, settings, preferences, and info (display name, MFA, referral link). Deleting it removes the record and all their data | The Drift user | `auth.users` + profile fields |
 | **Household** | A group of Drift users that manage money together. Holds members, roles, and the list of people | Its members | `households`, `household_members` |
 | **Portfolio** | What Drift rebalances: a set of accounts plus one strategy (targets, placement, overrides). "Mine" and "Ours" are two portfolios | One household | `portfolios` (`state` = today's `AppState`) |
 | **Account** | A brokerage account as it appears in a portfolio, e.g. "Schwab Roth IRA". What the engine rebalances. Either **linked** or **manual** | One portfolio | `Account` in `AppState` |
@@ -42,7 +42,8 @@ portfolio, never for a Drift sign-in.
 | **Person** | An owner label ("Ryan", "Partner", "Kid"), kept per household. Can be tied to a member's Drift user, or not (a child's 529). Never controls access | One household | `household_people` |
 
 UI wording follows the table:
-- "Delete my Drift user" lives under **Profile**.
+- "Delete my Drift user profile" lives under **Profile**. It deletes Drift's
+  record of the person and their data, not the person.
 - The landing page says "Use Drift without signing in".
 - "Account" always means a row in the portfolio's account list.
 - When the account list needs to say how an account gets its data, it says
@@ -199,7 +200,7 @@ accounts for one real account.
 2. Portfolios (strategy and `AppState`) stay with the household. Before
    leaving, a member may **copy** a portfolio into one of their own
    households. This covers separation without anyone losing their own data.
-3. Deleting a Drift user (linking spec §5.8) removes its memberships and
+3. Deleting a Drift user profile (linking spec §5.8) removes its memberships and
    its brokerage logins. It also deletes households where it was the sole
    member, and notifies the remaining members of shared households.
 
