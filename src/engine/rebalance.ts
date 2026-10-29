@@ -1332,10 +1332,53 @@ export function rebalance(
     .reduce((s, ac) => s + Math.max(0, targetValue[ac] - immovableByClass[ac]), 0);
 
   const scale = totalOOTTarget > 0 ? totalFreeCapacity / totalOOTTarget : 0;
+  const desiredOOT = (ac: AssetClass) => Math.max(0, targetValue[ac] - immovableByClass[ac]);
+
+  // Per-class scale actually applied (also read by the PROJECTED_OFF_TARGET check).
+  // A uniform `scale` is right when free capacity falls short (every OOT class gives
+  // up proportionally). A *surplus* is different (#252): it is mostly the shortfall
+  // of underweight in-band classes, frozen below target, and scaling it across every
+  // OOT class pushes an overweight class further above target — with idle cash
+  // (CASH, 0% target) as the only other OOT class, the overweight class absorbs all
+  // of it. So a surplus is routed, in order, to:
+  //   1. underweight OOT classes, scaled up in proportion to their desired value;
+  //   2. else underweight in-band classes, as buy-only top-ups capped at each one's
+  //      shortfall (their frozen holdings are never sold) — `inBandBuys`;
+  //   3. anything left over, scaled across all OOT classes as before.
+  // Overweight OOT classes stop at their target whenever an earlier tier takes it.
+  const classScale = Object.fromEntries(ALL_ASSET_CLASSES.map(ac => [ac, scale])) as Record<AssetClass, number>;
+  const inBandBuys = zeroByClass();
+  const surplus = totalFreeCapacity - totalOOTTarget;
+  if (surplus > EPSILON && totalOOTTarget > 0) {
+    const oot = ALL_ASSET_CLASSES.filter(ac => !withinTolerance.has(ac));
+    const underOOT = oot.filter(ac => currentValue[ac] < targetValue[ac]);
+    const underOOTTotal = underOOT.reduce((s, ac) => s + desiredOOT(ac), 0);
+    let remaining = surplus;
+    for (const ac of oot) classScale[ac] = 1;
+    if (underOOTTotal > EPSILON) {
+      for (const ac of underOOT) classScale[ac] = 1 + remaining / underOOTTotal;
+      remaining = 0;
+    } else {
+      const shortfall = Object.fromEntries(ALL_ASSET_CLASSES.map(ac => [
+        ac,
+        withinTolerance.has(ac) ? Math.max(0, targetValue[ac] - currentValue[ac]) : 0,
+      ])) as Record<AssetClass, number>;
+      const shortfallTotal = Object.values(shortfall).reduce((a, b) => a + b, 0);
+      if (shortfallTotal > EPSILON) {
+        const fill = Math.min(remaining, shortfallTotal);
+        for (const ac of ALL_ASSET_CLASSES) inBandBuys[ac] = fill * (shortfall[ac] / shortfallTotal);
+        remaining -= fill;
+      }
+    }
+    if (remaining > EPSILON) {
+      for (const ac of oot) classScale[ac] = 1 + remaining / totalOOTTarget;
+    }
+  }
+
   const adjustedTarget = Object.fromEntries(
     ALL_ASSET_CLASSES.map(ac => [
       ac,
-      withinTolerance.has(ac) ? 0 : Math.max(0, targetValue[ac] - immovableByClass[ac]) * scale,
+      withinTolerance.has(ac) ? inBandBuys[ac] : desiredOOT(ac) * classScale[ac],
     ]),
   ) as Record<AssetClass, number>;
 
@@ -1450,7 +1493,9 @@ export function rebalance(
   for (const acct of nonLockedAccounts) {
     const inTaxable = accountBucket(acct.type) === 'TAXABLE';
     for (const ac of ALL_ASSET_CLASSES) {
-      if (withinTolerance.has(ac)) continue;
+      // In-band classes trade only as #252 buy-only top-ups (unlockedCurrent is 0
+      // for them, so the delta below can only be a buy).
+      if (withinTolerance.has(ac) && inBandBuys[ac] <= EPSILON) continue;
       const current = unlockedCurrent[acct.id][ac];
       const target  = targetLocation[acct.id]?.[ac] ?? 0;
       const delta   = target - current;
@@ -1751,8 +1796,8 @@ export function rebalance(
     // Divide by householdValue to a weight — both are in the same (possibly TA-scaled)
     // space as checkProjected.
     const reachableValue = immovableByClass[ac] <= targetValue[ac]
-      ? immovableByClass[ac] + (targetValue[ac] - immovableByClass[ac]) * scale
-      : targetValue[ac] * scale;
+      ? immovableByClass[ac] + (targetValue[ac] - immovableByClass[ac]) * classScale[ac]
+      : targetValue[ac] * classScale[ac];
     const reachableTarget = householdValue > 0 ? reachableValue / householdValue : 0;
     const deviation = Math.abs(checkProjected[ac] - reachableTarget);
     const outOfBand = deviation > effectiveTolerance(ac, strategy);

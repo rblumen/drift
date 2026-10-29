@@ -19,10 +19,11 @@ import { DEFAULT_STRATEGY } from './strategy';
 import samplePortfolio from '../data/sample-portfolio.json';
 
 describe('Goal 5: PROJECTED_OFF_TARGET suppresses dust / un-actionable drift (issue #57)', () => {
-  it('does not flag the sole OOT class when its offsets are frozen by 5/25', () => {
+  it('trims the sole OOT class into its in-band offsets without flagging', () => {
     // LC 54% (target 50%, drift 4% > 3% tol → OOT). FI 28% and ALT 18% each drift
-    // 2% < 3% tol → within tolerance, frozen. The only way to trim LC is to buy
-    // FI/ALT, but they're untouchable, so LC correctly stays at 54%. No locked
+    // 2% < 3% tol → within tolerance. Before #252 they were untouchable and LC stayed
+    // stuck at 54%; now in-band underweight classes take buy-only top-ups, so LC is
+    // trimmed to target and the proceeds split between FI and ALT. No locked
     // positions, no account restrictions, no min-trade suppression → nothing to flag.
     const accts: Account[] = [
       { id: 'ira', name: 'IRA', institution: 'Fidelity', type: 'TRADITIONAL_IRA' },
@@ -44,8 +45,12 @@ describe('Goal 5: PROJECTED_OFF_TARGET suppresses dust / un-actionable drift (is
 
     const r = rebalance(accts, positions, strategy);
 
-    // The frozen classes mean no trades and LC stuck at 54% — expected, not an error.
-    expect(r.trades).toHaveLength(0);
+    // LC trimmed to target; in-band classes are only ever bought, never sold.
+    expect(r.projectedWeights.US_LARGE_CAP).toBeCloseTo(0.50, 3);
+    const byClass = Object.fromEntries(r.trades.map(t => [t.assetClass, t.deltaUsd]));
+    expect(byClass.US_LARGE_CAP).toBeCloseTo(-4_000, 0);
+    expect(byClass.FIXED_INCOME).toBeCloseTo(2_000, 0);
+    expect(byClass.ALTERNATIVES).toBeCloseTo(2_000, 0);
     expect(r.flags.filter(f => f.kind === 'PROJECTED_OFF_TARGET')).toHaveLength(0);
   });
 

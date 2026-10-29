@@ -58,19 +58,19 @@
       {
         "accountId": "k401",
         "ticker": "SCHB",
-        "deltaUsd": 3528
+        "deltaUsd": 3757
       },
       {
         "accountId": "k401",
         "ticker": "VOO",
         "assetClass": "US_LARGE_CAP",
-        "deltaUsd": -22118
+        "deltaUsd": -23400
       },
       {
         "accountId": "k401",
         "ticker": null,
         "assetClass": "US_MID_CAP",
-        "deltaUsd": 18590
+        "deltaUsd": 19643
       }
     ],
     "netByAccount": {

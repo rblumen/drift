@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Cash no longer goes to a class you're already over on** ([#252](https://github.com/rblumen/drift/issues/252)) — when the only classes outside their band were one overweight class and idle or new cash, every dollar of that cash was used to buy more of the overweight class (e.g. "BUY $10k SCHF" while Developed Intl was already above target), and Results still reported that all classes were in band. Cash and trim proceeds now go to classes that are under target, even ones still inside their band. Those classes are only ever bought, never sold, so an overweight class now gets trimmed back toward target instead of staying stuck above it.
+
 ## [0.6.0] - 2026-10-23
 
 ### Changed

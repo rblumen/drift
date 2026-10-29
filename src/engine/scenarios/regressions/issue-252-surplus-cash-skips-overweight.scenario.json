@@ -1,0 +1,37 @@
+{
+  "name": "issue-252-surplus-cash-skips-overweight",
+  "description": "Regression #252: when the only out-of-band classes are an overweight class and idle CASH, the surplus goes to underweight in-band classes (buy-only) instead of pushing the overweight class further above target",
+  "principle": "regression #252 (surplus capacity never overshoots an overweight class)",
+  "accounts": [
+    { "id": "brokerage", "name": "Brokerage", "institution": "Schwab", "type": "TAXABLE" },
+    { "id": "k401", "name": "401k", "institution": "Fidelity", "type": "FOUR_OH_ONE_K", "acceptsDeposits": false },
+    { "id": "roth", "name": "Roth IRA", "institution": "Schwab", "type": "ROTH_IRA", "acceptsDeposits": false }
+  ],
+  "holdings": [
+    { "accountId": "brokerage", "ticker": "MUNY",  "marketValue": 193500 },
+    { "accountId": "brokerage", "ticker": "VMFXX", "marketValue": 10000 },
+    { "accountId": "k401",      "ticker": "VEA",   "marketValue": 180500 },
+    { "accountId": "k401",      "ticker": "VOO",   "marketValue": 100000 },
+    { "accountId": "roth",      "ticker": "VOO",   "marketValue": 492000 },
+    { "accountId": "roth",      "ticker": "VWO",   "marketValue": 24000 }
+  ],
+  "strategy": {
+    "targets": {
+      "US_TOTAL_MARKET": 0.0, "US_LARGE_CAP": 0.6, "US_MID_CAP": 0.0, "US_SMALL_CAP": 0.0,
+      "DEVELOPED_INTL": 0.17, "DEVELOPED_EUROPE": 0.0, "DEVELOPED_PACIFIC": 0.0, "EMERGING_INTL": 0.03,
+      "FIXED_INCOME": 0.2, "US_TREASURY": 0.0, "US_CORP_BOND": 0.0, "MUNI_BOND": 0.0, "TIPS": 0.0, "INTL_BOND": 0.0,
+      "REAL_ESTATE": 0.0, "ALTERNATIVES": 0.0, "CRYPTO": 0.0, "PRECIOUS_METALS": 0.0, "CASH": 0.0
+    },
+    "placement": {},
+    "toleranceAbs": 0.01,
+    "toleranceRel": 0.25,
+    "minTradeUsd": 500
+  },
+  "expected": {
+    "currentWeights": { "DEVELOPED_INTL": 0.1805, "CASH": 0.01 },
+    "projectedWeights": { "DEVELOPED_INTL": 0.1745, "EMERGING_INTL": 0.03, "FIXED_INCOME": 0.2, "CASH": 0.0 },
+    "projectedDriftWithinTolerance": true,
+    "forbiddenTrades": [{ "accountId": "brokerage", "assetClass": "DEVELOPED_INTL" }],
+    "netByAccount": { "brokerage": 0, "k401": 0, "roth": 0 }
+  }
+}
