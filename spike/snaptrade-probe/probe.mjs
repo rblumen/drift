@@ -141,20 +141,29 @@ async function report() {
   const creds = await userCreds(st);
   const { data: connections } = await call(() => st.connections.listBrokerageAuthorizations({ ...creds }));
   const { data: accounts } = await call(() => st.accountInformation.listUserAccounts({ ...creds }));
-  const holdings = {};
+  // Two calls per account. The combined getUserHoldings is deprecated and
+  // returns HTTP 410 for customers who signed up after 2026-05-11.
+  const positions = {};
+  const balances = {};
   const errors = {};
-  for (const [i, acct] of accounts.entries()) {
-    process.stderr.write(`  fetching holdings for account ${i + 1}/${accounts.length}...\n`);
+  const fetchInto = async (target, key, acct, fn) => {
     try {
-      ({ data: holdings[acct.id] } = await call(() => st.accountInformation.getUserHoldings({ ...creds, accountId: acct.id })));
+      ({ data: target[acct.id] } = await call(fn));
     } catch (e) {
       if (!(e instanceof ProbeError)) throw e;
-      errors[acct.id] = e.message;
+      (errors[acct.id] ??= {})[key] = e.message;
     }
+  };
+  for (const [i, acct] of accounts.entries()) {
+    process.stderr.write(`  fetching positions and balances for account ${i + 1}/${accounts.length}...\n`);
+    await fetchInto(positions, 'positions', acct,
+      () => st.accountInformation.getAllAccountPositions({ ...creds, accountId: acct.id }));
+    await fetchInto(balances, 'balances', acct,
+      () => st.accountInformation.getUserAccountBalance({ ...creds, accountId: acct.id }));
   }
-  console.log('\n' + buildReport({ connections, accounts, holdings, errors }));
+  console.log('\n' + buildReport({ connections, accounts, positions, balances, errors }));
   if (flag('raw')) {
-    const file = writeRaw({ fetchedAt: new Date().toISOString(), mode: MODE, connections, accounts, holdings, errors });
+    const file = writeRaw({ fetchedAt: new Date().toISOString(), mode: MODE, connections, accounts, positions, balances, errors });
     console.log(`\nRAW (unmasked) responses written to ${file}`);
     console.log('This file contains real account data. Keep it under private/ and delete it when done.');
   } else {

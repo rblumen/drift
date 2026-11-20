@@ -12,7 +12,7 @@ It sits outside `src/`, the app's tests and its build, and lives only on the
 |---|---|
 | `brokerages [--filter text]` | Lists the institutions SnapTrade supports (public reference data) |
 | `connect [--broker SLUG]` | Prints a **read-only** connection-portal link, waits while you link accounts, then runs `report` |
-| `report [--raw]` | Fetches connections, accounts and holdings, and prints a **masked** coverage report |
+| `report [--raw]` | Fetches connections, accounts, and each account's positions and balances, and prints a **masked** coverage report |
 | `cleanup [--yes]` | Removes the linked connections (Personal key) or deletes the probe user (Commercial key) |
 
 The masked report prints structure only:
@@ -78,7 +78,7 @@ per-institution errors clearly. Run `connect --broker <SLUG>` to jump straight
 to one institution (slugs come from `brokerages`).
 
 SnapTrade may rate-limit Personal keys at 10 requests per minute per account.
-The script fetches one holdings response per account and backs off on 429.
+The script makes two calls per account (positions, balances) and backs off on 429.
 
 ## Clean up
 
@@ -117,14 +117,20 @@ These use `fixtures/synthetic.json`, which is synthetic data shaped like SDK
 
 ## Notes for the spec (§6.1)
 
-From the SDK 13.2.2 types:
-- **No CUSIP field.** Securities carry `symbol.symbol.symbol` (ticker),
-  `raw_symbol`, `figi_code`, `description`, and `symbol.local_id`.
-  Ticker-less funds may surface their CUSIP through `raw_symbol` or
-  `local_id`; the probe reports which.
-- Cost basis comes from `average_purchase_price` and per-lot
-  `tax_lots[].cost_basis`. The lot fields are **strings**, not numbers.
-- Cash comes from `balances[].cash` per currency, and from positions flagged
-  `cash_equivalent: true` (e.g. money market funds).
-- `account.sync_status.holdings.holdings_unavailable` flags accounts
-  SnapTrade can see but can't read holdings for.
+From the SDK 13.2.2 types and a first real run:
+- **`getUserHoldings` is retired for new customers.** It returns HTTP 410 for
+  anyone who signed up after 2026-05-11. Use `getAllAccountPositions`
+  (positions) plus `getUserAccountBalance` (balances); `getAccountBalancesV2`
+  is beta and needs enabling by SnapTrade.
+- Positions are `results[]` with an `instrument.kind` discriminator: `stock`,
+  `etf`, `mutualfund`, `cef`, `bond`, `other`, `cash`, `option` and others.
+  Cash can arrive as a `kind: cash` position.
+- `units`, `price` and `cost_basis` are **strings**, and so are the
+  `tax_lots[]` fields. Tax lots appear only when tax-lot data is enabled for
+  the account.
+- **No CUSIP field.** Securities carry `symbol`, `raw_symbol`, `description`
+  and `figi_instrument.figi_code`. Ticker-less funds may surface their CUSIP
+  through `raw_symbol`; the probe reports which.
+- Real accounts return fields the SDK types omit (e.g. top-level
+  `is_paper`, `cash_restrictions`, `raw_data`), and `status` can be null.
+  The adapter's minimal local type should tolerate both.
