@@ -1,0 +1,216 @@
+{
+  "_comment": "SYNTHETIC data shaped like SnapTrade responses (SDK 13.2.2: getAllAccountPositions + getUserAccountBalance). Every value marked SENTINEL, and every distinctive number, must never appear in the masked report; report.test.mjs checks this.",
+  "connections": [
+    {
+      "id": "11111111-1111-4111-8111-111111111111",
+      "created_date": "2026-11-01T00:00:00Z",
+      "name": "SENTINEL-CONNECTION-NAME",
+      "type": "read",
+      "disabled": false,
+      "disabled_date": null,
+      "brokerage": {
+        "id": "22222222-2222-4222-8222-222222222222",
+        "slug": "BROKERAGE-A",
+        "name": "Brokerage A",
+        "display_name": "Brokerage A",
+        "enabled": true,
+        "maintenance_mode": false,
+        "is_degraded": false,
+        "brokerage_type": {
+          "id": "t1",
+          "name": "Traditional Brokerage"
+        }
+      },
+      "meta": {}
+    }
+  ],
+  "accounts": [
+    {
+      "id": "33333333-3333-4333-8333-333333333333",
+      "brokerage_authorization": "11111111-1111-4111-8111-111111111111",
+      "name": "SENTINEL Alex Example Roth IRA",
+      "number": "SENTINEL9876543",
+      "institution_name": "Brokerage A",
+      "raw_type": "Roth IRA",
+      "account_category": "INVESTMENT",
+      "status": "open",
+      "balance": {
+        "total": {
+          "amount": 314159.27,
+          "currency": "USD"
+        }
+      },
+      "sync_status": {
+        "transactions": {},
+        "holdings": {
+          "initial_sync_completed": true,
+          "last_successful_sync": "2026-11-19T12:00:00Z",
+          "holdings_unavailable": false
+        }
+      },
+      "meta": {
+        "SENTINEL123456": "keyed-by-account-number"
+      }
+    },
+    {
+      "id": "44444444-4444-4444-8444-444444444444",
+      "brokerage_authorization": "11111111-1111-4111-8111-111111111111",
+      "name": null,
+      "number": "SENTINEL0000111",
+      "institution_name": "Recordkeeper B",
+      "raw_type": "401k",
+      "account_category": "INVESTMENT",
+      "status": "open",
+      "balance": {
+        "total": null
+      },
+      "sync_status": {
+        "transactions": {},
+        "holdings": {
+          "initial_sync_completed": false,
+          "last_successful_sync": null,
+          "holdings_unavailable": true
+        }
+      },
+      "meta": {}
+    }
+  ],
+  "positions": {
+    "33333333-3333-4333-8333-333333333333": {
+      "results": [
+        {
+          "instrument": {
+            "kind": "etf",
+            "id": "66666666-6666-4666-8666-666666666666",
+            "symbol": "ZZSNT",
+            "raw_symbol": "ZZSNT",
+            "description": "SENTINEL Total Market ETF",
+            "currency": "USD",
+            "exchange": "ARCX",
+            "figi_instrument": {
+              "figi_code": "BBGSNT000001",
+              "figi_share_class": "BBGSNT000002"
+            }
+          },
+          "units": "161.803",
+          "price": "271.82",
+          "cost_basis": "28024.28",
+          "currency": "USD",
+          "cash_equivalent": false,
+          "tax_lots": [
+            {
+              "original_purchase_date": "2020-01-02",
+              "quantity": "100.5",
+              "purchased_price": "150.25",
+              "cost_basis": "15100.13",
+              "current_value": "27318.91",
+              "position_type": "LONG",
+              "lot_id": "SENTINEL-LOT-1"
+            }
+          ]
+        },
+        {
+          "instrument": {
+            "kind": "mutualfund",
+            "id": "88888888-8888-4888-8888-888888888888",
+            "symbol": "",
+            "raw_symbol": "999ZZSNT1",
+            "description": "SENTINEL Collective Investment Trust 2050",
+            "currency": "USD",
+            "exchange": null,
+            "figi_instrument": null
+          },
+          "units": "4242.42",
+          "price": "31.41",
+          "cost_basis": null,
+          "currency": "USD",
+          "cash_equivalent": false,
+          "tax_lots": []
+        },
+        {
+          "instrument": {
+            "kind": "mutualfund",
+            "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "symbol": "ZZMMX",
+            "raw_symbol": "ZZMMX",
+            "description": "SENTINEL Money Market",
+            "currency": "USD",
+            "exchange": null,
+            "figi_instrument": null
+          },
+          "units": "5555.55",
+          "price": "1",
+          "cost_basis": "5555.55",
+          "currency": "USD",
+          "cash_equivalent": true,
+          "tax_lots": []
+        },
+        {
+          "instrument": {
+            "kind": "cash",
+            "code": "USD"
+          },
+          "units": "2718.28",
+          "price": "1",
+          "cost_basis": null,
+          "currency": "USD",
+          "cash_equivalent": true,
+          "tax_lots": []
+        }
+      ],
+      "data_freshness": {
+        "as_of": "2026-11-20T12:00:00Z"
+      }
+    }
+  },
+  "balances": {
+    "33333333-3333-4333-8333-333333333333": [
+      {
+        "currency": {
+          "id": "c1",
+          "code": "USD",
+          "name": "US Dollar"
+        },
+        "cash": 2718.28,
+        "buying_power": 2718.28
+      }
+    ]
+  },
+  "errors": {
+    "44444444-4444-4444-8444-444444444444": {
+      "positions": "HTTP 400 1012: holdings not available for this account",
+      "balances": "HTTP 400 1012: holdings not available for this account"
+    }
+  },
+  "sentinels": [
+    "SENTINEL",
+    "ZZSNT",
+    "ZZMMX",
+    "999ZZSNT1",
+    "BBGSNT000001",
+    "Alex",
+    "314159",
+    "2718",
+    "161.8",
+    "271.8",
+    "1414",
+    "173.2",
+    "4242",
+    "31.41",
+    "5555",
+    "15100",
+    "27318",
+    "150.25",
+    "100.5",
+    "11111111",
+    "33333333",
+    "44444444",
+    "55555555",
+    "66666666",
+    "77777777",
+    "88888888",
+    "28024",
+    "BBGSNT000002",
+    "ARCX"
+  ]
+}
