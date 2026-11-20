@@ -114,6 +114,10 @@ Bay Leaf Labs; the app lives at `drift.bayleaflabs.com` (spec D13).
 
 **Exit:** coverage table and the 401(k) decision.
 
+**Status:** coverage passed, including workplace 401(k)s; no Plaid spike
+(spec §6.3, D20). The terms summary (#248) and the private coverage list (#247)
+finish M0.
+
 ### M1 — Guardrails and docs update
 | Owner | Task |
 |---|---|
