@@ -8,8 +8,9 @@ built:** [`build-plan-account-linking.md`](build-plan-account-linking.md).
 
 This document specifies what Drift becomes: decisions, data model, behavior,
 API, and security requirements. Sequencing and ownership live in the build
-plan. Milestone IDs mentioned here (M0a–M8) refer to it. `<domain>` stands for
-the custom domain, not yet chosen.
+plan. Milestone IDs mentioned here (M0a–M8) refer to it. The app is served at
+`drift.bayleaflabs.com`; email and support use the publisher's apex domain,
+`bayleaflabs.com` (D13).
 
 **Vocabulary.** These terms are defined in
 [`spec-households.md`](spec-households.md) §2 and mean the same thing in the
@@ -71,9 +72,9 @@ docs, the UI, and the schema:
 | D8 | Composing positions | A shared **pure** function combines a portfolio's `AppState` with its assigned holdings into the engine's `Position[]`. Runs in the browser now; importable by server code for later features |
 | D9 | Engine location | **One engine, one implementation, run in the browser.** `src/engine/` is pure TypeScript with no DOM or Node APIs. The browser bundles it; server code imports **the same module from the same commit** only when a §10 feature needs it, never a copy or a port. Browser because: guest mode needs it; interactive edits recompute in milliseconds, where a server round-trip would add ~100–500 ms per edit (more on cold starts); and it works offline. Guards against the two runtimes diverging: (1) CI fails if `src/engine/` imports anything environment-specific; (2) the scenario suite already runs in Node via Vitest, which is the server runtime; (3) browser bundle and functions deploy atomically from one commit, and server-computed results record the engine's git SHA; (4) an open tab on an older bundle gets a "new version — reload" prompt |
 | D10 | Secrets at rest | SnapTrade `userSecret` encrypted at the application level (AES-256-GCM) with a **versioned keyring** (`TOKEN_ENC_KEYS`), so the key can be rotated. Holdings stay plain rows, protected by RLS and Supabase's disk encryption, so they remain queryable. Threat model in §8 |
-| D11 | Outgoing email | **Resend** as Supabase Auth's custom SMTP and for app email. SPF, DKIM, and DMARC on `<domain>`. **No portfolio data in any email**; open/click tracking off |
-| D12 | Incoming email | **Cloudflare Email Routing** forwards `support@<domain>` to your inbox (free). Upgrade to a real mailbox if replying as support becomes awkward |
-| D13 | Domain & DNS | Custom `<domain>` with DNS on Cloudflare; app served by Vercel. Records pointing at Vercel are **DNS-only** (Cloudflare proxy off). Auth emails link to `<domain>`, not `supabase.co` |
+| D11 | Outgoing email | **Resend** as Supabase Auth's custom SMTP and for app email. SPF, DKIM, and DMARC on `bayleaflabs.com`. **No portfolio data in any email**; open/click tracking off |
+| D12 | Incoming email | **Cloudflare Email Routing** forwards `support@bayleaflabs.com` to your inbox (free). Upgrade to a real mailbox if replying as support becomes awkward |
+| D13 | Domain & DNS | Publisher domain **`bayleaflabs.com`** (Bay Leaf Labs), registered at Cloudflare Registrar with DNS on Cloudflare. The app is served by Vercel at **`drift.bayleaflabs.com`**; the apex hosts a publisher page or redirects to the app. Email uses the apex: `mail.` and `news.` sending subdomains (§7) and `support@`. Records pointing at Vercel are **DNS-only** (Cloudflare proxy off). Auth emails link to `drift.bayleaflabs.com`, not `supabase.co`. Auth sessions are scoped to the `drift.` host, never the parent domain, so other `*.bayleaflabs.com` sites can't read them |
 | D14 | LLM readiness | No MCP in the beta. Versioned server API (`/api/v1/…`), server-owned holdings, and server-importable compose/engine make a read-only MCP server a thin layer later. A client-side "Copy summary for AI" ships in the beta |
 | D15 | Budget ceiling | Up to **$20/mo** during the personal phase (domain, plus room for a paid tier if a free one pauses or limits); up to ~$100/mo during the beta |
 | D16 | Households | Access is granted per **household** (owner / editor / viewer). A Drift user can belong to several households. A hard privacy boundary means a separate household under the same Drift user. Mine/hers/joint is a label, never an access boundary. Requirements: `spec-households.md` |
@@ -427,7 +428,7 @@ export function composePositions(
     brokerages do you use?" and "How did you hear about Drift?"
 - Invited users get an email; the link lands on a "Set your password" page.
   Household invites then land in that household.
-- All auth links use the PKCE flow and land on `<domain>`. The app exchanges
+- All auth links use the PKCE flow and land on `drift.bayleaflabs.com`. The app exchanges
   the code and **strips it from the URL**, as it does with `?demo` today.
 - Profile → Security: enable/disable an authenticator app (TOTP).
 
@@ -441,7 +442,7 @@ export function composePositions(
   `invited_at`. The admin view lists referred signups first.
 
 ### 5.2a Referrals (M7, once beta users exist)
-- Each signed-in user sees a personal link, `https://<domain>/join?ref=<code>`,
+- Each signed-in user sees a personal link, `https://drift.bayleaflabs.com/join?ref=<code>`,
   under Profile → "Invite a friend."
 - The link opens the waitlist form with the code attached; the signup is
   stored with `referral_code`. "How did you hear" is pre-set to
@@ -692,18 +693,18 @@ Exact SnapTrade field names are confirmed during the spike (M0).
 
 | Email | Sender | Content rule |
 |---|---|---|
-| Invite (beta or household), magic link, password reset, email change | Supabase Auth via Resend SMTP; household invites via Resend API | Custom templates on `<domain>`. Auth links use `{{ .TokenHash }}` to `<domain>/auth/confirm`. Household invites name the inviter and household only |
+| Invite (beta or household), magic link, password reset, email change | Supabase Auth via Resend SMTP; household invites via Resend API | Custom templates, sent from `mail.bayleaflabs.com`. Auth links use `{{ .TokenHash }}` to `drift.bayleaflabs.com/auth/confirm`. Household invites name the inviter and household only |
 | Membership changes (join, leave, role) | Server via Resend API | Names and household name only |
 | Reminders, drift alerts (later, §10) | Server via Resend API | "Open Drift to review." Never dollar amounts, tickers, or account names |
-| Announcements (beta news, waitlist updates) | Resend Broadcasts to an Audience, from `news.<domain>` | Product news only. Unsubscribe link and postal address (CAN-SPAM). Never portfolio data |
-| Support | Inbound to `support@<domain>` | Cloudflare Email Routing → your inbox. Replies go out as support@ (§7.1) |
+| Announcements (beta news, waitlist updates) | Resend Broadcasts to an Audience, from `news.bayleaflabs.com` | Product news only. Unsubscribe link and postal address (CAN-SPAM). Never portfolio data |
+| Support | Inbound to `support@bayleaflabs.com` | Cloudflare Email Routing → your inbox. Replies go out as support@ (§7.1) |
 
 DNS (Cloudflare):
 - SPF and DKIM for Resend.
 - DMARC starting at `p=none` with reports.
 - MX for Cloudflare Email Routing.
-- Separate sending subdomains: `mail.<domain>` for transactional email and
-  `news.<domain>` for announcements. A spam complaint about news then can't
+- Separate sending subdomains: `mail.bayleaflabs.com` for transactional email and
+  `news.bayleaflabs.com` for announcements. A spam complaint about news then can't
   hurt sign-in email.
 
 Check Supabase Auth's per-hour email rate limit with custom SMTP during M3, and
@@ -834,7 +835,8 @@ raise it if needed.
 
 ## 11. Open questions
 
-1. Which domain? Settled by the domain spike (build plan M0a).
+1. ~~Which domain?~~ **Resolved:** `bayleaflabs.com`, under the publisher name Bay Leaf
+   Labs, with the app at `drift.bayleaflabs.com` (D13).
 2. ~~Invite quotas for beta users?~~ **Resolved:** beta users invite
    household members only. Everyone else comes through referral and your
    invite (D6).

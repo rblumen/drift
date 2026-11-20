@@ -64,8 +64,8 @@ steps, settings, and DNS records for each.
 | 2 | **Password manager** entry/vault for the project (vendor logins, recovery codes, encryption-key backup) | M0a | — |
 | 3 | **Cloudflare** account; register the domain; auto-renew and registrar lock on | M0a | ~$10–15/yr |
 | 4 | **SnapTrade** developer account; Personal key for the spike | M0 | Free |
-| 5 | **Supabase** org: `drift-staging` and `drift-prod` projects (same region as Vercel functions), new API keys, asymmetric JWT keys, public signups off, redirect URLs | M3 | Free |
-| 6 | **Resend** account; add and verify `mail.<domain>`; Supabase custom SMTP settings | M3 | Free tier |
+| 5 | **Supabase** org: `drift-staging` and `drift-prod` projects (same region as Vercel functions), new API keys, asymmetric JWT keys, public signups off, redirect URLs (production: `https://drift.bayleaflabs.com`) | M3 | Free |
+| 6 | **Resend** account; add and verify `mail.bayleaflabs.com`; Supabase custom SMTP settings | M3 | Free tier |
 | 7 | **Cloudflare DNS** records for Vercel, Resend, DMARC, Email Routing; **Email Routing** `support@` → project Gmail | M3 | Free |
 | 8 | **Sentry** project for `api/` | M3 | Free tier |
 | 9 | **Vercel env vars** per environment (staging for previews, production): Supabase URL and keys, SnapTrade keys, `TOKEN_ENC_KEYS`, Resend key, Sentry DSN. Generate `TOKEN_ENC_KEYS` locally with the command the agent provides; keep a backup in the password manager | M3, M5 | — |
@@ -74,7 +74,7 @@ steps, settings, and DNS records for each.
 | 12 | Approve the **privacy notice and beta terms**; decide whether to buy a lawyer review | M6 | $0–? |
 | 13 | **Supabase Pro** on production; **Vercel Pro** if needed; SnapTrade pay-as-you-go billing | M7 | ~$25 + $20/mo + usage |
 | 14 | **Postal address** for announcement emails (PO box or virtual mailbox) | M7 | ~$5–15/mo |
-| 15 | `news.<domain>` in Resend; Gmail **"Send mail as" support@** via Resend SMTP | M7 | Free |
+| 15 | `news.bayleaflabs.com` in Resend; Gmail **"Send mail as" support@** via Resend SMTP | M7 | Free |
 | 16a | **GitHub:** secret scanning and push protection on; `production` environment with you as required reviewer for the migration workflow | Now / M3 | Free (public repo) |
 | 16b | **Vercel Deployment Protection** on preview deployments (preview URLs are posted publicly on PRs) | M3 | Free tier |
 | 16 | **Apple Developer** ($99/yr) and **Google Play Console** ($25 once) accounts | M8 | ~$9/mo |
@@ -97,6 +97,9 @@ its topic but comes after Gate 1.
 | 🤖 | Replace `<domain>` throughout the docs (PR) |
 
 **Exit:** domain registered and filled in.
+
+**Status:** done. `bayleaflabs.com` registered 2026-11-20 under the publisher name
+Bay Leaf Labs; the app lives at `drift.bayleaflabs.com` (spec D13).
 
 ### M0 — SnapTrade spike (throwaway; not merged)
 | Owner | Task |
@@ -243,7 +246,7 @@ invisible to them.
 ### M7 — Open the closed beta
 | Owner | Task |
 |---|---|
-| 👤 | Supabase Pro, Vercel Pro if needed, SnapTrade billing, postal address, `news.<domain>`, Gmail "Send mail as" (checklist 13–15) |
+| 👤 | Supabase Pro, Vercel Pro if needed, SnapTrade billing, postal address, `news.bayleaflabs.com`, Gmail "Send mail as" (checklist 13–15) |
 | 🤖 | Referrals (§5.2a): `referral_codes`, "Invite a friend", `/join?ref=`, referred-first admin view |
 | 🤖 | `scripts/admin/sync-audiences.ts`; Profile → Email toggle (§7.1) |
 | 🤝 | Agent writes the backup-restore drill; you run it (restore production's backup into a scratch project) |
