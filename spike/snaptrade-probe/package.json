@@ -1,0 +1,14 @@
+{
+  "name": "snaptrade-probe",
+  "private": true,
+  "description": "Throwaway SnapTrade coverage probe for the Drift v1 spike (M0). Never merged.",
+  "type": "module",
+  "engines": { "node": ">=22.9" },
+  "scripts": {
+    "probe": "node --env-file-if-exists=../../private/snaptrade-probe.env probe.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "snaptrade-typescript-sdk": "13.2.2"
+  }
+}

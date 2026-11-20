@@ -1,0 +1,154 @@
+{
+  "_comment": "SYNTHETIC data shaped like SnapTrade responses (SDK 13.2.2 types). Every value marked SENTINEL, and every distinctive number, must never appear in the masked report; report.test.mjs checks this.",
+  "connections": [
+    {
+      "id": "11111111-1111-4111-8111-111111111111",
+      "created_date": "2026-11-01T00:00:00Z",
+      "name": "SENTINEL-CONNECTION-NAME",
+      "type": "read",
+      "disabled": false,
+      "disabled_date": null,
+      "brokerage": {
+        "id": "22222222-2222-4222-8222-222222222222",
+        "slug": "BROKERAGE-A",
+        "name": "Brokerage A",
+        "display_name": "Brokerage A",
+        "enabled": true,
+        "maintenance_mode": false,
+        "is_degraded": false,
+        "brokerage_type": { "id": "t1", "name": "Traditional Brokerage" }
+      },
+      "meta": {}
+    }
+  ],
+  "accounts": [
+    {
+      "id": "33333333-3333-4333-8333-333333333333",
+      "brokerage_authorization": "11111111-1111-4111-8111-111111111111",
+      "name": "SENTINEL Alex Example Roth IRA",
+      "number": "SENTINEL9876543",
+      "institution_name": "Brokerage A",
+      "raw_type": "Roth IRA",
+      "account_category": "INVESTMENT",
+      "status": "open",
+      "balance": { "total": { "amount": 314159.27, "currency": "USD" } },
+      "sync_status": {
+        "transactions": {},
+        "holdings": { "initial_sync_completed": true, "last_successful_sync": "2026-11-19T12:00:00Z", "holdings_unavailable": false }
+      },
+      "meta": { "SENTINEL123456": "keyed-by-account-number" }
+    },
+    {
+      "id": "44444444-4444-4444-8444-444444444444",
+      "brokerage_authorization": "11111111-1111-4111-8111-111111111111",
+      "name": null,
+      "number": "SENTINEL0000111",
+      "institution_name": "Recordkeeper B",
+      "raw_type": "401k",
+      "account_category": "INVESTMENT",
+      "status": "open",
+      "balance": { "total": null },
+      "sync_status": {
+        "transactions": {},
+        "holdings": { "initial_sync_completed": false, "last_successful_sync": null, "holdings_unavailable": true }
+      },
+      "meta": {}
+    }
+  ],
+  "holdings": {
+    "33333333-3333-4333-8333-333333333333": {
+      "account": { "id": "33333333-3333-4333-8333-333333333333" },
+      "balances": [ { "currency": { "id": "c1", "code": "USD", "name": "US Dollar" }, "cash": 2718.28, "buying_power": 2718.28 } ],
+      "positions": [
+        {
+          "symbol": {
+            "id": "55555555-5555-4555-8555-555555555555",
+            "description": "SENTINEL Total Market ETF",
+            "local_id": "ZZSNT",
+            "is_quotable": true,
+            "is_tradable": true,
+            "symbol": {
+              "id": "66666666-6666-4666-8666-666666666666",
+              "symbol": "ZZSNT",
+              "raw_symbol": "ZZSNT",
+              "description": "SENTINEL Total Market ETF",
+              "figi_code": "BBGSNT000001",
+              "type": { "id": "st1", "code": "et", "description": "ETF", "is_supported": true }
+            }
+          },
+          "units": 161.803,
+          "price": 271.82,
+          "open_pnl": 1414.21,
+          "average_purchase_price": 173.2,
+          "fractional_units": 0.803,
+          "currency": { "id": "c1", "code": "USD", "name": "US Dollar" },
+          "cash_equivalent": false,
+          "tax_lots": [
+            { "original_purchase_date": "2020-01-02", "quantity": "100.5", "purchased_price": "150.25", "cost_basis": "15100.13", "current_value": "27318.91", "position_type": "LONG", "lot_id": "SENTINEL-LOT-1" }
+          ]
+        },
+        {
+          "symbol": {
+            "id": "77777777-7777-4777-8777-777777777777",
+            "description": "SENTINEL Collective Investment Trust 2050",
+            "local_id": "999ZZSNT1",
+            "is_quotable": false,
+            "is_tradable": false,
+            "symbol": {
+              "id": "88888888-8888-4888-8888-888888888888",
+              "symbol": "",
+              "raw_symbol": "999ZZSNT1",
+              "description": "SENTINEL Collective Investment Trust 2050",
+              "figi_code": null,
+              "type": { "id": "st2", "code": "oef", "description": "Open Ended Fund", "is_supported": true }
+            }
+          },
+          "units": 4242.42,
+          "price": 31.41,
+          "open_pnl": null,
+          "average_purchase_price": null,
+          "fractional_units": null,
+          "currency": { "id": "c1", "code": "USD", "name": "US Dollar" },
+          "cash_equivalent": false,
+          "tax_lots": []
+        },
+        {
+          "symbol": {
+            "id": "99999999-9999-4999-8999-999999999999",
+            "description": "SENTINEL Money Market",
+            "local_id": "ZZMMX",
+            "is_quotable": true,
+            "is_tradable": true,
+            "symbol": {
+              "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+              "symbol": "ZZMMX",
+              "raw_symbol": "ZZMMX",
+              "description": "SENTINEL Money Market",
+              "figi_code": null,
+              "type": { "id": "st3", "code": "mmf", "description": "Money Market Fund", "is_supported": true }
+            }
+          },
+          "units": 5555.55,
+          "price": 1,
+          "open_pnl": null,
+          "average_purchase_price": 1,
+          "fractional_units": null,
+          "currency": { "id": "c1", "code": "USD", "name": "US Dollar" },
+          "cash_equivalent": true,
+          "tax_lots": []
+        }
+      ],
+      "option_positions": [],
+      "orders": [],
+      "total_value": { "value": 314159.27, "currency": "USD" }
+    }
+  },
+  "errors": {
+    "44444444-4444-4444-8444-444444444444": "HTTP 400 1012: holdings not available for this account"
+  },
+  "sentinels": [
+    "SENTINEL", "ZZSNT", "ZZMMX", "999ZZSNT1", "BBGSNT000001", "Alex",
+    "314159", "2718", "161.8", "271.8", "1414", "173.2", "4242", "31.41", "5555", "15100", "27318", "150.25", "100.5",
+    "11111111", "33333333", "44444444", "55555555", "66666666", "77777777", "88888888"
+  ]
+}
