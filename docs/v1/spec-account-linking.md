@@ -1,7 +1,9 @@
-# Spec: Account Linking (Closed Beta)
+# Spec: Account Linking
 
-**Status:** Draft for review · **Scope:** the product for the closed beta
-(invited friends & family, web-hosted) · **Background and rationale:**
+**Status:** Draft for review · **Scope:** the personal phase first (the
+developer and their household, web-hosted), built so a wider launch needs no
+re-architecture; whether Drift opens wider is gated on demand (D24) ·
+**Background and rationale:**
 [`study-account-linking.md`](study-account-linking.md) · **Household
 requirements:** [`spec-households.md`](spec-households.md) · **How it gets
 built:** [`build-plan-account-linking.md`](build-plan-account-linking.md).
@@ -39,8 +41,10 @@ docs, the UI, and the schema:
    manage one household's portfolios.
 4. The server owns synced brokerage data, so later features (scheduled syncs,
    drift alerts, LLM access) can work without a browser open.
-5. Rollout in order: **the developer alone → the developer's household →
-   invited friends & family**, with no re-architecture between steps.
+5. Rollout in order: **the developer alone → the developer's household**,
+   then a **wider launch only if demand justifies it** (D24), with no
+   re-architecture between steps. The priority is a tool the developer uses
+   every day, not reach.
 6. **Guest mode (no signup) keeps working** exactly as today for anyone who doesn't
    sign in.
 
@@ -64,7 +68,7 @@ docs, the UI, and the schema:
 |---|---|---|
 | D1 | Data + auth | **Supabase**: Postgres, Supabase Auth, Row-Level Security (RLS). Auth and the database are one system, so RLS enforces household isolation in the database itself. Standard Postgres keeps data portable. Open source and self-hostable |
 | D2 | Server code | **Vercel Functions** in `api/`: same project, repo, CI, and preview deploys as today. Vercel Cron available for later scheduled jobs. Function region co-located with the Supabase region |
-| D3 | Aggregator | **SnapTrade**, Commercial key. Free tier (5 connected users) during the personal phase, pay-as-you-go (~$2 per connected Drift user/month) after. The Personal key is used only for the throwaway spike. **Conditional on M0 showing workplace 401(k) coverage**; see D20 |
+| D3 | Aggregator | **SnapTrade** for the personal phase: a Commercial workspace on the free **Build** plan ("testing and personal use", up to 5 brokerage connections), so the code is the real multi-user design from day one. M0 confirmed coverage, workplace 401(k)s included (#247). The Personal key was used only for the throwaway spike. Opening linking to anyone outside the developer's household needs a paid plan; which aggregator to use then is decided at the demand gate (D24) |
 | D4 | Brokerage access | Read-only holdings, balances, and positions. No trading endpoints are called, and the code must not include them |
 | D5 | Login | **Email + password, plus magic link** (Supabase Auth). Password reset by email. **TOTP MFA available as an opt-in during the beta** (free in Supabase, and expected by the FTC Safeguards Rule; exploration §8). Required MFA is a public-launch decision |
 | D6 | Invite gating | Public signups disabled in Supabase. Only two kinds of invite exist: **you** invite from the waitlist, and a **household owner** invites members into their own household (`spec-households.md` R2). Beta users can't invite anyone else; they can refer friends (§5.2a), and you decide whom to invite. The invite link lets them set a password. Non-invited visitors can join a **waitlist** |
@@ -76,15 +80,16 @@ docs, the UI, and the schema:
 | D12 | Incoming email | **Cloudflare Email Routing** forwards `support@bayleaflabs.com` to your inbox (free). Upgrade to a real mailbox if replying as support becomes awkward |
 | D13 | Domain & DNS | Publisher domain **`bayleaflabs.com`** (Bay Leaf Labs), registered at Cloudflare Registrar with DNS on Cloudflare. The app is served by Vercel at **`drift.bayleaflabs.com`**; the apex hosts a publisher page or redirects to the app. Email uses the apex: `mail.` and `news.` sending subdomains (§7) and `support@`. Records pointing at Vercel are **DNS-only** (Cloudflare proxy off). Auth emails link to `drift.bayleaflabs.com`, not `supabase.co`. Auth sessions are scoped to the `drift.` host, never the parent domain, so other `*.bayleaflabs.com` sites can't read them |
 | D14 | LLM readiness | No MCP in the beta. Versioned server API (`/api/v1/…`), server-owned holdings, and server-importable compose/engine make a read-only MCP server a thin layer later. A client-side "Copy summary for AI" ships in the beta |
-| D15 | Budget ceiling | Up to **$20/mo** during the personal phase (domain, plus room for a paid tier if a free one pauses or limits); up to ~$100/mo during the beta |
+| D15 | Budget ceiling | Up to **$20/mo** during the personal phase (domain, plus room for a paid tier if a free one pauses or limits). No budget is committed beyond that: a wider launch sets its own at the demand gate (D24), where paid-aggregator cost is the main line item (SnapTrade's paid plan starts at $100/mo) |
 | D16 | Households | Access is granted per **household** (owner / editor / viewer). A Drift user can belong to several households. A hard privacy boundary means a separate household under the same Drift user. Mine/hers/joint is a label, never an access boundary. Requirements: `spec-households.md` |
 | D17 | Supabase keys & tokens | Use the **new API keys** (`sb_publishable_…` in the browser, `sb_secret_…` on the server) and **asymmetric JWT signing keys** from day one. The legacy `anon`/`service_role` keys are being retired and can't be rotated. Functions verify access tokens locally against the project's JWKS (`jose`) |
 | D18 | Least privilege on the server | Functions act **as the user** (a Supabase client carrying the caller's token, so RLS applies). The secret key is used only for `snaptrade_users`, `waitlist`, rate limits, and profile deletion |
 | D19 | Environments | Two Supabase projects: **staging** (local dev and Vercel preview deploys) and **production** (production deploys only). Preview URLs are allowed as auth redirects in staging only. Real brokerage data only in production |
-| D20 | Aggregator fallback | **Plaid Investments** is the named second adapter, triggered if M0 shows SnapTrade can't read workplace 401(k)s at the major recordkeepers (e.g. Empower, Fidelity NetBenefits). The pure-adapter design (§6.1) keeps this to a new adapter plus server routes. Until then, uncovered accounts stay on CSV |
+| D20 | Second aggregator | **Plaid Investments** is the named alternative adapter. M0 removed the coverage trigger, but Plaid's pay-as-you-go pricing (no monthly minimum, billed per linked login) may beat SnapTrade's $100/mo floor at small scale; compared at the demand gate (D24, §10). The pure-adapter design (§6.1) keeps a switch, or running both, to a new adapter plus server routes. Accounts no aggregator covers stay on CSV |
 | D21 | Error monitoring | **Sentry for `api/` only**, with `sendDefaultPii: false`, no request or response bodies, and a `beforeSend` that keeps only route, status, error type, and stack. No client-side SDK in the beta |
 | D22 | Support access | **No routine access to user data.** Bugs are investigated from logs and `sync_runs` (IDs, codes, timings only) and from **user-initiated problem reports** (§5.9) that the user reviews before sending. As Supabase project owner you can technically read the database; the policy is to do so only with the user's consent for a specific report, logged in `support_access_log`, and the privacy notice says so. No impersonation or "view as user" feature |
 | D23 | Mobile | **Mobile web first:** every beta flow works in a phone browser and the app is installable as a PWA (§5.10). A **native app** is in beta scope as a secondary priority (M8). Default approach: wrap the same React app with Capacitor for iOS and Android, so there is one UI codebase; confirmed at the start of M8 |
+| D24 | Tiers and demand gate | Linking for people outside the developer's household waits for evidence of demand. A wider launch, if it happens, has three tiers: **Guest** (today's app, no signup, data stays in the browser), **Free account** (sign-in, sync across devices, households, CSV import; no linking), and **Premium** (linking). Premium starts as a waitlist behind a priced fake door, to measure demand at a price (§10). The paid aggregator plan is bought only when the waitlist reaches a threshold set at the gate. Build plan Gate D |
 
 ---
 
@@ -677,7 +682,19 @@ export function normalizeSnapTrade(
   `tickerOverrides` / `decompositions` and the Classify tab.
 - A Plaid adapter (D20), if needed, has the same output type.
 
-Exact SnapTrade field names are confirmed during the spike (M0).
+Findings from the M0 spike (#247) that the adapter must handle:
+- Read positions and balances through their own endpoints. The combined
+  holdings endpoint returns HTTP 410 for new SnapTrade customers.
+- Amounts arrive as **strings**; parse them before any arithmetic.
+- Cash comes only from balances, never as a cash position, and
+  `cash_equivalent` is sometimes missing.
+- Account type is uneven: some institutions label 401(k)s explicitly, others
+  return a generic `investmentAccount` for every account. Don't infer
+  `Account.type` from it; the user confirms the type when assigning.
+- Every position seen had a ticker and a FIGI code, including 401(k) core
+  funds. Keep the ticker-less path (`SEC:<security_id>`) anyway.
+- Empty accounts (cash only) come through correctly.
+- 401(k) positions have no cost basis, which is expected and not needed.
 
 ### 6.2 Runtime limits
 - Function region = Supabase region (both US East unless M3 finds a reason
@@ -816,6 +833,26 @@ raise it if needed.
   - a privacy rule update, because portfolio data then goes to an AI provider.
 - **Viewer/adviser role** in the UI (`spec-households.md` R7).
 - **Holdings history:** snapshot table for performance and drift over time.
+- **Wider launch (D24).** If the demand gate says go:
+  - **Tiers:** Guest, Free account (no linking), Premium (linking).
+  - **Price test:** the Premium entry point (for example "Link accounts
+    automatically" in the Positions tab) shows a price and leads to the
+    waitlist. Measure how many visitors continue to the waitlist versus
+    leave. With enough traffic, A/B test price points: assign a variant at
+    random per visitor and count waitlist joins per variant on the server.
+    Only the variant ID is recorded, never PII, and nothing goes to the
+    analytics tool beyond page-level traffic. Small samples make A/B results
+    noisy, so testing one price at a time in sequence may be the realistic
+    first step.
+  - **Aggregator choice:** at the waitlist threshold, compare SnapTrade and
+    Plaid on real prices and coverage. SnapTrade costs about
+    `$100 + $1 × users` per month (Launch plan, Daily refresh). Plaid's
+    pay-as-you-go costs about `r × logins` per month, where `r` is its
+    per-login Investments rate and each user has `k` logins (often 2–4). The
+    break-even is `users = 100 / (r × k − 1)`; if `r × k ≤ 1`, Plaid is
+    cheaper at every size. Starting on Plaid and moving to SnapTrade past
+    break-even is viable, but each move asks every user to re-link. Run a
+    short Plaid spike (coverage plus the real rate) before choosing.
 - **Public launch:** public signup, required MFA, abuse protection, legal
   review (exploration doc Phase 3).
 - **Billing (post-beta).** Deferred. Expect an **additive** migration, with
@@ -840,10 +877,22 @@ raise it if needed.
 2. ~~Invite quotas for beta users?~~ **Resolved:** beta users invite
    household members only. Everyone else comes through referral and your
    invite (D6).
-3. Does SnapTrade cover workplace 401(k)s? Settled by the SnapTrade spike
-   (build plan M0). If not, decide on Plaid (D20) or CSV.
+3. ~~Does SnapTrade cover workplace 401(k)s?~~ **Resolved:** yes, at both
+   recordkeepers tested, with positions rather than just a balance (#247).
+   No fallback needed (#249).
 4. Household open questions: `spec-households.md` §7.
 5. ~~Label for signed-out mode~~ **Resolved:** **guest mode**. The landing
    page says "Continue as guest — no signup, your data stays in this
    browser." ("Incognito" was rejected: in browsers it means nothing is kept
    after you close the window, which is the opposite of guest mode.)
+6. **Questions for SnapTrade** (from the terms review, #248), to ask before
+   M3 builds the schema:
+   - Does a second household member linking on the free Build plan still
+     count as personal use? This decides whether M5b stays free.
+   - Does storing a user's own holdings (`price`, `market_value`) count as
+     storing "Market Data" (Developer Terms 2.f)? Fallback: store units only
+     and price at read time.
+   - Their end-user consent requirement (an unchecked checkbox plus an
+     "Agree and Continue" step, with stored evidence; Terms 7.f) becomes a
+     step before the connection portal in §5.5. Spec that change once the
+     other answers are in.

@@ -1,9 +1,10 @@
 # Drift v1.0 planning
 
 Planning docs for **Drift v1.0**, which adds Drift users, cross-device sync,
-brokerage account linking, and shared households, opened first as a closed
-beta. The current 0.x release series stays browser-only. Guest mode
-carries that experience forward into v1.0.
+brokerage account linking, and shared households. It is built first for the
+developer's own household; opening it wider is gated on demand (spec D24).
+The current 0.x release series stays browser-only. Guest mode carries that
+experience forward into v1.0.
 
 | Doc | Purpose |
 |---|---|

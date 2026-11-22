@@ -70,9 +70,9 @@ steps, settings, and DNS records for each.
 | 8 | **Sentry** project for `api/` | M3 | Free tier |
 | 9 | **Vercel env vars** per environment (staging for previews, production): Supabase URL and keys, SnapTrade keys, `TOKEN_ENC_KEYS`, Resend key, Sentry DSN. Generate `TOKEN_ENC_KEYS` locally with the command the agent provides; keep a backup in the password manager | M3, M5 | — |
 | 10 | **GitHub Actions secrets** for the manual migration workflow (staging and production database credentials) | M3 | — |
-| 11 | **SnapTrade Commercial key** (free tier, 5 connected users) | M5 | Free |
+| 11 | **SnapTrade Commercial workspace** on the free **Build** plan (testing and personal use, 5 brokerage connections) | M5 | Free |
 | 12 | Approve the **privacy notice and beta terms**; decide whether to buy a lawyer review | M6 | $0–? |
-| 13 | **Supabase Pro** on production; **Vercel Pro** if needed; SnapTrade pay-as-you-go billing | M7 | ~$25 + $20/mo + usage |
+| 13 | **Supabase Pro** on production; **Vercel Pro** if needed; paid aggregator plan only once the Premium waitlist reaches its threshold | M7 | ~$25 + $20/mo; aggregator from $100/mo (SnapTrade) or usage (Plaid) |
 | 14 | **Postal address** for announcement emails (PO box or virtual mailbox) | M7 | ~$5–15/mo |
 | 15 | `news.bayleaflabs.com` in Resend; Gmail **"Send mail as" support@** via Resend SMTP | M7 | Free |
 | 16a | **GitHub:** secret scanning and push protection on; `production` environment with you as required reviewer for the migration workflow | Now / M3 | Free (public repo) |
@@ -83,9 +83,13 @@ steps, settings, and DNS records for each.
 
 ## 4. Milestones
 
-Order: M0a → M0 → M1 → M2 → M3 → M4 → M5 → M6 → M6b → **Gate 1** → M5b → M7
-→ M8 → **Gate 2**. M2 can run in parallel with M0a/M0. M5b is numbered for
-its topic but comes after Gate 1.
+Order: M0a → M0 → M1 → M2 → M3 → M4 → M5 → M6 → M6b → **Gate 1** → M5b →
+**Gate D** → M7 → M8 → **Gate 2**. M2 can run in parallel with M0a/M0. M5b is
+numbered for its topic but comes after Gate 1.
+
+**Priority:** everything through M5b is the personal phase, a tool you and your
+household use every day. Nothing after Gate D is scheduled until that gate
+says go (spec D24).
 
 ### M0a — Domain spike
 | Owner | Task |
@@ -113,6 +117,11 @@ Bay Leaf Labs; the app lives at `drift.bayleaflabs.com` (spec D13).
 | 🤖 | Record the decision in the spec, naming no institutions tied to you (the repo is public) |
 
 **Exit:** coverage table and the 401(k) decision.
+
+**Status:** done. Coverage passed, workplace 401(k)s included (#247); no
+fallback needed (#249). Terms review in #248. SnapTrade's pricing changed
+(free plan for testing and personal use only; paid from $100/mo), which led
+to the demand gate (spec D24).
 
 ### M1 — Guardrails and docs update
 | Owner | Task |
@@ -178,7 +187,7 @@ Useful on its own: cross-device Drift with CSV import.
 ### M5 — Linking
 | Owner | Task |
 |---|---|
-| 👤 | SnapTrade Commercial key into Vercel env vars (checklist 11) |
+| 👤 | SnapTrade Commercial workspace keys (Build plan) into Vercel env vars (checklist 11) |
 | 🤖 | `api/v1/snaptrade/*` with sync leases, the time budget, `sync_runs` logging (§6) |
 | 🤖 | Positions tab "Linked accounts": connect, assign, sync, mapping, auto-sync on open, connection list, reconnect (§5.5) |
 | 🤖 | Engine input switches to `composePositions(state, linked)` |
@@ -243,17 +252,26 @@ shared household, confirm a joint account as one, and both edit "Ours" from
 separate devices. Your private portfolio stays in your personal household,
 invisible to them.
 
-### M7 — Open the closed beta
+### Gate D — Demand 👤
+Decide whether to open Drift beyond your household at all. If not, keep
+using it; nothing below is scheduled. If yes, set the Premium waitlist
+threshold that would justify a paid aggregator plan (spec D24, §10).
+
+### M7 — Open wider (only if Gate D says go)
 | Owner | Task |
 |---|---|
-| 👤 | Supabase Pro, Vercel Pro if needed, SnapTrade billing, postal address, `news.bayleaflabs.com`, Gmail "Send mail as" (checklist 13–15) |
+| 👤 | Supabase Pro, Vercel Pro if needed, postal address, `news.bayleaflabs.com`, Gmail "Send mail as" (checklist 13–15) |
+| 🤖 | Free-account tier: linking hidden for non-Premium users |
+| 🤖 | Premium fake door with a shown price leading to the waitlist; server-side count of waitlist joins per price variant; A/B variants when traffic allows (spec §10) |
 | 🤖 | Referrals (§5.2a): `referral_codes`, "Invite a friend", `/join?ref=`, referred-first admin view |
 | 🤖 | `scripts/admin/sync-audiences.ts`; Profile → Email toggle (§7.1) |
 | 🤝 | Agent writes the backup-restore drill; you run it (restore production's backup into a scratch project) |
 | 👤 | Triage the waitlist and send invites |
+| 🤝 | At the Premium threshold: agent runs a short Plaid spike (coverage, real per-login rate) and computes the break-even against SnapTrade (spec §10); you pick the provider and buy the plan |
 
-**Exit:** 👤 invited users can sign up, link, and sync; costs track the
-~$45–95/mo estimate (about $2 per Drift user who links).
+**Exit:** 👤 invited users can use free accounts; you have waitlist
+conversion per price; linking opens to Premium users once the threshold is
+met.
 
 ### M8 — Native mobile app (secondary priority; before any paid launch)
 | Owner | Task |
