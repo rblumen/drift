@@ -68,7 +68,7 @@ docs, the UI, and the schema:
 |---|---|---|
 | D1 | Data + auth | **Supabase**: Postgres, Supabase Auth, Row-Level Security (RLS). Auth and the database are one system, so RLS enforces household isolation in the database itself. Standard Postgres keeps data portable. Open source and self-hostable |
 | D2 | Server code | **Vercel Functions** in `api/`: same project, repo, CI, and preview deploys as today. Vercel Cron available for later scheduled jobs. Function region co-located with the Supabase region |
-| D3 | Aggregator | **SnapTrade** for the personal phase: a Commercial workspace on the free **Build** plan ("testing and personal use", up to 5 brokerage connections), so the code is the real multi-user design from day one. M0 confirmed coverage, workplace 401(k)s included (#247). The Personal key was used only for the throwaway spike. Opening linking to anyone outside the developer's household needs a paid plan; which aggregator to use then is decided at the demand gate (D24) |
+| D3 | Aggregator | **SnapTrade** for the personal phase, on the free **Personal** key: the key belongs to the developer, so only the developer's Drift user can link, and the household's logins are linked through it (§6.4). Accepted limitation: no per-user SnapTrade accounts until a Commercial key. The server code keeps the Commercial design (one SnapTrade user per Drift user, `snaptrade_users`, D10), so switching is configuration plus registering users, not a rewrite. M0 confirmed coverage, workplace 401(k)s included (§6.3). Opening linking to anyone outside the developer's household needs a paid Commercial plan; which aggregator to use then is decided at the demand gate (D24) |
 | D4 | Brokerage access | Read-only holdings, balances, and positions. No trading endpoints are called, and the code must not include them |
 | D5 | Login | **Email + password, plus magic link** (Supabase Auth). Password reset by email. **TOTP MFA available as an opt-in during the beta** (free in Supabase, and expected by the FTC Safeguards Rule; exploration §8). Required MFA is a public-launch decision |
 | D6 | Invite gating | Public signups disabled in Supabase. Only two kinds of invite exist: **you** invite from the waitlist, and a **household owner** invites members into their own household (`spec-households.md` R2). Beta users can't invite anyone else; they can refer friends (§5.2a), and you decide whom to invite. The invite link lets them set a password. Non-invited visitors can join a **waitlist** |
@@ -241,8 +241,8 @@ account assigned in their household, so they can show "needs reconnection by
 | `user_id` | `uuid` not null | The linker (denormalized for RLS) |
 | `institution` | `text` not null | |
 | `name` | `text` | Account name from the brokerage |
-| `account_type` | `text` | From SnapTrade when available (helps dedupe) |
-| `mask` | `text` | Last 4 of the account number |
+| `account_type` | `text` | SnapTrade's `raw_type`. Helps dedupe, and seeds the suggested account type (§5.5) |
+| `mask` | `text` | Last 4 of SnapTrade's `number`. M0 saw `number` lengths from 9 to 30 characters, so at some institutions it may not be the plain account number; confirm before relying on it for dedupe |
 | `last_synced_at` | `timestamptz` | Holdings timestamp from the last successful sync |
 
 RLS: same visibility as `brokerage_logins`. Writes server-only.
@@ -301,14 +301,16 @@ RLS: select by members of that household. Decisions go through `api/v1/`.
 | Column | Type | Notes |
 |---|---|---|
 | `linked_account_id` | `text` not null → `linked_accounts(id)` on delete cascade | PK part |
-| `security_id` | `text` not null | PK part. SnapTrade's security ID, or `CASH:<currency>` for cash balances |
-| `ticker` | `text` **null** | Many 401(k) funds (collective trusts) have none |
-| `cusip` | `text` null | When available |
+| `security_id` | `text` not null | PK part. SnapTrade's `instrument.id`, or `CASH:<currency>` for cash balances |
+| `ticker` | `text` **null** | `instrument.symbol`. M0 found a ticker on every holding, 401(k) core funds included, but other plans' collective trusts may have none |
+| `figi` | `text` null | `instrument.figi_instrument.figi_code`. Present on every M0 holding; a stable ID across providers |
+| `kind` | `text` | `instrument.kind`: `stock`, `etf`, `mutualfund`, `cef`, `bond`, `other`, … |
+| `cusip` | `text` null | SnapTrade has no CUSIP field. Kept for the Plaid adapter (D20) |
 | `description` | `text` | |
 | `units` | `numeric` | Summed across lots |
 | `price` | `numeric` | |
 | `market_value` | `numeric` not null | |
-| `cost_basis` | `numeric` | Aggregate; when available |
+| `cost_basis` | `numeric` | Aggregate; when available. M0: present for brokerage accounts, absent for 401(k)s |
 | `as_of` | `timestamptz` not null | |
 
 RLS: select if you're the linker, or the account is assigned to a portfolio in
@@ -506,8 +508,12 @@ A new "Linked accounts" source in `src/ui/PositionsPanel.tsx`:
    a second request.
 4. **Mapping:** any assigned account with no `account_id` goes
    through the existing "Map accounts" UI. Options are an existing account
-   in the portfolio, or "Create a new account" (pre-filled with institution and name;
-   the user confirms the account type). Saved through `save_portfolio`, so
+   in the portfolio, or "Create a new account", pre-filled with institution, name,
+   and a **suggested account type** when SnapTrade's data identifies one: `raw_type`
+   `401K` suggests 401(k); a name containing "Roth IRA" suggests Roth IRA. The user
+   confirms or changes it. The suggestion is often blank, because some institutions
+   return a generic `raw_type` (`investmentAccount`) for every account, so the type
+   is never set without the user's confirmation. Saved through `save_portfolio`, so
    creating and mapping are atomic. Later syncs need no mapping.
 5. **Duplicates:** when a suggested duplicate exists, show "Schwab ••1234
    linked by <name> looks like this one. Same account?" Yes asks which copy to
@@ -639,7 +645,7 @@ All endpoints except waitlist:
 | Endpoint | Behavior |
 |---|---|
 | `POST /snaptrade/connect` | Ensure a `snaptrade_users` row (register + store encrypted secret if missing; secret key). Return `{ url }` for the SnapTrade portal, read-only connection |
-| `POST /snaptrade/sync` | `begin_sync`; list the caller's logins and accounts; fetch holdings/balances (accounts in parallel, max 4 at a time); normalize (§6.1); upsert `brokerage_logins`/`linked_accounts` (server-written columns only); `replace_holdings` per account; refresh duplicate suggestions; `finish_sync`. Return `{ accounts, holdings, run }`. If the time budget (§6.2) runs out, finish as `partial`; the next run picks up the rest |
+| `POST /snaptrade/sync` | `begin_sync`; list the caller's logins and accounts; fetch positions (`getAllAccountPositions`) and balances (`getUserAccountBalance`) per account (accounts in parallel, max 4 at a time; never the deprecated `getUserHoldings`, §6.3); normalize (§6.1); upsert `brokerage_logins`/`linked_accounts` (server-written columns only); `replace_holdings` per account; refresh duplicate suggestions; `finish_sync`. Return `{ accounts, holdings, run }`. If the time budget (§6.2) runs out, finish as `partial`; the next run picks up the rest |
 | `GET /snaptrade/connections` | The caller's brokerage logins with status |
 | `DELETE /snaptrade/connections/:id` | Remove a login at SnapTrade, then delete its rows (cascades accounts, assignments, holdings) |
 | `POST /households/:id/invites` | Owner only. Create invite (hashed token), send email. Body: `email`, `role` |
@@ -665,36 +671,44 @@ aggregator adapter. Imported by `api/`.
 
 ```ts
 export function normalizeSnapTrade(
-  accounts: SnapTradeAccountHoldings[],
+  accounts: SnapTradeAccountData[],
 ): { logins: BrokerageLoginRow[]; accounts: LinkedAccountRow[];
      holdings: HoldingRow[]; errors: string[] }
 ```
 
-- `SnapTradeAccountHoldings` is a **minimal local type** with only the fields
-  used, so `src/` doesn't depend on the SnapTrade SDK.
-- `market_value` = units × price. `cost_basis` = average purchase price ×
-  units, when present. Lots of the same security are summed.
-- Cash balances become `CASH:<currency>` holdings that classify as CASH, the
-  same approach the CSV adapters' `cashRow` option uses (#54).
-- Securities with no ticker keep `security_id`, `cusip`, and `description`.
+- `SnapTradeAccountData` is one account plus its positions and balances
+  responses. It is a **minimal local type** with only the fields used, so
+  `src/` doesn't depend on the SnapTrade SDK. It must tolerate extra fields
+  and nulls: real responses include fields the SDK omits, and `status` can be
+  null.
+- Positions are `results[]` with an `instrument.kind` discriminator.
+  Supported kinds: `stock`, `etf`, `mutualfund`, `cef`, `adr`,
+  `preferred_stock`, `bond`, `other`. Derivatives (`option`, `future`,
+  `future_option`, `cfd`) and `tokenized_asset` go into `errors` as
+  unsupported in v1.
+- `units`, `price` and `cost_basis` arrive as **decimal strings**. Parse them;
+  an unparseable value sends the row to `errors`. `market_value` = units ×
+  price. `cost_basis` is the position's aggregate value when present. Tax
+  lots appear only when SnapTrade enables lot data for an account, and v1
+  doesn't use them.
+- Cash comes from the balances response: each currency's `cash` becomes a
+  `CASH:<currency>` holding that classifies as CASH, the same approach the
+  CSV adapters' `cashRow` option uses (#54). A `kind: cash` position, if one
+  appears, is treated the same way. Money-market funds are ordinary
+  `mutualfund` positions, sometimes flagged `cash_equivalent: true`; the flag
+  is sometimes missing, so treat missing as `false`, and classify them by
+  ticker like any fund.
+- Identifiers: ticker = `instrument.symbol`, `security_id` =
+  `instrument.id`, plus `figi_code`, `raw_symbol` and `description`.
+  SnapTrade has **no CUSIP field**. A holding with no ticker falls back to
+  `SEC:<security_id>` (§4.2); M0 found none, but other 401(k) plans may.
 - Rows that would fail `positionSchema` go into `errors`.
 - Asset classification is unchanged: unknown tickers flow through
   `tickerOverrides` / `decompositions` and the Classify tab.
 - A Plaid adapter (D20), if needed, has the same output type.
 
-Findings from the M0 spike (#247) that the adapter must handle:
-- Read positions and balances through their own endpoints. The combined
-  holdings endpoint returns HTTP 410 for new SnapTrade customers.
-- Amounts arrive as **strings**; parse them before any arithmetic.
-- Cash comes only from balances, never as a cash position, and
-  `cash_equivalent` is sometimes missing.
-- Account type is uneven: some institutions label 401(k)s explicitly, others
-  return a generic `investmentAccount` for every account. Don't infer
-  `Account.type` from it; the user confirms the type when assigning.
-- Every position seen had a ticker and a FIGI code, including 401(k) core
-  funds. Keep the ticker-less path (`SEC:<security_id>`) anyway.
-- Empty accounts (cash only) come through correctly.
-- 401(k) positions have no cost basis, which is expected and not needed.
+Field names were confirmed in M0 against `snaptrade-typescript-sdk` 13.2.2
+and real responses (§6.3).
 
 ### 6.2 Runtime limits
 - Function region = Supabase region (both US East unless M3 finds a reason
@@ -704,7 +718,60 @@ Findings from the M0 spike (#247) that the adapter must handle:
 - `vercel.json`'s SPA rewrite must exclude `api/`:
   `"source": "/((?!api/).*)"`.
 
+### 6.3 SnapTrade coverage (M0 results)
+
+Probe run on 2026-11-20 with a Personal key: 3 brokerage logins, 7 accounts,
+34 holdings. Institutions are recorded only in the developer's private
+coverage list (the repo is public).
+
+| Criterion | Result |
+|---|---|
+| Taxable brokerage and IRA accounts | **Pass.** Positions with units, price and cost basis; cash through balances |
+| Workplace 401(k)s | **Pass at both recordkeepers tested**, including a self-directed brokerage window inside one plan. Positions, not just a plan balance. No cost basis |
+| Funds without a ticker | **None.** Every holding had a ticker and a FIGI code, 401(k) core funds included |
+| Per-developer enablement | **None needed.** Every institution linked on the first try |
+
+Findings that shape the build:
+- **`getUserHoldings` is deprecated** and returns HTTP 410 for SnapTrade
+  customers who signed up after 2026-05-11. Use `getAllAccountPositions` and
+  `getUserAccountBalance`: two calls per account. `getAccountBalancesV2` is a
+  beta that SnapTrade must enable.
+- Account types are uneven: some institutions label 401(k)s (`401K`), and one
+  returned `investmentAccount` for every account, IRAs included. Hence
+  suggested-not-assumed types (§5.5).
+- Empty accounts (no positions, cash only) come through correctly.
+- Personal-key data is cached and refreshed daily. Check the Commercial
+  plan's freshness at M5.
+
+Caveats: one plan per recordkeeper; Personal key only. Commercial-key
+coverage is assumed to match. Check that again at M5 with the first real
+Commercial link.
+
 ---
+
+### 6.4 Personal-key mode (personal phase)
+
+D3 starts on SnapTrade's free Personal key, where the key itself is the
+SnapTrade user: calls take no `userId`/`userSecret`, and there is no
+register or delete-user call. The server supports this as a mode, set by
+`SNAPTRADE_MODE=personal`, without changing the data model:
+- **One linking user.** Only the Drift user named by
+  `SNAPTRADE_PERSONAL_OWNER` (the developer's internal user ID) may call
+  `/snaptrade/*`. Everyone else gets `403 linking_unavailable`, and the UI hides
+  "Linked accounts" for them.
+- **No `snaptrade_users` row** is needed in this mode; connect skips
+  registration and the secret.
+- **Household logins** (for example a partner's 401(k)) are linked from the
+  developer's session, with the account holder entering their own
+  credentials in SnapTrade's portal, then assigned to the shared household
+  (`spec-households.md`). Household members see and edit them through
+  household roles, not through their own link. Whether this counts as
+  "personal use" is a question for SnapTrade (§11 Q6).
+- **Deletion:** `DELETE /me` for the owner deletes their connections at
+  SnapTrade (there is no SnapTrade user to delete).
+- **Switch to Commercial:** set `SNAPTRADE_MODE=commercial` and the Commercial
+  keys, register a SnapTrade user per linking Drift user, and have each re-link.
+  Logins linked under the Personal key don't carry over.
 
 ## 7. Email
 
@@ -877,9 +944,8 @@ raise it if needed.
 2. ~~Invite quotas for beta users?~~ **Resolved:** beta users invite
    household members only. Everyone else comes through referral and your
    invite (D6).
-3. ~~Does SnapTrade cover workplace 401(k)s?~~ **Resolved:** yes, at both
-   recordkeepers tested, with positions rather than just a balance (#247).
-   No fallback needed (#249).
+3. ~~Does SnapTrade cover workplace 401(k)s?~~ **Resolved:** yes, at every
+   recordkeeper tested in M0 (§6.3). No Plaid spike; D20 stays a named fallback.
 4. Household open questions: `spec-households.md` §7.
 5. ~~Label for signed-out mode~~ **Resolved:** **guest mode**. The landing
    page says "Continue as guest — no signup, your data stays in this
@@ -887,8 +953,11 @@ raise it if needed.
    after you close the window, which is the opposite of guest mode.)
 6. **Questions for SnapTrade** (from the terms review, #248), to ask before
    M3 builds the schema:
-   - Does a second household member linking on the free Build plan still
-     count as personal use? This decides whether M5b stays free.
+   - Does linking a household member's logins (they enter their own
+     credentials) under the developer's Personal key count as personal use
+     (§6.4)? And what are the Personal plan's limits? The dashboard appeared
+     to show 20 accounts; confirm whether the cap is on accounts or on
+     brokerage connections. This decides whether M5b stays free.
    - Does storing a user's own holdings (`price`, `market_value`) count as
      storing "Market Data" (Developer Terms 2.f)? Fallback: store units only
      and price at read time.

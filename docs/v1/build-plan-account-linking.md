@@ -7,7 +7,7 @@
 
 The spec says *what* Drift becomes. This plan says *how and in what order* it
 gets built, and **who does each step**: a coding agent, or you. Milestone IDs
-(M0a–M8) and decision IDs (D1–D23) match the spec.
+(M0a–M8) and decision IDs (D1–D24) match the spec.
 
 ---
 
@@ -70,7 +70,7 @@ steps, settings, and DNS records for each.
 | 8 | **Sentry** project for `api/` | M3 | Free tier |
 | 9 | **Vercel env vars** per environment (staging for previews, production): Supabase URL and keys, SnapTrade keys, `TOKEN_ENC_KEYS`, Resend key, Sentry DSN. Generate `TOKEN_ENC_KEYS` locally with the command the agent provides; keep a backup in the password manager | M3, M5 | — |
 | 10 | **GitHub Actions secrets** for the manual migration workflow (staging and production database credentials) | M3 | — |
-| 11 | **SnapTrade Commercial workspace** on the free **Build** plan (testing and personal use, 5 brokerage connections) | M5 | Free |
+| 11 | **SnapTrade Personal key** for production (free; the key is your SnapTrade user, spec D3/§6.4). A Commercial workspace only if Gate D says go | M5 | Free |
 | 12 | Approve the **privacy notice and beta terms**; decide whether to buy a lawyer review | M6 | $0–? |
 | 13 | **Supabase Pro** on production; **Vercel Pro** if needed; paid aggregator plan only once the Premium waitlist reaches its threshold | M7 | ~$25 + $20/mo; aggregator from $100/mo (SnapTrade) or usage (Plaid) |
 | 14 | **Postal address** for announcement emails (PO box or virtual mailbox) | M7 | ~$5–15/mo |
@@ -84,10 +84,10 @@ steps, settings, and DNS records for each.
 ## 4. Milestones
 
 Order: M0a → M0 → M1 → M2 → M3 → M4 → M5 → M6 → M6b → **Gate 1** → M5b →
-**Gate D** → M7 → M8 → **Gate 2**. M2 can run in parallel with M0a/M0. M5b is
-numbered for its topic but comes after Gate 1.
+M8 → **Gate D** → M7 → **Gate 2**. M2 can run in parallel with M0a/M0. M5b
+and M8 are numbered for their topics but come after Gate 1.
 
-**Priority:** everything through M5b is the personal phase, a tool you and your
+**Priority:** everything through M8 is the personal phase, a tool you and your
 household use every day. Nothing after Gate D is scheduled until that gate
 says go (spec D24).
 
@@ -118,10 +118,11 @@ Bay Leaf Labs; the app lives at `drift.bayleaflabs.com` (spec D13).
 
 **Exit:** coverage table and the 401(k) decision.
 
-**Status:** done. Coverage passed, workplace 401(k)s included (#247); no
-fallback needed (#249). Terms review in #248. SnapTrade's pricing changed
-(free plan for testing and personal use only; paid from $100/mo), which led
-to the demand gate (spec D24).
+**Status:** done. Coverage passed, including workplace 401(k)s; no Plaid spike
+(spec §6.3, D20). Terms review in #248; private coverage list in #247.
+SnapTrade's pricing changed (free plans for testing and personal use only;
+paid from $100/mo), which led to the Personal-key personal phase (spec D3)
+and the demand gate (spec D24).
 
 ### M1 — Guardrails and docs update
 | Owner | Task |
@@ -187,8 +188,8 @@ Useful on its own: cross-device Drift with CSV import.
 ### M5 — Linking
 | Owner | Task |
 |---|---|
-| 👤 | SnapTrade Commercial workspace keys (Build plan) into Vercel env vars (checklist 11) |
-| 🤖 | `api/v1/snaptrade/*` with sync leases, the time budget, `sync_runs` logging (§6) |
+| 👤 | SnapTrade Personal key into Vercel env vars, plus `SNAPTRADE_MODE=personal` and `SNAPTRADE_PERSONAL_OWNER` (checklist 11) |
+| 🤖 | `api/v1/snaptrade/*` with sync leases, the time budget, `sync_runs` logging (§6); Personal-key mode with the single linking owner (§6.4), Commercial mode kept behind tests |
 | 🤖 | Positions tab "Linked accounts": connect, assign, sync, mapping, auto-sync on open, connection list, reconnect (§5.5) |
 | 🤖 | Engine input switches to `composePositions(state, linked)` |
 | 🤖 | Handler tests with mocked SnapTrade, including a killed sync and lease expiry |
@@ -213,7 +214,7 @@ Useful on its own: cross-device Drift with CSV import.
 | 🤝 | Agent drafts the privacy notice and beta terms from the spec's data inventory and §5.11 clause list; **you approve the text** and decide on a lawyer review |
 | 🤖 | Landing and README copy for guest mode vs signed-in mode |
 | 🤝 | Agent drafts the breach-response note and the encryption-key rotation runbook; you review them |
-| 👤 | Delete a throwaway test profile in production; confirm its SnapTrade user is gone |
+| 👤 | Delete a throwaway test profile in production; confirm its rows are gone (Personal-key mode has no SnapTrade user per profile, §6.4) |
 
 **Exit:**
 - 👤 deleting a Drift user profile removes the auth user, the user's rows and
@@ -247,10 +248,21 @@ Use it for a few weeks on desktop and phone. Cost up to $20/mo (D15). Review
 | 🤖 | Role-matrix tests for editor and former member |
 | 👤 | Invite a second member of your household; both of you run the exit scenario |
 
-**Exit:** 👤 you and the second member each link your own logins into one
-shared household, confirm a joint account as one, and both edit "Ours" from
+**Exit:** 👤 the second member's logins are linked through your Personal key
+(they enter their own credentials) and assigned to one shared household; you both confirm a joint account as one and edit "Ours" from
 separate devices. Your private portfolio stays in your personal household,
 invisible to them.
+
+### M8 — Native mobile app (personal phase, secondary priority)
+| Owner | Task |
+|---|---|
+| 🤝 | Agent prototypes Capacitor around the same app and reports gaps; you confirm the approach (D23) |
+| 👤 | Apple Developer and Google Play accounts (checklist 16) |
+| 🤖 | Deep links for magic links and PKCE; SnapTrade portal in an in-app browser; tokens in Keychain/Keystore |
+| 🤝 | Agent drafts Apple's privacy label and Google's data-safety answers from the privacy notice; you submit them |
+| 👤 | Store listings, review submissions, TestFlight/internal-testing invites |
+
+**Exit:** 👤 you and your household use a TestFlight / internal-testing build.
 
 ### Gate D — Demand 👤
 Decide whether to open Drift beyond your household at all. If not, keep
@@ -272,17 +284,6 @@ threshold that would justify a paid aggregator plan (spec D24, §10).
 **Exit:** 👤 invited users can use free accounts; you have waitlist
 conversion per price; linking opens to Premium users once the threshold is
 met.
-
-### M8 — Native mobile app (secondary priority; before any paid launch)
-| Owner | Task |
-|---|---|
-| 🤝 | Agent prototypes Capacitor around the same app and reports gaps; you confirm the approach (D23) |
-| 👤 | Apple Developer and Google Play accounts (checklist 16) |
-| 🤖 | Deep links for magic links and PKCE; SnapTrade portal in an in-app browser; tokens in Keychain/Keystore |
-| 🤝 | Agent drafts Apple's privacy label and Google's data-safety answers from the privacy notice; you submit them |
-| 👤 | Store listings, review submissions, TestFlight/internal-testing invites |
-
-**Exit:** 👤 beta households use a TestFlight / internal-testing build.
 
 ### Gate 2 — Beta review 👤
 Decide among: stay closed, build spec §10 features (scheduled sync, alerts,
