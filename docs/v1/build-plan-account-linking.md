@@ -82,23 +82,66 @@ steps, settings, and DNS records for each.
 
 ---
 
-## 4. Milestones
+## 4. Phases and gates at a glance
+
+Drift v1 moves through four phases. Each one ends at a gate where you decide,
+against criteria written down in advance, whether to go on. The idea: get the
+product right on your own money first, then find out whether anyone else
+wants it, and pay for account linking only once they've shown they do
+(spec D24).
+
+| Phase | Who uses it | Purpose | What's in it | Milestones | Cost | Ends at |
+|---|---|---|---|---|---|---|
+| **Alpha** (internal) | You | Get the functionality right: a hosted Drift you trust as your daily tool | Sign-in, cross-device sync, linking your own accounts (SnapTrade Personal key), deletion, terms, problem reports, mobile web | M0a–M6b | ≤ $20/mo | **Gate 1** |
+| **Beta build-up** | You and your household | Make Drift ready for strangers, and for your household | Households, the native app (secondary), and open-beta readiness: open signup, the free-account tier, the Premium fake door and waitlist, feedback | M5b, M8, M7 | ≤ $20/mo, rising to the beta budget at M7 | **Gate 2** |
+| **Open beta** (public MVP) | Anyone in the US | (a) **Validate demand** for paid linking; (b) **gather feedback** | Hosted free accounts (guest mode kept), CSV import and manual entry only. Linking appears as **Premium**, a priced waitlist; it isn't available yet. Your household keeps linking | — (runs for the period set at Gate 2) | ~$50–65/mo, no aggregator cost | **Gate 3** |
+| **Premium** (full linking) | Premium users, in batches from the waitlist | Deliver account linking at a cost demand has justified | Aggregator chosen on real prices, Commercial mode, SnapTrade's consent step, entitlement and billing if paid | M9 | Set at Gate 3; aggregator from $100/mo or Plaid usage | Later: leaving beta (spec §10) |
+
+### Gate criteria
+
+**Gate 1 — Alpha exit.** Is the product right?
+- You've used it as your daily tool for a few weeks on desktop and phone.
+- Link → sync → map → rebalance is reliable. A broken connection recovers
+  through re-authentication, and a killed sync doesn't block the next one.
+- `sync_runs` errors and Sentry are quiet or understood.
+- Costs stay at or under $20/mo.
+
+**Gate 2 — Open the beta.** Is it ready for strangers?
+- A stranger's whole path works in production: sign up, free account, fake
+  door, Premium waitlist, feedback, deletion.
+- Your household uses a shared household day to day.
+- Beta terms and the privacy notice are live. They say plainly that personal
+  financial data is stored on Drift's servers and that maintainers may access
+  it, with every access logged (spec D22). The lawyer-review decision is
+  made.
+- The beta budget is confirmed (D15).
+- **Gate 3 criteria are written down before any data arrives:** the minimum
+  beta length, and the Premium waitlist size and join rate that would justify
+  the aggregator cost.
+
+**Gate 3 — Demand decision.** Do enough people want linking, at a price,
+to pay for it?
+- The minimum beta period has passed.
+- Compare Premium waitlist joins per price, and the share of fake-door
+  viewers who join, against the Gate 2 criteria.
+- Feedback themes: what users ask for, what confuses them, whether linking
+  is the thing they want.
+- Outcomes: **open Premium** (→ M9), **stay free-only** and keep improving
+  from feedback, or **hold** the hosted beta. Also choose which spec §10
+  follow-ups come next (scheduled sync, alerts, MCP, adviser role).
+
+**After M9.** Invited Premium users link and sync, and costs track the
+Gate 3 budget. Leaving beta for a public launch (required MFA, legal review,
+billing if not done yet) is a later decision (spec §10).
+
+---
+
+## 5. Milestones
 
 Order: M0a → M0 → M1 → M2 → M3 → M4 → M5 → M6 → M6b → **Gate 1** → M5b →
 M8 → M7 → **Gate 2** → *open beta* → **Gate 3** → M9. M2 can run in parallel
 with M0a/M0. M5b and M8 are numbered for their topics but come after Gate 1.
 M8 is secondary: if you'd rather open the beta sooner, it can follow Gate 2.
-
-**Phases (spec D24):**
-- **Alpha** (internal, you only): M0a–M6b. **Gate 1** exits alpha.
-- **Beta build-up:** M5b (households, for your household first), M8 (native
-  app), M7 (open-beta readiness).
-- **Open beta:** **Gate 2** opens it. Hosted free accounts (guest mode still
-  available), CSV import and manual entry only, with linking offered as a
-  priced Premium waitlist. Purpose: validate demand and gather feedback.
-  Your household keeps Personal-key linking.
-- **Gate 3** decides whether demand justifies paying for linking. M9 happens
-  only if it says go.
 
 ### M0a — Domain spike
 | Owner | Task |
@@ -325,7 +368,7 @@ budget.
 
 ---
 
-## 5. Ongoing during the beta (from Gate 2)
+## 6. Ongoing during the beta (from Gate 2)
 
 | Owner | Task | Cadence |
 |---|---|---|
