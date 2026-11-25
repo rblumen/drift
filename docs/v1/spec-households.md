@@ -1,8 +1,8 @@
 # Requirements: Households and Shared Portfolios
 
 **Status:** Draft for review (revision 4) · **Builds on:**
-[`spec-account-linking.md`](spec-account-linking.md) (closed-beta stack:
-Supabase, Vercel Functions, SnapTrade).
+[`spec-account-linking.md`](spec-account-linking.md) (alpha and open-beta
+stack: Supabase, Vercel Functions, SnapTrade).
 
 Drift rebalances a *household's* portfolio, and most households have more than
 one adult. This doc turns the household user story into requirements, the
@@ -96,14 +96,14 @@ Brokerage login (Schwab) ──contains──▶ Linked account ──feeds─�
 2. The invite email contains no portfolio data (linking spec §7). It has the
    inviter's name, the household name, and a link.
 3. An invite works whether or not the invitee already has a Drift user.
-   **A household invite also admits the invitee to the closed beta,** skipping
-   the waitlist.
+   **A household invite also admits the invitee while signup is still
+   closed** (alpha, before Gate 2).
 4. Invites expire (default 7 days), are single-use, and can be revoked. Tokens
    are stored hashed.
 5. Owners get an email when a member joins, leaves, or changes role.
-6. **Beta users can invite household members only.** Anyone else comes
-   through a referral link (linking spec §5.2a), and the Drift operator
-   decides whom to invite.
+6. **Users can invite household members only.** Anyone else signs up on
+   their own once the open beta starts (linking spec D6), optionally through
+   a referral link (§5.2a).
 
 ### R3 — Brokerage logins, linked accounts, and ownership
 1. Each person links their own brokerage logins. The login belongs to its
@@ -258,7 +258,7 @@ Sequencing and ownership are in
 [`build-plan-account-linking.md`](build-plan-account-linking.md). In short:
 owner labels arrive in M2, the household schema in M3, per-account assignment
 with linking in M5, and the rest of R1–R8 in **M5b**, after Gate 1 and before
-the beta opens (M7). The viewer/adviser role (R7) comes after the beta.
+the beta opens (M7, Gate 2). The viewer/adviser role (R7) comes after the beta.
 
 ---
 
@@ -283,5 +283,5 @@ the beta opens (M7). The viewer/adviser role (R7) comes after the beta.
    settings are their "profile".
 3. ~~Duplicate fallback~~ **Resolved:** confirming a duplicate removes the
    other copy from the household. No backup copy is kept (R5.4).
-4. ~~Invites beyond the household~~ **Resolved:** beta users invite household
-   members only (R2.6).
+4. ~~Invites beyond the household~~ **Resolved:** users invite household
+   members only; everyone else uses open signup (R2.6).
