@@ -68,7 +68,7 @@ steps, settings, and DNS records for each.
 | 6 | **Resend** account; add and verify `mail.bayleaflabs.com`; Supabase custom SMTP settings | M3 | Free tier |
 | 7 | **Cloudflare DNS** records for Vercel, Resend, DMARC, Email Routing; **Email Routing** `support@` → project Gmail | M3 | Free |
 | 8 | **Sentry** project for `api/` | M3 | Free tier |
-| 9 | **Vercel env vars** per environment (staging for previews, production): Supabase URL and keys, SnapTrade keys, `TOKEN_ENC_KEYS`, Resend key, Sentry DSN, `CRON_SECRET` (M6c). Generate `TOKEN_ENC_KEYS` locally with the command the agent provides; keep a backup in the password manager | M3, M5, M6c | — |
+| 9 | **Vercel env vars** per environment (staging for previews, production): Supabase URL and keys, SnapTrade keys, `TOKEN_ENC_KEYS`, Resend key, Sentry DSN, `CRON_SECRET` (M6c), `TICKER_REF_KEY` (M3; random 32 bytes, like `TOKEN_ENC_KEYS`). Generate `TOKEN_ENC_KEYS` locally with the command the agent provides; keep a backup in the password manager | M3, M5, M6c | — |
 | 10 | **GitHub Actions secrets** for the manual migration workflow (staging and production database credentials) | M3 | — |
 | 11 | **SnapTrade Personal key** for production (free; the key is your SnapTrade user, spec D3/§6.4). Used through alpha and beta | M5 | Free |
 | 12 | Approve the **privacy notice and beta terms**; decide whether to buy a lawyer review (before Gate 2 at the latest, since the open beta admits strangers) | M6, M7 | $0–? |

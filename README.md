@@ -1,6 +1,6 @@
 # Drift — DIY Portfolio Rebalancer
 
-A local, browser-only tool for household-level investment rebalancing across multiple accounts (Empower, Schwab, Fidelity). Runs entirely in your browser — no server, no login, no data leaves your machine.
+A tool for household-level investment rebalancing across multiple accounts (Empower, Schwab, Fidelity). Today it runs entirely in your browser — no server, no login, no data leaves your machine. Version 1.0 (in development, [`docs/v1/`](docs/v1/README.md)) adds optional sign-in, which stores your data on Drift's servers; guest mode keeps working exactly as it does now.
 
 ---
 
@@ -228,10 +228,10 @@ After `npm run build`, the `dist/` folder is a fully static site. Drag it to [Ne
 
 ## Privacy and guardrails
 
-- **All client-side.** No backend, no server-side processing of your data.
-- **Your data never leaves your browser.** Holdings, account details, and dollar amounts stay in `localStorage` and are never transmitted anywhere. The only network traffic is anonymous, cookieless pageview counting (no personal or financial data, no cross-site tracking).
+- **Guest mode (today's app): your data never leaves your browser.** All computation is client-side. Holdings, account details, and dollar amounts stay in `localStorage` and are never transmitted anywhere. The only network traffic is anonymous, cookieless analytics (no personal or financial data, no cross-site tracking).
+- **Signed-in mode (v1.0, in development) stores your data on Drift's servers.** Your portfolios, linked holdings, balances, account names, and drift history are kept in Drift's database so they sync across devices and power alerts. Brokerage credentials are never seen by Drift (linking goes through SnapTrade's own portal), and SnapTrade tokens are encrypted. Only members of a household you share see what you assign to it. The people who maintain Drift can access stored data to debug and support it; every access is logged. Analytics never receive your holdings, amounts, account details, or personal information.
 - **No real data in the repo.** `/private/` and `*.local.json` are git-ignored. Only synthetic fixtures in `src/data/` are committed.
-- **No credential automation.** CSV export and manual entry only; no scraping, no undocumented APIs.
+- **No credential automation.** Brokerage linking only through an authorized aggregator's documented, read-only API; otherwise CSV export and manual entry. No scraping, no undocumented APIs.
 - **Not investment advice.** This tool produces mechanical recommendations from your own inputs and strategy.
 
 ---

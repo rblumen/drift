@@ -49,8 +49,8 @@ Getting this household-vs-account distinction right is the whole point of the to
 **Explicit non-goals (deferred):**
 - Cost-basis / tax-lot tracking and realized-gain estimation. *(v1 only flags that a sale lands in taxable.)*
 - Live price feeds. *(User enters current market values off statements.)*
-- Automated brokerage connections. *(Plaid adapter stubbed for the future.)*
-- Any server, login, or transmission of financial data off the user's machine.
+- Automated brokerage connections. *(Plaid adapter stubbed for the future.)* **v1.0 adds them** through SnapTrade, read-only, for signed-in users (`docs/v1/`).
+- Any server, login, or transmission of financial data off the user's machine. *(True of the 0.x series and of v1.0 guest mode. v1.0 signed-in mode deliberately adds a server; see the guardrails below and `docs/v1/`.)*
 
 ---
 
@@ -164,10 +164,11 @@ See the README's [Flags reference](README.md#flags-reference) for a user-facing,
 
 ## Guardrails (permanent)
 
-- All computation stays client-side — no backend, no server-side processing of user data.
-- No user data leaves the browser (PII, holdings, account details, dollar amounts). Only anonymous, cookieless, aggregate pageview analytics are permitted, and they must never receive user/portfolio data.
-- Never commit real financial data. Only synthetic fixtures. `/private/` and `*.local.json` are git-ignored.
-- No credential automation and no undocumented/reverse-engineered APIs. CSV export and manual entry only.
+- **Guest mode:** all computation stays client-side, and no user data leaves the browser (PII, holdings, account details, dollar amounts).
+- **Signed-in mode (v1.0):** the user's personal financial data (portfolios, linked holdings, balances, account names, drift history) is stored on Drift's servers, with SnapTrade credentials encrypted and household-scoped row-level security. Maintainers may read it for debugging, support, and security, with every read logged (`docs/v1/spec-account-linking.md` D22). This is disclosed plainly in the privacy notice.
+- Analytics: cookieless, no-PII page traffic and product events only; never holdings, amounts, tickers, account details, or PII.
+- Never commit real financial data. Only synthetic fixtures. `/private/` and `*.local.json` are git-ignored. Real user data never goes into PRs, issues, fixtures, or AI coding tools.
+- Brokerage linking only through an authorized aggregator's documented, read-only API (SnapTrade); Drift never sees brokerage passwords. No credential automation, no scraping, no undocumented/reverse-engineered APIs. Otherwise CSV export and manual entry.
 - Do not create remote repos or push on the user's behalf.
 - Money math in a single currency; round only at display time.
 - This tool produces mechanical recommendations from the user's own inputs and strategy. It is not investment advice.
