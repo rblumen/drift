@@ -92,7 +92,7 @@ wants it, and pay for account linking only once they've shown they do
 
 | Phase | Who uses it | Purpose | What's in it | Milestones | Cost | Ends at |
 |---|---|---|---|---|---|---|
-| **Alpha** (internal) | You | Get the functionality right: a hosted Drift you trust as your daily tool | Sign-in, cross-device sync, linking your own accounts (SnapTrade Personal key), deletion, terms, problem reports, mobile web, **drift alerts** for your portfolios | M0a–M6c | ≤ $20/mo | **Gate 1** |
+| **Alpha** (internal) | You | Get the functionality right: a hosted Drift you trust as your daily tool | Sign-in, cross-device sync, linking your own accounts (SnapTrade Personal key), deletion, terms, problem reports, mobile web, **drift history and alerts** for your portfolios | M0a–M6c | ≤ $20/mo | **Gate 1** |
 | **Beta build-up** | You and your household | Make Drift ready for strangers, and for your household | Households, the native app (secondary), and open-beta readiness: open signup, the free-account tier, the Premium fake door and waitlist, feedback | M5b, M8, M7 | ≤ $20/mo, rising to the beta budget at M7 | **Gate 2** |
 | **Open beta** (public MVP) | Anyone in the US | (a) **Validate demand** for paid linking; (b) **gather feedback** | Hosted free accounts (guest mode kept), CSV import and manual entry only. Linking appears as **Premium**, a priced waitlist; it isn't available yet. Your household keeps linking | — (runs for the period set at Gate 2) | ~$50–65/mo, no aggregator cost | **Gate 3** |
 | **Premium** (full linking) | Premium users, in batches from the waitlist | Deliver account linking at a cost demand has justified | Aggregator chosen on real prices, Commercial mode, SnapTrade's consent step, entitlement and billing if paid | M9 | Set at Gate 3; aggregator from $100/mo or Plaid usage | Later: leaving beta (spec §10) |
@@ -103,8 +103,8 @@ wants it, and pay for account linking only once they've shown they do
 - You've used it as your daily tool for a few weeks on desktop and phone.
 - Link → sync → map → rebalance is reliable. A broken connection recovers
   through re-authentication, and a killed sync doesn't block the next one.
-- Your scheduled drift checks email you when a portfolio leaves its bands,
-  and stay quiet when it doesn't.
+- Drift history builds up daily, and your alerts email you when a portfolio
+  has stayed outside its bands, not on one-day swings.
 - `sync_runs` errors and Sentry are quiet or understood.
 - Costs stay at or under $20/mo.
 
@@ -287,17 +287,22 @@ Useful on its own: cross-device Drift with CSV import.
 **Exit:** 👤 the whole Gate 1 loop works on both phones: sign in, link, sync,
 map, read results, edit strategy, report a problem.
 
-### M6c — Drift alerts (yours)
+### M6c — Drift history and alerts (yours)
 | Owner | Task |
 |---|---|
-| 🤖 | `alert_checks` migration; `/api/v1/alerts` endpoints; Strategy → Alerts UI, owner only (spec §5.13) |
-| 🤖 | Daily Vercel Cron → `POST /api/v1/cron/alerts` with `CRON_SECRET`: due checks → cron sync → server-side compose + `rebalance()` → neutral email |
-| 🤖 | Tests: due-date logic, in band stays quiet, drift sends one email, failure email throttled, non-owner gets 403, email body has no amounts or tickers |
-| 👤 | `CRON_SECRET` into Vercel env vars (checklist 9); set up a weekly check on your portfolio |
+| 🤖 | Migrations: `portfolio_snapshots`, `alert_checks` (spec §4.2) |
+| 🤖 | `src/alerts/evaluate.ts`: pure rule evaluation (instant, persistence, average; episodes) with synthetic-sequence tests (spec §5.13) |
+| 🤖 | Daily (weekday) Vercel Cron → `POST /api/v1/cron/alerts` with `CRON_SECRET`: cron sync → server-side compose + `rebalance()` → snapshot → evaluate → neutral email |
+| 🤖 | Strategy → Alerts UI and `/api/v1/alerts`; Results → History chart and `/api/v1/portfolios/:id/history`; owner only (spec §5.14) |
+| 🤖 | Tests: one snapshot per day, a one-day spike stays quiet, persistent drift emails once per episode, failure email throttled, non-owner gets 403, email body has no amounts or tickers |
+| 👤 | `CRON_SECRET` into Vercel env vars (checklist 9); turn on an alert for your portfolio |
 
-**Exit:** 👤 with bands tightened on purpose, the check emails you; loosened
-again, it stays quiet; the email carries no amounts, tickers, or account
-names.
+**Exit:**
+- 🤖 the rule tests pass, including the spike, the 3-of-5, and re-arm cases;
+- 👤 after a week, History shows a line per class with its band;
+- 👤 with bands tightened on purpose, the alert emails you once after the
+  rule is met (not on day one); loosened again, the episode closes and it
+  stays quiet; the email carries no amounts, tickers, or account names.
 
 ### Gate 1 — Alpha exit (you only) 👤
 Use it for a few weeks on desktop and phone. Cost up to $20/mo (D15). Review

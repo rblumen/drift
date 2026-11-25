@@ -321,8 +321,8 @@ RLS: select by members of that household. Decisions go through `api/v1/`.
 
 RLS: select if you're the linker, or the account is assigned to a portfolio in
 a household you belong to. Writes only through `replace_holdings` (§4.3).
-History is out of scope; a snapshot table can be added later without changing
-this one.
+This table holds only the latest positions. Drift over time lives in
+`portfolio_snapshots` (class level, §5.14); per-holding history is later (§10).
 
 A holding with no ticker gets a synthetic key `SEC:<security_id>` in
 composition, so it can still be classified through `tickerOverrides` /
@@ -345,21 +345,42 @@ can recognize the fund.
 
 RLS: own rows for select. No dollar amounts or tickers.
 
-#### `alert_checks` — scheduled drift checks (§5.13)
+#### `portfolio_snapshots` — daily drift history (server-written, §5.14)
+| Column | Type | Notes |
+|---|---|---|
+| `portfolio_id` | `uuid` not null → `portfolios` on delete cascade | PK part |
+| `snapshot_date` | `date` not null | PK part. One row per portfolio per day; a later run the same day replaces it |
+| `taken_at` | `timestamptz` not null | |
+| `source` | `text` not null | `cron` or `sync` |
+| `classes` | `jsonb` not null | Per asset class: `weight`, `target`, `tolerance` (the effective band half-width), `drift` (= weight − target), `state` (`under`, `in`, `over`) |
+| `in_band` | `boolean` not null | Every class in band |
+| `engine_sha` | `text` not null | Engine version that computed it |
+
+**Weights only:** no dollar values, prices, or tickers, so history adds no
+stored Market Data (§11 Q6) and stays small (about 1 KB per portfolio-day,
+kept indefinitely). RLS: members of the portfolio's household can select;
+writes only by the server. Deleted with the portfolio or the profile (§5.8).
+
+#### `alert_checks` — drift alert settings (§5.13)
 | Column | Type | Notes |
 |---|---|---|
 | `id` | `uuid` PK | |
 | `user_id` | `uuid` not null → `auth.users` on delete cascade | Who gets the email |
 | `portfolio_id` | `uuid` not null → `portfolios` on delete cascade | Checked against this portfolio's own tolerance bands |
-| `schedule` | `text` not null | `weekly` or `monthly` |
-| `day` | `smallint` not null | Weekday 0–6 (weekly) or day of month 1–28 (monthly) |
+| `schedule` | `text` not null | When it may email: `daily` (as soon as a new episode starts), `weekly`, or `monthly` (on `day`, if any episode is active) |
+| `day` | `smallint` null | Weekday 0–6 (weekly) or day of month 1–28 (monthly) |
+| `rule` | `text` not null default `persistence` | `instant`, `persistence`, or `average` (§5.13) |
+| `window_days` / `min_days` | `smallint` not null default 5 / 3 | The rule's N and M |
+| `class_overrides` | `jsonb` null | Per-class `rule` / `window_days` / `min_days`, e.g. a longer window for a volatile class. Schema now, UI later |
 | `enabled` | `boolean` not null default true | Pausing keeps the row |
+| `episodes` | `jsonb` not null default `{}` | Open episodes per class and direction, with the date each started and whether it was emailed |
 | `last_run_at` / `last_notified_at` | `timestamptz` null | |
-| `last_result` | `text` null | `in_band`, `drift`, or `error`. No amounts or tickers |
+| `last_result` | `text` null | `in_band`, `drift`, `waiting` (out of band, rule not met yet), or `error`. No amounts or tickers |
 | `created_at` | `timestamptz` not null | |
 
 RLS: own rows for select, insert, update, delete, and only for a portfolio in
-a household you belong to. The cron writes `last_*` with the secret key.
+a household you belong to. The cron writes `episodes` and `last_*` with the
+secret key.
 
 #### Server-only tables
 - `snaptrade_users`:
@@ -686,34 +707,75 @@ what do they want changed?
   aggregator cost (§10).
 
 ### 5.13 Drift alerts (alpha: the owner only)
-Scheduled checks that email you when a portfolio drifts outside its bands
-(#259).
-- **User-created and opt-in.** Under Strategy → Alerts, per portfolio: turn a
-  check on, pick a schedule (weekly on a weekday, or monthly on a day), and
-  it uses that portfolio's own tolerance bands. Off by default; pause or
-  delete at any time.
+Email when a portfolio has **stayed** outside its bands, not on every
+short-lived swing (#259). Volatile classes can cross a band for a day or two
+and come back; the right response then is to wait. So alerts read the daily
+drift history (§5.14), not just today's state.
+- **User-created and opt-in.** Under Strategy → Alerts, per portfolio: turn
+  an alert on, pick when it may email (`daily`, `weekly`, or `monthly`), and
+  pick a rule. Off by default; pause or delete at any time. It uses that
+  portfolio's own tolerance bands.
+- **Rules,** evaluated per asset class and direction (over or under), always
+  requiring the **latest** snapshot to be out of band in that direction:
+  - **`persistence` (default, 3 of 5):** out of band in the same direction on
+    at least `min_days` of the last `window_days` daily snapshots.
+  - **`average`:** the mean drift over the last `window_days` snapshots is
+    beyond the band in that direction.
+  - **`instant`:** the latest snapshot alone (today's behavior).
+
+  Days are snapshot days (weekdays). A missing day (failed sync) doesn't
+  count either way. If fewer than `min_days` snapshots exist in the window,
+  the rule waits. `class_overrides` can give a volatile class a longer window.
+- **Episodes, not repeats:** when a rule first fires for a class and
+  direction, an episode opens and is emailed once (at once for `daily`, on
+  the next scheduled day otherwise). It closes when that class's latest
+  snapshot is back in band; only then can the same class and direction alert
+  again.
 - **Who:** in alpha and beta, only the Personal-key owner
   (`SNAPTRADE_PERSONAL_OWNER`, §6.4); everyone else gets
-  `403 alerts_unavailable` and no Alerts UI. Opening alerts to free accounts
-  (manual holdings are stored server-side too) or Premium is a Gate 3
-  decision.
-- **Run:** a daily Vercel Cron calls `POST /api/v1/cron/alerts` (protected by
-  `CRON_SECRET`). For each check due today, it syncs that user's linked
-  logins (`sync_runs.trigger = 'cron'`, same lease as manual syncs; manual
-  accounts use their last saved holdings), composes positions, runs
-  `rebalance()` server-side (D14), and compares each class with its band.
-- **Notify only on drift:** at most one email per check run, from
-  `mail.bayleaflabs.com`: "Your scheduled check found drift beyond your
-  bands. Open Drift to review." No amounts, tickers, account names, or
-  suggested trades; the analysis appears only in the app. In band means no
-  email.
+  `403 alerts_unavailable` and no Alerts UI. Opening history and alerts to
+  free accounts (manual holdings are stored server-side too) or Premium is a
+  Gate 3 decision.
+- **Run:** a daily (weekday) Vercel Cron calls `POST /api/v1/cron/alerts`
+  (protected by `CRON_SECRET`). For each of the owner's portfolios it syncs
+  linked logins (`sync_runs.trigger = 'cron'`, same lease as manual syncs;
+  manual accounts use their last saved holdings), composes positions, runs
+  `rebalance()` server-side (D14), writes today's snapshot (§5.14), then
+  evaluates each enabled alert.
+- **The rule is a pure function,** `src/alerts/evaluate.ts`
+  (`evaluateAlert(snapshots, settings, episodes)` → updated episodes and
+  whether to email). No I/O, unit-tested with synthetic sequences:
+  - a one-day spike doesn't fire;
+  - 3 of 5 fires;
+  - alternating directions don't fire;
+  - gaps are skipped;
+  - an episode emails once, then re-arms after a return to band.
+- **Email:** from `mail.bayleaflabs.com`: "Your scheduled check found drift
+  beyond your bands. Open Drift to review." No amounts, tickers, account
+  names, or suggested trades; the analysis appears only in the app.
 - **Failures** (a sync error, or a login that needs re-authentication) send
   "Your scheduled check couldn't finish. Open Drift to see why," at most once
-  a week per check.
+  a week per alert.
 - **Pull-based rule:** SnapTrade's Compliance Policy wants analysis in
-  read-enabled apps to be "pull-based." A check you schedule for your own
+  read-enabled apps to be "pull-based." An alert you set up on your own
   portfolio, under your own Personal key, is your own automation. Confirm
   with SnapTrade before offering alerts to anyone else (#259).
+
+### 5.14 Drift history (alpha: the owner only)
+- **What's recorded:** one `portfolio_snapshots` row per portfolio per
+  weekday, written by the daily cron (§5.13). A manual sync also writes the
+  day's row, and the later run that day wins. Class weights, targets, bands,
+  and drift only; no dollar values.
+- **View:** Results → **History**. For each asset class, a line of drift
+  (weight − target) over time, with its band shaded. The range is 30 days,
+  90 days, 1 year, or all. Days an alert fired are marked. Phone-friendly
+  (§5.10).
+- **Use:** see which classes keep drifting and in which direction, and tune
+  bands or alert rules against real history. The alert rules read the same
+  rows.
+- **Who:** the owner's portfolios in alpha and beta, like alerts; opening it
+  wider is a Gate 3 decision (with #15).
+- History starts when the cron first runs; there is no backfill.
 
 ---
 
@@ -743,8 +805,9 @@ All endpoints except waitlist:
 | `POST /duplicates/decide` | Confirm (body names the copy to keep; the other is removed from the household) or reject a suggestion |
 | `POST /support/reports` | Store a problem report (§5.9); rate-limited |
 | `DELETE /me` | Delete the caller's Drift user profile and all their data (§5.8) |
-| `GET /alerts`, `PUT /alerts/:id`, `DELETE /alerts/:id` | The caller's alert checks (§5.13). Alpha: owner only |
-| `POST /cron/alerts` | Vercel Cron only (`CRON_SECRET`); runs due alert checks (§5.13) |
+| `GET /alerts`, `PUT /alerts/:id`, `DELETE /alerts/:id` | The caller's alert settings (§5.13). Alpha: owner only |
+| `GET /portfolios/:id/history?from=&to=` | Drift snapshots for the history view (§5.14). Alpha: owner only |
+| `POST /cron/alerts` | Vercel Cron only (`CRON_SECRET`); writes daily snapshots and evaluates alerts (§5.13, §5.14) |
 | `POST /waitlist` | Unauthenticated; honeypot + rate limit; insert into `waitlist` |
 | `GET /health` | Verifies the token; also the target of a daily Vercel Cron ping |
 
@@ -993,7 +1056,9 @@ raise it if needed.
   - an explicit user opt-in;
   - a privacy rule update, because portfolio data then goes to an AI provider.
 - **Viewer/adviser role** in the UI (`spec-households.md` R7).
-- **Holdings history:** snapshot table for performance and drift over time.
+- **Per-holding history** (values and units over time, for performance).
+  Class-level drift history is already in alpha (§5.14). Storing past values
+  raises the Market Data question again (§11 Q6).
 - **Premium launch (Gate 3, M9).** If demand justifies it:
   - **Aggregator choice:** compare SnapTrade and Plaid on real prices and
     coverage. SnapTrade costs about `$100 + $1 × users` per month (Launch
