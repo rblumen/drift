@@ -92,7 +92,7 @@ docs, the UI, and the schema:
 | D19 | Environments | Two Supabase projects: **staging** (local dev and Vercel preview deploys) and **production** (production deploys only). Preview URLs are allowed as auth redirects in staging only. Real brokerage data only in production |
 | D20 | Second aggregator | **Plaid Investments** is the named alternative adapter. M0 removed the coverage trigger, but Plaid's pay-as-you-go pricing (no monthly minimum, billed per linked login; unverified until a spike) may beat SnapTrade's $100/mo floor at small scale; compared at Gate 3 (D24, §10). The pure-adapter design (§6.1) keeps a switch, or running both, to a new adapter plus server routes. Accounts no aggregator covers stay on CSV |
 | D21 | Error monitoring | **Sentry for `api/` only**, with `sendDefaultPii: false`, no request or response bodies, and a `beforeSend` that keeps only route, status, error type, and stack. No client-side SDK in the beta |
-| D22 | Support access | **No routine access to user data.** Bugs are investigated from logs and `sync_runs` (IDs, codes, timings only) and from **user-initiated problem reports** (§5.9) that the user reviews before sending. As Supabase project owner you can technically read the database; the policy is to do so only with the user's consent for a specific report, logged in `support_access_log`, and the privacy notice says so. No impersonation or "view as user" feature |
+| D22 | Maintainer access | **Drift stores users' personal financial data on its servers** (portfolios, holdings, balances, account names), and the people who maintain Drift **can access it** for debugging, support, security, and data repair, **without asking each time**. Rules: try logs, `sync_runs` (IDs, codes, timings only) and **user-initiated problem reports** (§5.9) first; read only what the task needs; read production data only through the admin scripts, which write every access to `support_access_log` (who, whose data, what, why); never copy real data into a PR, fixture, issue, or AI coding tool (reproduce with synthetic fixtures instead). The Privacy Notice says all of this plainly. No impersonation or "view as user" feature |
 | D23 | Mobile | **Mobile web first:** every beta flow works in a phone browser and the app is installable as a PWA (§5.10). A **native app** is in beta scope as a secondary priority (M8). Default approach: wrap the same React app with Capacitor for iOS and Android, so there is one UI codebase; confirmed at the start of M8 |
 | D24 | Phases, tiers, and gates | **Alpha** (internal, the developer only) ends at **Gate 1**. The **open beta** starts at **Gate 2**, to validate demand and gather feedback, with three tiers: **Guest** (today's app, no signup, data stays in the browser), **Free account** (sign-in, sync across devices, households, CSV import and manual entry; no linking), and **Premium** (linking), offered only as a **waitlist behind a priced fake door** (§5.12). **Gate 3** decides whether demand justifies paying for an aggregator and opening Premium (M9). The developer's household keeps Personal-key linking throughout (§6.4) |
 
@@ -359,8 +359,10 @@ RLS: own rows for select. No dollar amounts or tickers.
   `diagnostics` jsonb (no amounts or names), `portfolio_snapshot_enc` null
   (encrypted with the D10 keyring; present only if the user opted in),
   `status`, `closed_at`. Deleted 30 days after closing, or on request.
-- `support_access_log`: `id`, `report_id`, `accessed_at`, `reason`. Written
-  by the admin script whenever a snapshot is decrypted.
+- `support_access_log`: `id`, `accessed_by`, `subject_user_id` null,
+  `report_id` null, `scope` (what was read), `reason`, `accessed_at`. Written
+  by the admin scripts on **every** read of user data, including decrypting a
+  problem-report snapshot (D22).
 - `referral_codes` (M7): `code` PK, `user_id` unique, `created_at`. Owners can
   select their own.
 - `rate_limits`: `key` (route + hashed IP), `window_start`, `count`. Updated by
@@ -633,9 +635,10 @@ Drift's record of the person, not the person. `DELETE /api/v1/me`:
     not an offer or a promise that Premium will launch, or at the price shown.
   - Acceptable use: one person per Drift user; no scraping; no reverse
     engineering of the service.
-  - Data handling by reference to the Privacy Notice: what's stored,
-    household sharing, SnapTrade, Resend, problem reports and support
-    access, deletion.
+  - Data handling by reference to the Privacy Notice: what's stored
+    (personal financial data on Drift's servers), household sharing,
+    SnapTrade, Resend, problem reports, maintainer access for debugging and
+    support (D22), deletion.
   - US-only; governing law of your state.
   - Feedback may be used to improve Drift.
 - **Native app (M8):** the App Store's standard EULA plus a link to the same
@@ -872,10 +875,10 @@ raise it if needed.
 | Analytics stays page-only | URL scrubbed after auth callbacks and invite links; `<Analytics beforeSend>` drops query strings and hashes; reported path stays `/`. Fake-door counts (§5.12) are server-side, variant ID only, never sent to the analytics tool |
 | Email | No portfolio data; tracking off (§7) |
 | Logs and errors | Structured JSON logs per request: request ID, route, status, duration, user ID, error code. No bodies, emails, amounts, or tickers. Sentry on `api/` only, scrubbed (D21). Vercel's built-in log retention is short (confirm in M3), so `sync_runs`, Sentry, and problem reports are the durable record; add a log drain only if needed |
-| Support access | D22: user-initiated problem reports; consent-gated, logged snapshot access; no impersonation |
+| Maintainer access | D22: personal financial data is stored server-side and maintainers may read it for debugging and support; every read is logged in `support_access_log`; disclosed in the Privacy Notice; no impersonation; real data never reaches PRs, fixtures, or AI coding tools |
 | Environments | Real data only in the production Supabase project; previews use staging (D19) |
 | Cost hygiene | Commercial mode only (M9): `snaptrade_users.last_active_at`. An admin script lists or deletes SnapTrade users inactive for 60+ days (with notice), since each connected user is billed until deleted; run it before month-end |
-| Light beta posture | Beta Terms accepted at sign-in (§5.11); Privacy notice (accounts, households and sharing with members, waitlist, SnapTrade, email and Resend, problem reports and support access) and short ToS (the beta is free and may become paid, with notice); US-only; free; breach-response note in `docs/` |
+| Light beta posture | Beta Terms accepted at sign-in (§5.11); Privacy notice (accounts, the personal financial data stored on Drift's servers, households and sharing with members, waitlist, SnapTrade, email and Resend, problem reports, logged maintainer access (D22)) and short ToS (the beta is free and may become paid, with notice); US-only; free; breach-response note in `docs/` |
 
 ---
 

@@ -136,7 +136,7 @@ and the demand gate, Gate 3 (spec D24).
 ### M1 — Guardrails and docs update
 | Owner | Task |
 |---|---|
-| 🤖 | Draft amendments to `CLAUDE.md`, `IMPLEMENTATION_PLAN.md`, and `README.md`: *guest mode sends nothing; signed-in mode stores the user's portfolios, linked holdings, and SnapTrade credentials server-side, encrypted where sensitive; data is visible only to members of the household it's assigned to.* Plus a CHANGELOG entry |
+| 🤖 | Draft amendments to `CLAUDE.md`, `IMPLEMENTATION_PLAN.md`, and `README.md`, replacing "no user data ever leaves the browser": *guest mode sends nothing. Signed-in mode **stores the user's personal financial data on Drift's servers** (portfolios, linked holdings, balances, account names) and SnapTrade credentials, encrypted where sensitive. Other users see only what's assigned to a household they belong to. **Maintainers can access stored data** for debugging, support, and security; every access is logged (spec D22), and real data never goes into PRs, fixtures, or AI coding tools. **Analytics:** product events (feature use, fake-door views and clicks, price variant ID) are allowed; holdings, amounts, account names or numbers, and PII never reach the analytics tool.* Plus a CHANGELOG entry |
 | 👤 | **Explicit sign-off** and merge. These are rules `CLAUDE.md` calls inviolable |
 
 **Exit:** merged. No backend code merges before this.
@@ -216,7 +216,7 @@ Useful on its own: cross-device Drift with CSV import.
 | Owner | Task |
 |---|---|
 | 🤖 | `DELETE /api/v1/me` (idempotent, retried) and the Profile control (§5.8) |
-| 🤖 | Admin scripts: SnapTrade inactive-user report and prune; problem-report reader that writes `support_access_log` |
+| 🤖 | Admin scripts: SnapTrade inactive-user report and prune; a data-access script (read a user's data or a problem-report snapshot) that writes `support_access_log` on every read (D22) |
 | 🤖 | Report a problem (§5.9) and error references in the UI |
 | 🤖 | "Copy summary for AI" (§5.7) |
 | 🤖 | Terms acceptance gate (§5.11) |
@@ -331,8 +331,8 @@ budget.
 |---|---|---|
 | 👤 | Read feedback; review the Premium waitlist and per-price counts | Weekly |
 | 👤 | Answer support@ (as support@ from the project Gmail) | As needed |
-| 👤 | Read problem reports. Decrypt a snapshot only with the user's consent (D22) | As needed |
-| 🤝 | Fix reported bugs: you load the consented snapshot locally and turn it into a synthetic regression fixture with the agent. Real data never enters a PR | As needed |
+| 👤 | Read problem reports and feedback. Read user data only through the logging admin script, and only what the task needs (D22) | As needed |
+| 🤝 | Fix reported bugs: you reproduce locally from the report (or a logged read) and turn it into a synthetic regression fixture with the agent. Real data never enters a PR or the agent's context | As needed |
 | 👤 | Check costs (Supabase, Vercel, SnapTrade, Resend), Sentry, and `sync_runs` errors | Monthly |
 | 👤 | Run the SnapTrade inactive-user prune (Commercial mode, after M9), before month-end | Monthly |
 | 👤 | Rotate `TOKEN_ENC_KEYS` (agent-written runbook) | Yearly, or on suspicion |
