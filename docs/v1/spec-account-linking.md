@@ -56,8 +56,10 @@ docs, the UI, and the schema:
 - Trading or any write action against a brokerage. Holdings are **read-only**.
 - Billing or charging money. These are post-beta (§10). Public signup is in
   scope from Gate 2 (D6).
-- Scheduled server syncs, drift alerts, email reminders, and the MCP server.
-  These are planned follow-ups (§10); the design must keep them easy.
+- Email reminders, general scheduled syncs, and the MCP server. These are
+  planned follow-ups (§10); the design must keep them easy. **Drift alerts**
+  (with the scheduled sync they need) are in scope for the alpha owner only
+  (§5.13); offering them to other users is a Gate 3 decision.
 - The read-only viewer/adviser role in the UI (the schema supports it; see
   `spec-households.md` R7).
 - A native mobile app **in alpha**. It is a secondary priority after Gate 1
@@ -88,7 +90,7 @@ docs, the UI, and the schema:
 | D15 | Budget ceiling | **Alpha:** up to **$20/mo** (domain, plus room for a paid tier if a free one pauses or limits). **Beta:** confirmed at Gate 2; expect about **$50–65/mo** (Supabase Pro $25, Vercel Pro $20 because Hobby is for non-commercial use, postal address $5–15), with no aggregator cost because linking stays on the Personal key. **Premium:** set at Gate 3, where the paid aggregator plan (SnapTrade from $100/mo, or Plaid usage) is the main line item |
 | D16 | Households | Access is granted per **household** (owner / editor / viewer). A Drift user can belong to several households. A hard privacy boundary means a separate household under the same Drift user. Mine/hers/joint is a label, never an access boundary. Requirements: `spec-households.md` |
 | D17 | Supabase keys & tokens | Use the **new API keys** (`sb_publishable_…` in the browser, `sb_secret_…` on the server) and **asymmetric JWT signing keys** from day one. The legacy `anon`/`service_role` keys are being retired and can't be rotated. Functions verify access tokens locally against the project's JWKS (`jose`) |
-| D18 | Least privilege on the server | Functions act **as the user** (a Supabase client carrying the caller's token, so RLS applies). The secret key is used only for `snaptrade_users`, `waitlist`, rate limits, and profile deletion |
+| D18 | Least privilege on the server | Functions act **as the user** (a Supabase client carrying the caller's token, so RLS applies). The secret key is used only for `snaptrade_users`, `waitlist`, rate limits, profile deletion, and the alert cron (§5.13), which has no user token |
 | D19 | Environments | Two Supabase projects: **staging** (local dev and Vercel preview deploys) and **production** (production deploys only). Preview URLs are allowed as auth redirects in staging only. Real brokerage data only in production |
 | D20 | Second aggregator | **Plaid Investments** is the named alternative adapter. M0 removed the coverage trigger, but Plaid's pay-as-you-go pricing (no monthly minimum, billed per linked login; unverified until a spike) may beat SnapTrade's $100/mo floor at small scale; compared at Gate 3 (D24, §10). The pure-adapter design (§6.1) keeps a switch, or running both, to a new adapter plus server routes. Accounts no aggregator covers stay on CSV |
 | D21 | Error monitoring | **Sentry for `api/` only**, with `sendDefaultPii: false`, no request or response bodies, and a `beforeSend` that keeps only route, status, error type, and stack. No client-side SDK in the beta |
@@ -313,15 +315,14 @@ RLS: select by members of that household. Decisions go through `api/v1/`.
 | `cusip` | `text` null | SnapTrade has no CUSIP field. Kept for the Plaid adapter (D20) |
 | `description` | `text` | |
 | `units` | `numeric` | Summed across lots |
-| `price` | `numeric` | |
-| `market_value` | `numeric` not null | |
+| `market_value` | `numeric` not null | Units × price at sync time. **Price itself is not stored** (§11 Q6) |
 | `cost_basis` | `numeric` | Aggregate; when available. M0: present for brokerage accounts, absent for 401(k)s |
 | `as_of` | `timestamptz` not null | |
 
 RLS: select if you're the linker, or the account is assigned to a portfolio in
 a household you belong to. Writes only through `replace_holdings` (§4.3).
-History is out of scope; a snapshot table can be added later without changing
-this one.
+This table holds only the latest positions. Drift over time lives in
+`portfolio_snapshots` (class level, §5.14); per-holding history is later (§10).
 
 A holding with no ticker gets a synthetic key `SEC:<security_id>` in
 composition, so it can still be classified through `tickerOverrides` /
@@ -334,7 +335,7 @@ can recognize the fund.
 | `id` | `bigint` identity PK | |
 | `user_id` | `uuid` not null | Whose logins were synced |
 | `portfolio_id` | `uuid` null | Portfolio that triggered it, if any |
-| `trigger` | `text` not null | `manual`, `auto_on_open`, later `cron` |
+| `trigger` | `text` not null | `manual`, `auto_on_open`, `cron` (alert checks, §5.13) |
 | `started_at` / `finished_at` | `timestamptz` | |
 | `lease_expires_at` | `timestamptz` not null | `started_at` + 2 min; an expired lease no longer blocks a new run |
 | `status` | `text` not null | `running`, `ok`, `partial`, `error` |
@@ -343,6 +344,43 @@ can recognize the fund.
 | `error_code` | `text` | No messages that could contain holdings |
 
 RLS: own rows for select. No dollar amounts or tickers.
+
+#### `portfolio_snapshots` — daily drift history (server-written, §5.14)
+| Column | Type | Notes |
+|---|---|---|
+| `portfolio_id` | `uuid` not null → `portfolios` on delete cascade | PK part |
+| `snapshot_date` | `date` not null | PK part. One row per portfolio per day; a later run the same day replaces it |
+| `taken_at` | `timestamptz` not null | |
+| `source` | `text` not null | `cron` or `sync` |
+| `classes` | `jsonb` not null | Per asset class: `weight`, `target`, `tolerance` (the effective band half-width), `drift` (= weight − target), `state` (`under`, `in`, `over`) |
+| `in_band` | `boolean` not null | Every class in band |
+| `engine_sha` | `text` not null | Engine version that computed it |
+
+**Weights only:** no dollar values, prices, or tickers, so history adds no
+stored Market Data (§11 Q6) and stays small (about 1 KB per portfolio-day,
+kept indefinitely). RLS: members of the portfolio's household can select;
+writes only by the server. Deleted with the portfolio or the profile (§5.8).
+
+#### `alert_checks` — drift alert settings (§5.13)
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `uuid` PK | |
+| `user_id` | `uuid` not null → `auth.users` on delete cascade | Who gets the email |
+| `portfolio_id` | `uuid` not null → `portfolios` on delete cascade | Checked against this portfolio's own tolerance bands |
+| `schedule` | `text` not null | When it may email: `daily` (as soon as a new episode starts), `weekly`, or `monthly` (on `day`, if any episode is active) |
+| `day` | `smallint` null | Weekday 0–6 (weekly) or day of month 1–28 (monthly) |
+| `rule` | `text` not null default `persistence` | `instant`, `persistence`, or `average` (§5.13) |
+| `window_days` / `min_days` | `smallint` not null default 5 / 3 | The rule's N and M |
+| `class_overrides` | `jsonb` null | Per-class `rule` / `window_days` / `min_days`, e.g. a longer window for a volatile class. Schema now, UI later |
+| `enabled` | `boolean` not null default true | Pausing keeps the row |
+| `episodes` | `jsonb` not null default `{}` | Open episodes per class and direction, with the date each started and whether it was emailed |
+| `last_run_at` / `last_notified_at` | `timestamptz` null | |
+| `last_result` | `text` null | `in_band`, `drift`, `waiting` (out of band, rule not met yet), or `error`. No amounts or tickers |
+| `created_at` | `timestamptz` not null | |
+
+RLS: own rows for select, insert, update, delete, and only for a portfolio in
+a household you belong to. The cron writes `episodes` and `last_*` with the
+secret key.
 
 #### Server-only tables
 - `snaptrade_users`:
@@ -668,6 +706,77 @@ what do they want changed?
   fake-door viewers who join, and feedback themes, read against the
   aggregator cost (§10).
 
+### 5.13 Drift alerts (alpha: the owner only)
+Email when a portfolio has **stayed** outside its bands, not on every
+short-lived swing (#259). Volatile classes can cross a band for a day or two
+and come back; the right response then is to wait. So alerts read the daily
+drift history (§5.14), not just today's state.
+- **User-created and opt-in.** Under Strategy → Alerts, per portfolio: turn
+  an alert on, pick when it may email (`daily`, `weekly`, or `monthly`), and
+  pick a rule. Off by default; pause or delete at any time. It uses that
+  portfolio's own tolerance bands.
+- **Rules,** evaluated per asset class and direction (over or under), always
+  requiring the **latest** snapshot to be out of band in that direction:
+  - **`persistence` (default, 3 of 5):** out of band in the same direction on
+    at least `min_days` of the last `window_days` daily snapshots.
+  - **`average`:** the mean drift over the last `window_days` snapshots is
+    beyond the band in that direction.
+  - **`instant`:** the latest snapshot alone (today's behavior).
+
+  Days are snapshot days (weekdays). A missing day (failed sync) doesn't
+  count either way. If fewer than `min_days` snapshots exist in the window,
+  the rule waits. `class_overrides` can give a volatile class a longer window.
+- **Episodes, not repeats:** when a rule first fires for a class and
+  direction, an episode opens and is emailed once (at once for `daily`, on
+  the next scheduled day otherwise). It closes when that class's latest
+  snapshot is back in band; only then can the same class and direction alert
+  again.
+- **Who:** in alpha and beta, only the Personal-key owner
+  (`SNAPTRADE_PERSONAL_OWNER`, §6.4); everyone else gets
+  `403 alerts_unavailable` and no Alerts UI. Opening history and alerts to
+  free accounts (manual holdings are stored server-side too) or Premium is a
+  Gate 3 decision.
+- **Run:** a daily (weekday) Vercel Cron calls `POST /api/v1/cron/alerts`
+  (protected by `CRON_SECRET`). For each of the owner's portfolios it syncs
+  linked logins (`sync_runs.trigger = 'cron'`, same lease as manual syncs;
+  manual accounts use their last saved holdings), composes positions, runs
+  `rebalance()` server-side (D14), writes today's snapshot (§5.14), then
+  evaluates each enabled alert.
+- **The rule is a pure function,** `src/alerts/evaluate.ts`
+  (`evaluateAlert(snapshots, settings, episodes)` → updated episodes and
+  whether to email). No I/O, unit-tested with synthetic sequences:
+  - a one-day spike doesn't fire;
+  - 3 of 5 fires;
+  - alternating directions don't fire;
+  - gaps are skipped;
+  - an episode emails once, then re-arms after a return to band.
+- **Email:** from `mail.bayleaflabs.com`: "Your scheduled check found drift
+  beyond your bands. Open Drift to review." No amounts, tickers, account
+  names, or suggested trades; the analysis appears only in the app.
+- **Failures** (a sync error, or a login that needs re-authentication) send
+  "Your scheduled check couldn't finish. Open Drift to see why," at most once
+  a week per alert.
+- **Pull-based rule:** SnapTrade's Compliance Policy wants analysis in
+  read-enabled apps to be "pull-based." An alert you set up on your own
+  portfolio, under your own Personal key, is your own automation. Confirm
+  with SnapTrade before offering alerts to anyone else (#259).
+
+### 5.14 Drift history (alpha: the owner only)
+- **What's recorded:** one `portfolio_snapshots` row per portfolio per
+  weekday, written by the daily cron (§5.13). A manual sync also writes the
+  day's row, and the later run that day wins. Class weights, targets, bands,
+  and drift only; no dollar values.
+- **View:** Results → **History**. For each asset class, a line of drift
+  (weight − target) over time, with its band shaded. The range is 30 days,
+  90 days, 1 year, or all. Days an alert fired are marked. Phone-friendly
+  (§5.10).
+- **Use:** see which classes keep drifting and in which direction, and tune
+  bands or alert rules against real history. The alert rules read the same
+  rows.
+- **Who:** the owner's portfolios in alpha and beta, like alerts; opening it
+  wider is a Gate 3 decision (with #15).
+- History starts when the cron first runs; there is no backfill.
+
 ---
 
 ## 6. Server API (`api/v1/`)
@@ -696,6 +805,9 @@ All endpoints except waitlist:
 | `POST /duplicates/decide` | Confirm (body names the copy to keep; the other is removed from the household) or reject a suggestion |
 | `POST /support/reports` | Store a problem report (§5.9); rate-limited |
 | `DELETE /me` | Delete the caller's Drift user profile and all their data (§5.8) |
+| `GET /alerts`, `PUT /alerts/:id`, `DELETE /alerts/:id` | The caller's alert settings (§5.13). Alpha: owner only |
+| `GET /portfolios/:id/history?from=&to=` | Drift snapshots for the history view (§5.14). Alpha: owner only |
+| `POST /cron/alerts` | Vercel Cron only (`CRON_SECRET`); writes daily snapshots and evaluates alerts (§5.13, §5.14) |
 | `POST /waitlist` | Unauthenticated; honeypot + rate limit; insert into `waitlist` |
 | `GET /health` | Verifies the token; also the target of a daily Vercel Cron ping |
 
@@ -804,8 +916,8 @@ register or delete-user call. The server supports this as a mode, set by
   developer's session, with the account holder entering their own
   credentials in SnapTrade's portal, then assigned to the shared household
   (`spec-households.md`). Household members see and edit them through
-  household roles, not through their own link. Whether this counts as
-  "personal use" is a question for SnapTrade (§11 Q6).
+  household roles, not through their own link. This counts as personal
+  use (§11 Q6). The Personal plan allows **20 accounts** in total.
 - **Deletion:** `DELETE /me` for the owner deletes their connections at
   SnapTrade (there is no SnapTrade user to delete).
 - **Switch to Commercial (M9, if Gate 3 opens Premium):** set `SNAPTRADE_MODE=commercial` and the Commercial
@@ -818,7 +930,7 @@ register or delete-user call. The server supports this as a mode, set by
 |---|---|---|
 | Invite (beta or household), magic link, password reset, email change | Supabase Auth via Resend SMTP; household invites via Resend API | Custom templates, sent from `mail.bayleaflabs.com`. Auth links use `{{ .TokenHash }}` to `drift.bayleaflabs.com/auth/confirm`. Household invites name the inviter and household only |
 | Membership changes (join, leave, role) | Server via Resend API | Names and household name only |
-| Reminders, drift alerts (later, §10) | Server via Resend API | "Open Drift to review." Never dollar amounts, tickers, or account names |
+| Drift alerts (§5.13); reminders later (§10) | Server via Resend API | "Open Drift to review." Never dollar amounts, tickers, or account names |
 | Announcements (beta news, waitlist updates) | Resend Broadcasts to an Audience, from `news.bayleaflabs.com` | Product news only. Unsubscribe link and postal address (CAN-SPAM). Never portfolio data |
 | Support | Inbound to `support@bayleaflabs.com` | Cloudflare Email Routing → your inbox. Replies go out as support@ (§7.1) |
 
@@ -865,7 +977,7 @@ raise it if needed.
 | Requirement | How |
 |---|---|
 | Household isolation | RLS on every table via `private.household_role`; writes through role-checking RPCs; CI role matrix (§9) |
-| Least privilege | Functions act as the user (D18). The secret key is imported only by the connect, waitlist, rate-limit, and deletion routes, and a CI grep enforces it |
+| Least privilege | Functions act as the user (D18). The secret key is imported only by the connect, waitlist, rate-limit, deletion, and alert-cron routes, and a CI grep enforces it |
 | Secrets never reach the browser | Only `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` are `VITE_`-prefixed. CI fails if `dist/` contains `sb_secret_`, a server env var name, or a key-shaped value |
 | Token verification | Local JWKS verification (D17); asymmetric signing keys, so the signing key can be rotated |
 | `userSecret` at rest | AES-256-GCM, random IV each time, versioned keyring `TOKEN_ENC_KEYS` (`v1:…,v2:…`). A re-encryption script runs on rotation. **Threat model:** this protects against a database-only leak (backups, dashboard access, SQL injection). It does **not** protect against a compromised Vercel project, which holds both the database secret and the encryption key |
@@ -932,9 +1044,10 @@ raise it if needed.
 
 ## 10. Designed for later (out of scope here)
 
-- **Scheduled syncs + drift alerts:** Vercel Cron calls the same sync code,
-  then runs `composePositions` + `rebalance()` server-side and emails when drift
-  exceeds tolerance. Uses existing tables; `sync_runs.trigger = 'cron'`.
+- **Drift alerts for other users** (Gate 3, #259): extend §5.13 beyond the
+  owner, to free accounts and/or Premium. Confirm the pull-based question
+  with SnapTrade first.
+- **General scheduled syncs** (beyond alert checks), reusing the §5.13 cron.
 - **Email reminders:** server-side version of the existing reminder settings.
 - **MCP server (read-only):** a remote MCP endpoint whose tools
   (`get_portfolio`, `get_drift`, `get_rebalance_plan`) call the same
@@ -943,7 +1056,9 @@ raise it if needed.
   - an explicit user opt-in;
   - a privacy rule update, because portfolio data then goes to an AI provider.
 - **Viewer/adviser role** in the UI (`spec-households.md` R7).
-- **Holdings history:** snapshot table for performance and drift over time.
+- **Per-holding history** (values and units over time, for performance).
+  Class-level drift history is already in alpha (§5.14). Storing past values
+  raises the Market Data question again (§11 Q6).
 - **Premium launch (Gate 3, M9).** If demand justifies it:
   - **Aggregator choice:** compare SnapTrade and Plaid on real prices and
     coverage. SnapTrade costs about `$100 + $1 × users` per month (Launch
@@ -988,17 +1103,16 @@ raise it if needed.
    page says "Continue as guest — no signup, your data stays in this
    browser." ("Incognito" was rejected: in browsers it means nothing is kept
    after you close the window, which is the opposite of guest mode.)
-6. **Questions for SnapTrade** (from the terms review, #248), to ask before
-   M3 builds the schema:
-   - Does linking a household member's logins (they enter their own
-     credentials) under the developer's Personal key count as personal use
-     (§6.4)? And what are the Personal plan's limits? The dashboard appeared
-     to show 20 accounts; confirm whether the cap is on accounts or on
-     brokerage connections. This decides whether M5b stays free.
-   - Does storing a user's own holdings (`price`, `market_value`) count as
-     storing "Market Data" (Developer Terms 2.f)? Fallback: store units only
-     and price at read time.
-   - Their end-user consent requirement (an unchecked checkbox plus an
-     "Agree and Continue" step, with stored evidence; Terms 7.f) becomes a
-     step before the connection portal in §5.5. Spec that change once the
-     other answers are in.
+6. **SnapTrade questions** (from the terms review, #248):
+   - ~~Household logins under the Personal key?~~ **Resolved:** linking a
+     household member's logins under the developer's Personal key is
+     qualifying personal use (§6.4). The Personal plan allows **20
+     accounts**; M0 used 7. M5b stays free.
+   - ~~Storing prices?~~ **Decided:** store each holding's `market_value`
+     (plus units and cost basis), not `price` (§4.2). Note that Developer
+     Terms 2.f's "Market Data" definition also names market value, so this
+     narrows exposure rather than settling it. Acceptable for the
+     developer's own data under a Personal key; re-ask SnapTrade before M9
+     serves other users.
+   - End-user consent (an unchecked checkbox plus "Agree and Continue", with
+     stored evidence; Terms 7.f) applies to the Commercial plan: M9, §10.
