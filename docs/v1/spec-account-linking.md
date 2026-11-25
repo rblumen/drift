@@ -986,11 +986,26 @@ raise it if needed.
 | CSP | `connect-src 'self' https://<project>.supabase.co wss://<project>.supabase.co`. SnapTrade portal opens as top-level navigation. `form-action 'none'` and `frame-ancestors 'none'` stay |
 | Analytics stays page-only | URL scrubbed after auth callbacks and invite links; `<Analytics beforeSend>` drops query strings and hashes; reported path stays `/`. Fake-door counts (§5.12) are server-side, variant ID only, never sent to the analytics tool |
 | Email | No portfolio data; tracking off (§7) |
-| Logs and errors | Structured JSON logs per request: request ID, route, status, duration, user ID, error code. No bodies, emails, amounts, or tickers. Sentry on `api/` only, scrubbed (D21). Vercel's built-in log retention is short (confirm in M3), so `sync_runs`, Sentry, and problem reports are the durable record; add a log drain only if needed |
+| Logs and errors | Structured JSON logs per request: request ID, route, status, duration, user ID, error code. No bodies, emails, amounts, or raw tickers; a ticker appears only as a **ticker ref** (below). Sentry on `api/` only, scrubbed (D21). Vercel's built-in log retention is short (confirm in M3), so `sync_runs`, Sentry, and problem reports are the durable record; add a log drain only if needed |
 | Maintainer access | D22: personal financial data is stored server-side and maintainers may read it for debugging and support; every read is logged in `support_access_log`; disclosed in the Privacy Notice; no impersonation; real data never reaches PRs, fixtures, or AI coding tools |
 | Environments | Real data only in the production Supabase project; previews use staging (D19) |
 | Cost hygiene | Commercial mode only (M9): `snaptrade_users.last_active_at`. An admin script lists or deletes SnapTrade users inactive for 60+ days (with notice), since each connected user is billed until deleted; run it before month-end |
 | Light beta posture | Beta Terms accepted at sign-in (§5.11); Privacy notice (accounts, the personal financial data stored on Drift's servers, households and sharing with members, waitlist, SnapTrade, email and Resend, problem reports, logged maintainer access (D22)) and short ToS (the beta is free and may become paid, with notice); US-only; free; breach-response note in `docs/` |
+
+**Ticker refs (debugging without tickers).** Server logs and Sentry events
+refer to a security by
+`tk_` + the first 10 hex characters of HMAC-SHA256(`TICKER_REF_KEY`, ticker),
+or of `SEC:<security_id>` for a ticker-less holding. The key is a server-only
+secret (Vercel env var), so the log and error vendors can't reverse a ref,
+while a maintainer can: `scripts/admin/ticker-ref.ts VTI BND …` prints the
+refs for candidate tickers locally (with the key from the password
+manager), without touching user data. The same
+ticker gives the same ref for everyone, so refs show "this fund fails to
+classify for several users" without saying which fund to anyone outside the
+team. Refs never go to the analytics tool: analytics runs in the browser,
+where a secret key can't live, and an unkeyed hash of a public ticker can be
+reversed by trying every ticker. Raw tickers for a specific user come only
+through logged maintainer access (D22).
 
 ---
 
