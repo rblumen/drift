@@ -7,5 +7,6 @@
 //   - Fidelity access is behind a paid plan with a multi-week approval lead time
 //   - A backend token-exchange server (Plaid Link tokens must not touch the client)
 //
-// v1 uses CSV export and manual entry only. No credential automation.
+// Placeholder for a Plaid Investments adapter (spec-account-linking D20), if one is
+// ever needed. Linking uses SnapTrade (src/ingest/adapters/snaptrade.ts). No credential automation.
 export {}

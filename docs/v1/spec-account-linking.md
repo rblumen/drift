@@ -453,12 +453,16 @@ people: z.array(z.object({ id: z.string(), name: z.string() })).optional().defau
 export function composePositions(
   state: AppState,
   linked: LinkedHolding[],   // the portfolio's assigned holdings, joined with account_id
+  linkedAccountIds?: Iterable<string>,  // Drift accounts that are linked even with no holdings now
 ): Position[]
 ```
 - An account with linked accounts takes its positions
   **only** from their `holdings`. `AppState.positions` rows for that account
-  are ignored. Behavior when several linked accounts map to one account
-  follows #234.
+  are ignored, including when a linked account is currently empty
+  (`linkedAccountIds`), so stale manual rows never come back.
+- Several linked accounts mapped to one account are **combined, not
+  dropped** (#234): holdings with the same ticker are summed into one
+  position, with the oldest `as_of`.
 - Other accounts use `AppState.positions` (CSV/manual), as today.
 - `lastUpdatedAt` = the holding's `as_of`, so the existing freshness indicator
   (`src/ingest/freshness.ts`) shows real sync times.
@@ -793,7 +797,7 @@ All endpoints except waitlist:
 | Endpoint | Behavior |
 |---|---|
 | `POST /snaptrade/connect` | Ensure a `snaptrade_users` row (register + store encrypted secret if missing; secret key). Return `{ url }` for the SnapTrade portal, read-only connection |
-| `POST /snaptrade/sync` | `begin_sync`; list the caller's logins and accounts; fetch positions (`getAllAccountPositions`) and balances (`getUserAccountBalance`) per account (accounts in parallel, max 4 at a time; never the deprecated `getUserHoldings`, §6.3); normalize (§6.1); upsert `brokerage_logins`/`linked_accounts` (server-written columns only); `replace_holdings` per account; refresh duplicate suggestions; `finish_sync`. Return `{ accounts, holdings, run }`. If the time budget (§6.2) runs out, finish as `partial`; the next run picks up the rest |
+| `POST /snaptrade/sync` | `begin_sync`; list the caller's logins and accounts; fetch positions (`getAllAccountPositions`) and balances (`getUserAccountBalance`) per account (accounts in parallel, max 4 at a time; never the deprecated `getUserHoldings`, §6.3); normalize (§6.1); upsert `brokerage_logins`/`linked_accounts` (server-written columns only); `replace_holdings` per account, **skipping any account the normalizer returned with `last_synced_at: null`** (positions or balances missing), so a partial fetch never empties an account; refresh duplicate suggestions; `finish_sync`. Return `{ accounts, holdings, run }`. If the time budget (§6.2) runs out, finish as `partial`; the next run picks up the rest |
 | `GET /snaptrade/connections` | The caller's brokerage logins with status |
 | `DELETE /snaptrade/connections/:id` | Remove a login at SnapTrade, then delete its rows (cascades accounts, assignments, holdings) |
 | `POST /households/:id/invites` | Owner only. Create invite (hashed token), send email. Body: `email`, `role` |
@@ -817,8 +821,8 @@ connect, waitlist, rate-limit, and deletion routes), `snaptrade.ts`,
 `crypto.ts`, `rateLimit.ts`, `sentry.ts`.
 
 ### 6.1 Normalization: `src/ingest/adapters/snaptrade.ts`
-Pure function, replacing the empty `plaid.ts` stub as the first real
-aggregator adapter. Imported by `api/`.
+Pure function, the first real aggregator adapter (the `plaid.ts` stub stays
+until a Plaid adapter is needed, D20). Imported by `api/`.
 
 ```ts
 export function normalizeSnapTrade(
@@ -850,7 +854,8 @@ export function normalizeSnapTrade(
   is sometimes missing, so treat missing as `false`, and classify them by
   ticker like any fund.
 - Identifiers: ticker = `instrument.symbol`, `security_id` =
-  `instrument.id`, plus `figi_code`, `raw_symbol` and `description`.
+  `instrument.id`, plus `figi_code` and `description` (`raw_symbol` isn't
+  stored).
   SnapTrade has **no CUSIP field**. A holding with no ticker falls back to
   `SEC:<security_id>` (§4.2); M0 found none, but other 401(k) plans may.
 - Rows that would fail `positionSchema` go into `errors`.
