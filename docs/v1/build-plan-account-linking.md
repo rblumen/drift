@@ -68,7 +68,7 @@ steps, settings, and DNS records for each.
 | 6 | **Resend** account; add and verify `mail.bayleaflabs.com`; Supabase custom SMTP settings | M3 | Free tier |
 | 7 | **Cloudflare DNS** records for Vercel, Resend, DMARC, Email Routing; **Email Routing** `support@` → project Gmail | M3 | Free |
 | 8 | **Sentry** project for `api/` | M3 | Free tier |
-| 9 | **Vercel env vars** per environment (staging for previews, production): Supabase URL and keys, SnapTrade keys, `TOKEN_ENC_KEYS`, Resend key, Sentry DSN. Generate `TOKEN_ENC_KEYS` locally with the command the agent provides; keep a backup in the password manager | M3, M5 | — |
+| 9 | **Vercel env vars** per environment (staging for previews, production): Supabase URL and keys, SnapTrade keys, `TOKEN_ENC_KEYS`, Resend key, Sentry DSN, `CRON_SECRET` (M6c). Generate `TOKEN_ENC_KEYS` locally with the command the agent provides; keep a backup in the password manager | M3, M5, M6c | — |
 | 10 | **GitHub Actions secrets** for the manual migration workflow (staging and production database credentials) | M3 | — |
 | 11 | **SnapTrade Personal key** for production (free; the key is your SnapTrade user, spec D3/§6.4). Used through alpha and beta | M5 | Free |
 | 12 | Approve the **privacy notice and beta terms**; decide whether to buy a lawyer review (before Gate 2 at the latest, since the open beta admits strangers) | M6, M7 | $0–? |
@@ -92,7 +92,7 @@ wants it, and pay for account linking only once they've shown they do
 
 | Phase | Who uses it | Purpose | What's in it | Milestones | Cost | Ends at |
 |---|---|---|---|---|---|---|
-| **Alpha** (internal) | You | Get the functionality right: a hosted Drift you trust as your daily tool | Sign-in, cross-device sync, linking your own accounts (SnapTrade Personal key), deletion, terms, problem reports, mobile web | M0a–M6b | ≤ $20/mo | **Gate 1** |
+| **Alpha** (internal) | You | Get the functionality right: a hosted Drift you trust as your daily tool | Sign-in, cross-device sync, linking your own accounts (SnapTrade Personal key), deletion, terms, problem reports, mobile web, **drift alerts** for your portfolios | M0a–M6c | ≤ $20/mo | **Gate 1** |
 | **Beta build-up** | You and your household | Make Drift ready for strangers, and for your household | Households, the native app (secondary), and open-beta readiness: open signup, the free-account tier, the Premium fake door and waitlist, feedback | M5b, M8, M7 | ≤ $20/mo, rising to the beta budget at M7 | **Gate 2** |
 | **Open beta** (public MVP) | Anyone in the US | (a) **Validate demand** for paid linking; (b) **gather feedback** | Hosted free accounts (guest mode kept), CSV import and manual entry only. Linking appears as **Premium**, a priced waitlist; it isn't available yet. Your household keeps linking | — (runs for the period set at Gate 2) | ~$50–65/mo, no aggregator cost | **Gate 3** |
 | **Premium** (full linking) | Premium users, in batches from the waitlist | Deliver account linking at a cost demand has justified | Aggregator chosen on real prices, Commercial mode, SnapTrade's consent step, entitlement and billing if paid | M9 | Set at Gate 3; aggregator from $100/mo or Plaid usage | Later: leaving beta (spec §10) |
@@ -103,6 +103,8 @@ wants it, and pay for account linking only once they've shown they do
 - You've used it as your daily tool for a few weeks on desktop and phone.
 - Link → sync → map → rebalance is reliable. A broken connection recovers
   through re-authentication, and a killed sync doesn't block the next one.
+- Your scheduled drift checks email you when a portfolio leaves its bands,
+  and stay quiet when it doesn't.
 - `sync_runs` errors and Sentry are quiet or understood.
 - Costs stay at or under $20/mo.
 
@@ -138,7 +140,7 @@ billing if not done yet) is a later decision (spec §10).
 
 ## 5. Milestones
 
-Order: M0a → M0 → M1 → M2 → M3 → M4 → M5 → M6 → M6b → **Gate 1** → M5b →
+Order: M0a → M0 → M1 → M2 → M3 → M4 → M5 → M6 → M6b → M6c → **Gate 1** → M5b →
 M8 → M7 → **Gate 2** → *open beta* → **Gate 3** → M9. M2 can run in parallel
 with M0a/M0. M5b and M8 are numbered for their topics but come after Gate 1.
 M8 is secondary: if you'd rather open the beta sooner, it can follow Gate 2.
@@ -284,6 +286,18 @@ Useful on its own: cross-device Drift with CSV import.
 
 **Exit:** 👤 the whole Gate 1 loop works on both phones: sign in, link, sync,
 map, read results, edit strategy, report a problem.
+
+### M6c — Drift alerts (yours)
+| Owner | Task |
+|---|---|
+| 🤖 | `alert_checks` migration; `/api/v1/alerts` endpoints; Strategy → Alerts UI, owner only (spec §5.13) |
+| 🤖 | Daily Vercel Cron → `POST /api/v1/cron/alerts` with `CRON_SECRET`: due checks → cron sync → server-side compose + `rebalance()` → neutral email |
+| 🤖 | Tests: due-date logic, in band stays quiet, drift sends one email, failure email throttled, non-owner gets 403, email body has no amounts or tickers |
+| 👤 | `CRON_SECRET` into Vercel env vars (checklist 9); set up a weekly check on your portfolio |
+
+**Exit:** 👤 with bands tightened on purpose, the check emails you; loosened
+again, it stays quiet; the email carries no amounts, tickers, or account
+names.
 
 ### Gate 1 — Alpha exit (you only) 👤
 Use it for a few weeks on desktop and phone. Cost up to $20/mo (D15). Review
