@@ -7,6 +7,10 @@ import { ConfirmDialog } from './ConfirmDialog';
 import { IconLock, IconLockOpen, IconPencil, IconX } from './icons';
 import { Card, Stat, AcctTypeTag } from './card';
 import { btnPrimaryCompact, btnGhostCompact, btnTintedInfo } from './buttons';
+import type { Person } from '../ingest/schema';
+import {
+  addPerson, matchesOwnerFilter, ownerIdsForSave, ownerLabel, removePerson, type OwnerFilter,
+} from './owners';
 
 // ── Deposit eligibility (issue #30, revised in #14 review) ───────────────────
 // Deposits are a binary Open/Closed on the inline control; the optional
@@ -42,6 +46,9 @@ function withdrawalFields(policy: WithdrawalPolicy, rmdStr: string): Pick<Accoun
 interface Props {
   accounts: Account[];
   setAccounts: (a: Account[]) => void;
+  /** People available as owner labels (guest mode's local list). */
+  people: Person[];
+  setPeople: (p: Person[]) => void;
   /** Positions keyed by accountId — used to cascade-delete on account removal. */
   onDeleteAccount: (id: string) => void;
   freeCash: number;
@@ -90,6 +97,8 @@ interface FormState {
   restricted: boolean;
   allowedClasses: AssetClass[];
   concentrateClasses: AssetClass[];
+  /** Selected owner person ids. */
+  owners: string[];
 }
 
 function blankForm(): FormState {
@@ -99,6 +108,7 @@ function blankForm(): FormState {
     withdrawalPolicy: 'eligible', rmd: '',
     withdrawalPriority: String(defaultWithdrawalPriority('TAXABLE')),
     restricted: false, allowedClasses: [...PLACEABLE_CLASSES], concentrateClasses: [],
+    owners: [],
   };
 }
 
@@ -335,7 +345,7 @@ function EligibilityFormFields({ f, onChange }: { f: FormState; onChange: (next:
   );
 }
 
-export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash, setFreeCash, plannedWithdrawal, setPlannedWithdrawal, onLoadSample }: Props) {
+export function AccountsPanel({ accounts, setAccounts, people, setPeople, onDeleteAccount, freeCash, setFreeCash, plannedWithdrawal, setPlannedWithdrawal, onLoadSample }: Props) {
   const [freeCashInput, setFreeCashInput] = useState(freeCash > 0 ? String(freeCash) : '');
   const [withdrawalInput, setWithdrawalInput] = useState(plannedWithdrawal > 0 ? String(plannedWithdrawal) : '');
   const [showAdd, setShowAdd] = useState(false);
@@ -343,6 +353,26 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm]   = useState<FormState>(blankForm);
   const [removeTarget, setRemoveTarget] = useState<Account | null>(null);
+  const [newPersonName, setNewPersonName] = useState('');
+  const [ownerFilter, setOwnerFilter] = useState<OwnerFilter>('all');
+
+  // Owner filter (households R3.4). Display only: the engine still sees every account.
+  const visibleAccounts = people.length > 0
+    ? accounts.filter(a => matchesOwnerFilter(a, ownerFilter, people))
+    : accounts;
+
+  function handleAddPerson() {
+    const next = addPerson(people, newPersonName, crypto.randomUUID());
+    if (next !== people) setPeople(next);
+    setNewPersonName('');
+  }
+
+  function handleRemovePerson(id: string) {
+    const r = removePerson(people, accounts, id);
+    setPeople(r.people);
+    setAccounts(r.accounts);
+    if (ownerFilter === `person:${id}` || r.people.length === 0) setOwnerFilter('all');
+  }
 
   // Total RMD rolled up from accounts; the planned-withdrawal box shows
   // total = Σ RMD + additional (the manual entry).
@@ -357,6 +387,7 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
       withdrawalPriority:  withdrawalPriorityField(f),
       allowedAssetClasses: toAllowedAssetClasses(f),
       concentrateClasses:  f.concentrateClasses.length > 0 ? f.concentrateClasses : undefined,
+      ownerPersonIds:      ownerIdsForSave(f.owners, people),
     };
   }
 
@@ -394,6 +425,7 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
       concentrateClasses: (acct.concentrateClasses ?? []).filter(c =>
         (PLACEABLE_CLASSES as string[]).includes(c),
       ) as AssetClass[],
+      owners: acct.ownerPersonIds ?? [],
     });
   }
 
@@ -430,10 +462,44 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
     if (concentrated.length > 0) notes.push(`concentrate ${concentrated.map(c => AC_LABEL[c] ?? c).join(', ')}`);
     if (acct.withdrawalPriority != null) notes.push(`drain priority ${acct.withdrawalPriority}`);
     const warn = excluded.length > 0;
+    const owner = ownerLabel(acct, people);
     return (
       <span className={`font-mono text-[10.5px] ${warn ? 'text-warn' : 'text-muted-3'}`}>
-        {[acct.institution, ...notes].join(' · ')}
+        {[acct.institution, ...(owner ? [owner] : []), ...notes].join(' · ')}
       </span>
+    );
+  }
+
+  // Owner checkboxes for the add and edit forms (households R3.3). Hidden until
+  // at least one person exists.
+  function OwnerFields({ f, onChange }: { f: FormState; onChange: (next: FormState) => void }) {
+    if (people.length === 0) return null;
+    return (
+      <div className="pt-1 border-t border-gray-200">
+        <p className="text-xs font-medium text-gray-600">
+          Owners
+          <HelpTip>
+            A label for display and filtering. Pick two or more people for a joint account.
+            Owners never change trade suggestions.
+          </HelpTip>
+        </p>
+        <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1">
+          {people.map(p => (
+            <label key={p.id} className="flex items-center gap-1.5 text-xs cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={f.owners.includes(p.id)}
+                onChange={e => onChange({
+                  ...f,
+                  owners: e.target.checked ? [...f.owners, p.id] : f.owners.filter(id => id !== p.id),
+                })}
+                className="rounded"
+              />
+              {p.name}
+            </label>
+          ))}
+        </div>
+      </div>
     );
   }
 
@@ -632,13 +698,73 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
         </div>
       )}
 
+      {(accounts.length > 0 || people.length > 0) && (
+        <Card title="Owners" meta="Labels only · never change trades">
+          <div className="px-4 py-3 flex flex-wrap items-center gap-2">
+            {people.length === 0 && (
+              <span className="text-xs text-muted-2">
+                Add the people in your household to label accounts as theirs or joint, then filter by owner.
+              </span>
+            )}
+            {people.map(p => (
+              <span
+                key={p.id}
+                className="inline-flex items-center gap-1 rounded-full border border-line bg-paper pl-2.5 pr-1.5 py-0.5 text-[12px] text-brand-ink"
+              >
+                {p.name}
+                <button
+                  type="button"
+                  onClick={() => handleRemovePerson(p.id)}
+                  title={`Remove ${p.name}`}
+                  aria-label={`Remove owner ${p.name}`}
+                  className="inline-flex text-faint-2 hover:text-danger transition-colors"
+                ><IconX size={12} /></button>
+              </span>
+            ))}
+            <span className="inline-flex items-center gap-1.5">
+              <input
+                value={newPersonName}
+                onChange={e => setNewPersonName(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleAddPerson()}
+                placeholder="Name, e.g. Alex"
+                aria-label="New owner name"
+                className="w-36 border border-line rounded px-2 py-1 text-xs"
+              />
+              <button
+                type="button"
+                onClick={handleAddPerson}
+                disabled={!newPersonName.trim()}
+                className={btnGhostCompact}
+              >Add person</button>
+            </span>
+          </div>
+        </Card>
+      )}
+
       {accounts.length > 0 && (
         <Card
-          title={`Accounts · ${accounts.length}`}
+          title={visibleAccounts.length === accounts.length
+            ? `Accounts · ${accounts.length}`
+            : `Accounts · ${visibleAccounts.length} of ${accounts.length}`}
           action={
-            <button onClick={() => { setShowAdd(true); setEditingId(null); }} className={btnTintedInfo}>
-              + Add account
-            </button>
+            <span className="flex items-center gap-2">
+              {people.length > 0 && (
+                <select
+                  value={ownerFilter}
+                  onChange={e => setOwnerFilter(e.target.value as OwnerFilter)}
+                  aria-label="Filter accounts by owner"
+                  className="border border-line rounded px-1.5 py-0.5 text-[11px] bg-white"
+                >
+                  <option value="all">All owners</option>
+                  {people.map(p => <option key={p.id} value={`person:${p.id}`}>{p.name}</option>)}
+                  <option value="joint">Joint</option>
+                  <option value="none">No owner</option>
+                </select>
+              )}
+              <button onClick={() => { setShowAdd(true); setEditingId(null); }} className={btnTintedInfo}>
+                + Add account
+              </button>
+            </span>
           }
         >
           <div className="px-4 pt-1 pb-2 overflow-x-auto">
@@ -676,7 +802,10 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
                 </span>
               </div>
 
-              {accounts.map((acct, i) => (
+              {visibleAccounts.length === 0 && (
+                <p className="py-4 text-center text-xs text-muted-2">No accounts match this owner.</p>
+              )}
+              {visibleAccounts.map((acct, i) => (
                 editingId === acct.id ? (
                   <div key={acct.id} className="border-b border-line-3 last:border-b-0">
                     <div className="bg-rail-active rounded-lg my-2 px-4 py-3 space-y-3">
@@ -734,6 +863,7 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
                         </div>
                       </div>
                       <EligibilityFormFields f={editForm} onChange={setEditForm} />
+                      <OwnerFields f={editForm} onChange={setEditForm} />
                       <ConstraintFields f={editForm} onChange={setEditForm} />
                       <div className="flex items-center gap-3 pt-1">
                         <button onClick={() => saveEdit(acct.id)} className={btnPrimaryCompact}>Save</button>
@@ -750,7 +880,7 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
                   <div
                     key={acct.id}
                     className={`${ACCT_GRID} text-[12.5px] py-[7px] items-center hover:bg-paper ${
-                      i < accounts.length - 1 ? 'border-b border-line-3' : ''
+                      i < visibleAccounts.length - 1 ? 'border-b border-line-3' : ''
                     } ${acct.locked ? 'opacity-60' : ''}`}
                   >
                     {/* Account: name + institution/notes stacked */}
@@ -883,6 +1013,7 @@ export function AccountsPanel({ accounts, setAccounts, onDeleteAccount, freeCash
               </div>
             </div>
             <EligibilityFormFields f={form} onChange={setForm} />
+            <OwnerFields f={form} onChange={setForm} />
             <ConstraintFields f={form} onChange={setForm} />
             <div className="flex gap-2 pt-1">
               <button onClick={handleAdd} disabled={!form.name.trim()} className={btnPrimaryCompact}>Add</button>

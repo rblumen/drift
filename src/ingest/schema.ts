@@ -61,6 +61,11 @@ export const accountSchema = z.object({
   acceptsWithdrawals: z.boolean().optional(),
   withdrawalPriority: z.number().nonnegative().optional(),
   rmdDueUsd: z.number().nonnegative().optional(),
+  // Owner labels for a manual account (spec-account-linking §4.4, households R3.3):
+  // ids into AppState.people. Several ids means joint. Display and filtering only;
+  // the engine never reads it. Linked accounts carry their labels on
+  // account_assignments instead.
+  ownerPersonIds: z.array(z.string()).optional(),
 });
 
 // Per-class target-weight schema, derived from ALL_ASSET_CLASSES (issue #127). Each
@@ -215,6 +220,16 @@ export const reminderSchema = z.object({
 
 export type Reminder = z.infer<typeof reminderSchema>;
 
+// A person an account can be labelled with ("Alex", "Sam"). Never an access control.
+export const personSchema = z.object({
+  id:   z.string(),
+  name: z.string(),
+});
+export type Person = z.infer<typeof personSchema>;
+
+export const linkedPositionOverrideSchema = z.object({ locked: z.boolean() });
+export type LinkedPositionOverride = z.infer<typeof linkedPositionOverrideSchema>;
+
 // Full persisted app state — used for localStorage and JSON file export/import.
 export const appStateSchema = z.object({
   version:        z.literal(1),
@@ -226,6 +241,13 @@ export const appStateSchema = z.object({
   freeCash:       z.number().nonnegative().optional().default(0),
   plannedWithdrawal: z.number().nonnegative().optional().default(0),
   reminder:       reminderSchema.optional().default({}),
+  // Per-position overrides for linked (synced) accounts, whose positions are not in
+  // `positions` (spec-account-linking §4.4). Key: `${accountId}:${tickerOrSecKey}`,
+  // where a ticker-less holding uses `SEC:<security_id>`. Applied by composePositions.
+  linkedPositionOverrides: z.record(z.string(), linkedPositionOverrideSchema).optional().default({}),
+  // Guest mode's list of people for owner labels (households R9). Signed-in mode
+  // uses household_people instead. Optional so older saves still parse.
+  people:         z.array(personSchema).optional().default([]),
 });
 
 // The persisted shape, with `strategy` expressed as the engine's Strategy type.

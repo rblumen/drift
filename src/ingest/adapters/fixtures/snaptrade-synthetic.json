@@ -1,0 +1,111 @@
+{
+  "_comment": "SYNTHETIC data shaped like SnapTrade getAllAccountPositions + getUserAccountBalance responses (SDK 13.2.2 field names; extra fields included on purpose). No real accounts, people or institutions.",
+  "accounts": [
+    {
+      "account": {
+        "id": "acct-roth-0001",
+        "brokerage_authorization": "login-a-0001",
+        "name": "Alex Roth IRA",
+        "number": "XX00001234",
+        "institution_name": "Brokerage A",
+        "raw_type": "Roth IRA",
+        "account_category": "INVESTMENT",
+        "status": null,
+        "balance": { "total": { "amount": 25000, "currency": "USD" } },
+        "sync_status": {
+          "transactions": {},
+          "holdings": { "initial_sync_completed": true, "last_successful_sync": "2026-11-19T12:00:00Z", "holdings_unavailable": false }
+        },
+        "meta": {}
+      },
+      "connection": {
+        "id": "login-a-0001",
+        "disabled": false,
+        "brokerage": { "name": "Brokerage A", "display_name": "Brokerage A", "slug": "BROKERAGE-A" }
+      },
+      "positions": {
+        "results": [
+          {
+            "instrument": {
+              "kind": "etf", "id": "sec-vti", "symbol": "VTI", "raw_symbol": "VTI",
+              "description": "Total Stock Market ETF", "currency": "USD", "exchange": "ARCX",
+              "figi_instrument": { "figi_code": "BBG000000VTI", "figi_share_class": "BBG00000VTIS" }
+            },
+            "units": "50.5", "price": "200", "cost_basis": "8000.00", "currency": "USD",
+            "cash_equivalent": false,
+            "tax_lots": [{ "quantity": "50.5", "cost_basis": "8000.00", "lot_id": "lot-1" }]
+          },
+          {
+            "instrument": {
+              "kind": "mutualfund", "id": "sec-cit-2050", "symbol": "", "raw_symbol": "999CIT2050",
+              "description": "Collective Trust 2050", "currency": "USD", "exchange": null,
+              "figi_instrument": null
+            },
+            "units": "100", "price": "30", "cost_basis": null, "currency": "USD", "cash_equivalent": false
+          },
+          {
+            "instrument": {
+              "kind": "mutualfund", "id": "sec-vmfxx", "symbol": "VMFXX", "raw_symbol": "VMFXX",
+              "description": "Money Market Fund", "currency": "USD", "figi_instrument": null
+            },
+            "units": "1000", "price": "1", "cost_basis": "1000", "currency": "USD"
+          },
+          {
+            "instrument": { "kind": "cash", "code": "USD" },
+            "units": "500", "price": "1", "cost_basis": null, "currency": "USD", "cash_equivalent": true
+          },
+          {
+            "instrument": { "kind": "option", "id": "sec-opt-1", "symbol": "VTI 261218C00300000" },
+            "units": "1", "price": "2.5", "cost_basis": "250", "currency": "USD"
+          },
+          {
+            "instrument": { "kind": "stock", "id": "sec-bad-units", "symbol": "BADU", "description": "Bad units" },
+            "units": "N/A", "price": "10", "cost_basis": null, "currency": "USD"
+          }
+        ],
+        "data_freshness": { "as_of": "2026-11-20T12:00:00Z" }
+      },
+      "balances": [
+        { "currency": { "id": "c1", "code": "USD", "name": "US Dollar" }, "cash": 500, "buying_power": 500 }
+      ]
+    },
+    {
+      "account": {
+        "id": "acct-401k-0002",
+        "brokerage_authorization": "login-b-0002",
+        "name": null,
+        "number": "PLAN-000-000000005678",
+        "institution_name": "Recordkeeper B",
+        "raw_type": "401K",
+        "status": "open",
+        "sync_status": { "holdings": { "last_successful_sync": "2026-11-18T08:00:00Z" } }
+      },
+      "connection": { "id": "login-b-0002", "disabled": true, "brokerage": { "name": "Recordkeeper B" } },
+      "positions": {
+        "results": [
+          {
+            "instrument": {
+              "kind": "mutualfund", "id": "sec-bnd", "symbol": "BND", "raw_symbol": "BND",
+              "description": "Total Bond Market", "figi_instrument": { "figi_code": "BBG000000BND" }
+            },
+            "units": "200", "price": "72.5", "currency": "USD"
+          }
+        ],
+        "data_freshness": null
+      },
+      "balances": []
+    },
+    {
+      "account": {
+        "id": "acct-ira-0003",
+        "brokerage_authorization": "login-a-0001",
+        "name": "Sam Traditional IRA",
+        "number": "XX00009999",
+        "institution_name": "Brokerage A",
+        "raw_type": "investmentAccount"
+      },
+      "positions": null,
+      "balances": null
+    }
+  ]
+}

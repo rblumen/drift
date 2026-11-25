@@ -124,5 +124,6 @@
   "EMPOWER_CASH": "CASH",
 
   "SCHWAB_CASH":  "CASH",
-  "ETRADE_CASH":  "CASH"
+  "ETRADE_CASH":  "CASH",
+  "CASH:USD":     "CASH"
 }

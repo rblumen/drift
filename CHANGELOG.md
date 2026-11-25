@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Owner labels and an owner filter on the Accounts tab** ([#263](https://github.com/rblumen/drift/issues/263)) — add the people in your household (e.g. "Alex", "Sam") in the new Owners card, then mark each account as theirs, or pick two or more people for a joint account, in the account's Add or Edit form. Each account row shows its owners, and a filter in the Accounts header narrows the list to one person's accounts (joint accounts included), joint accounts only, or accounts with no owner. Owners are labels for display and filtering only: they never change trade suggestions. They're saved with your portfolio in this browser and in saved portfolio files.
+
 ### Fixed
 
 - **Cash no longer goes to a class you're already over on** ([#252](https://github.com/rblumen/drift/issues/252)) — when the only classes outside their band were one overweight class and idle or new cash, every dollar of that cash was used to buy more of the overweight class (e.g. "BUY $10k SCHF" while Developed Intl was already above target), and Results still reported that all classes were in band. Cash and trim proceeds now go to classes that are under target, even ones still inside their band. Those classes are only ever bought, never sold, so an overweight class now gets trimmed back toward target instead of staying stuck above it.
