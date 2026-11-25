@@ -1,14 +1,17 @@
-# Spec: Account Linking (Closed Beta)
+# Spec: Account Linking
 
-**Status:** Draft for review · **Scope:** the product for the closed beta
-(invited friends & family, web-hosted) · **Background and rationale:**
+**Status:** Draft for review · **Scope:** an internal **alpha** (the
+developer, web-hosted), then an **open beta** with hosted free accounts and
+account linking offered as a Premium waitlist; whether Premium opens is gated
+on demand (D24) ·
+**Background and rationale:**
 [`study-account-linking.md`](study-account-linking.md) · **Household
 requirements:** [`spec-households.md`](spec-households.md) · **How it gets
 built:** [`build-plan-account-linking.md`](build-plan-account-linking.md).
 
 This document specifies what Drift becomes: decisions, data model, behavior,
 API, and security requirements. Sequencing and ownership live in the build
-plan. Milestone IDs mentioned here (M0a–M8) refer to it. The app is served at
+plan. Milestone IDs mentioned here (M0a–M9) and gates (Gate 1–3) refer to it. The app is served at
 `drift.bayleaflabs.com`; email and support use the publisher's apex domain,
 `bayleaflabs.com` (D13).
 
@@ -32,28 +35,34 @@ docs, the UI, and the schema:
 
 ### Goals
 1. A signed-in user can link brokerage logins through SnapTrade and have
-   holdings sync into Drift **without CSV export/import**.
+   holdings sync into Drift **without CSV export/import**. In alpha and beta
+   that is the developer (and logins linked for their household, §6.4);
+   Premium users get it only if Gate 3 opens Premium (D24).
 2. A portfolio syncs across devices, including phones.
-3. Multi-user from day one: real auth, invite-only access, and **household**
-   isolation enforced in the database. Several Drift users can jointly
+3. Multi-user from day one: real auth (invite-only in alpha, open signup in
+   the beta), and **household** isolation enforced in the database. Several Drift users can jointly
    manage one household's portfolios.
 4. The server owns synced brokerage data, so later features (scheduled syncs,
    drift alerts, LLM access) can work without a browser open.
-5. Rollout in order: **the developer alone → the developer's household →
-   invited friends & family**, with no re-architecture between steps.
+5. Rollout in order, with no re-architecture between steps (D24):
+   **alpha** (the developer alone) → **Gate 1** → the developer's household →
+   **open beta** at Gate 2 (hosted free accounts; linking as a Premium
+   waitlist) → **Premium linking only if demand justifies it** at Gate 3.
+   The beta's purpose is to validate demand and gather feedback.
 6. **Guest mode (no signup) keeps working** exactly as today for anyone who doesn't
    sign in.
 
 ### Non-goals (this spec)
 - Trading or any write action against a brokerage. Holdings are **read-only**.
-- Public signup, billing, or charging money. These are post-beta (§10).
+- Billing or charging money. These are post-beta (§10). Public signup is in
+  scope from Gate 2 (D6).
 - Scheduled server syncs, drift alerts, email reminders, and the MCP server.
   These are planned follow-ups (§10); the design must keep them easy.
 - The read-only viewer/adviser role in the UI (the schema supports it; see
   `spec-households.md` R7).
-- A native mobile app **in the early beta**. It is in beta scope as a secondary
-  priority (M8): after the other milestones, before any paid launch. Until
-  then, "mobile" means the web app working well in a phone browser (§5.10).
+- A native mobile app **in alpha**. It is a secondary priority after Gate 1
+  (M8), for the developer's household first. Until then, "mobile" means the
+  web app working well in a phone browser (§5.10).
 - Users outside the US (no GDPR program yet).
 
 ---
@@ -64,10 +73,10 @@ docs, the UI, and the schema:
 |---|---|---|
 | D1 | Data + auth | **Supabase**: Postgres, Supabase Auth, Row-Level Security (RLS). Auth and the database are one system, so RLS enforces household isolation in the database itself. Standard Postgres keeps data portable. Open source and self-hostable |
 | D2 | Server code | **Vercel Functions** in `api/`: same project, repo, CI, and preview deploys as today. Vercel Cron available for later scheduled jobs. Function region co-located with the Supabase region |
-| D3 | Aggregator | **SnapTrade**, Commercial key. Free tier (5 connected users) during the personal phase, pay-as-you-go (~$2 per connected Drift user/month) after. The Personal key is used only for the throwaway spike. **M0 confirmed workplace 401(k) coverage** (§6.3), so D20 is not triggered |
+| D3 | Aggregator | **SnapTrade** for alpha and beta, on the free **Personal** key: the key belongs to the developer, so only the developer's Drift user can link, and the household's logins are linked through it (§6.4). Accepted limitation: beta users import or enter holdings by hand; linking is a Premium waitlist (D24). The server code keeps the Commercial design (one SnapTrade user per Drift user, `snaptrade_users`, D10), so switching is configuration plus registering users, not a rewrite. M0 confirmed coverage, workplace 401(k)s included (§6.3). Opening linking to anyone else needs a paid plan; which aggregator to use is decided at Gate 3 (D24, §10) |
 | D4 | Brokerage access | Read-only holdings, balances, and positions. No trading endpoints are called, and the code must not include them |
 | D5 | Login | **Email + password, plus magic link** (Supabase Auth). Password reset by email. **TOTP MFA available as an opt-in during the beta** (free in Supabase, and expected by the FTC Safeguards Rule; exploration §8). Required MFA is a public-launch decision |
-| D6 | Invite gating | Public signups disabled in Supabase. Only two kinds of invite exist: **you** invite from the waitlist, and a **household owner** invites members into their own household (`spec-households.md` R2). Beta users can't invite anyone else; they can refer friends (§5.2a), and you decide whom to invite. The invite link lets them set a password. Non-invited visitors can join a **waitlist** |
+| D6 | Signup | **Alpha:** public signups disabled in Supabase; you invite yourself, and a **household owner** invites members into their own household (`spec-households.md` R2). The invite link lets them set a password. **Open beta (Gate 2):** public signup on, with email confirmation and Cloudflare Turnstile on the signup form, plus the per-IP rate limit. Household invites work the same way in both. Before Gate 2, visitors can leave their email to hear when the beta opens (§5.2) |
 | D7 | Who writes what | **One writer per column.** The server alone writes synced brokerage data (`brokerage_logins`, `linked_accounts`, `holdings`, `sync_runs`). Users write their decisions (portfolio state, account assignments, owner labels), always through the database functions in §4.3 that check household role. No table row has two writers |
 | D8 | Composing positions | A shared **pure** function combines a portfolio's `AppState` with its assigned holdings into the engine's `Position[]`. Runs in the browser now; importable by server code for later features |
 | D9 | Engine location | **One engine, one implementation, run in the browser.** `src/engine/` is pure TypeScript with no DOM or Node APIs. The browser bundles it; server code imports **the same module from the same commit** only when a §10 feature needs it, never a copy or a port. Browser because: guest mode needs it; interactive edits recompute in milliseconds, where a server round-trip would add ~100–500 ms per edit (more on cold starts); and it works offline. Guards against the two runtimes diverging: (1) CI fails if `src/engine/` imports anything environment-specific; (2) the scenario suite already runs in Node via Vitest, which is the server runtime; (3) browser bundle and functions deploy atomically from one commit, and server-computed results record the engine's git SHA; (4) an open tab on an older bundle gets a "new version — reload" prompt |
@@ -76,15 +85,16 @@ docs, the UI, and the schema:
 | D12 | Incoming email | **Cloudflare Email Routing** forwards `support@bayleaflabs.com` to your inbox (free). Upgrade to a real mailbox if replying as support becomes awkward |
 | D13 | Domain & DNS | Publisher domain **`bayleaflabs.com`** (Bay Leaf Labs), registered at Cloudflare Registrar with DNS on Cloudflare. The app is served by Vercel at **`drift.bayleaflabs.com`**; the apex hosts a publisher page or redirects to the app. Email uses the apex: `mail.` and `news.` sending subdomains (§7) and `support@`. Records pointing at Vercel are **DNS-only** (Cloudflare proxy off). Auth emails link to `drift.bayleaflabs.com`, not `supabase.co`. Auth sessions are scoped to the `drift.` host, never the parent domain, so other `*.bayleaflabs.com` sites can't read them |
 | D14 | LLM readiness | No MCP in the beta. Versioned server API (`/api/v1/…`), server-owned holdings, and server-importable compose/engine make a read-only MCP server a thin layer later. A client-side "Copy summary for AI" ships in the beta |
-| D15 | Budget ceiling | Up to **$20/mo** during the personal phase (domain, plus room for a paid tier if a free one pauses or limits); up to ~$100/mo during the beta |
+| D15 | Budget ceiling | **Alpha:** up to **$20/mo** (domain, plus room for a paid tier if a free one pauses or limits). **Beta:** confirmed at Gate 2; expect about **$50–65/mo** (Supabase Pro $25, Vercel Pro $20 because Hobby is for non-commercial use, postal address $5–15), with no aggregator cost because linking stays on the Personal key. **Premium:** set at Gate 3, where the paid aggregator plan (SnapTrade from $100/mo, or Plaid usage) is the main line item |
 | D16 | Households | Access is granted per **household** (owner / editor / viewer). A Drift user can belong to several households. A hard privacy boundary means a separate household under the same Drift user. Mine/hers/joint is a label, never an access boundary. Requirements: `spec-households.md` |
 | D17 | Supabase keys & tokens | Use the **new API keys** (`sb_publishable_…` in the browser, `sb_secret_…` on the server) and **asymmetric JWT signing keys** from day one. The legacy `anon`/`service_role` keys are being retired and can't be rotated. Functions verify access tokens locally against the project's JWKS (`jose`) |
 | D18 | Least privilege on the server | Functions act **as the user** (a Supabase client carrying the caller's token, so RLS applies). The secret key is used only for `snaptrade_users`, `waitlist`, rate limits, and profile deletion |
 | D19 | Environments | Two Supabase projects: **staging** (local dev and Vercel preview deploys) and **production** (production deploys only). Preview URLs are allowed as auth redirects in staging only. Real brokerage data only in production |
-| D20 | Aggregator fallback | **Plaid Investments** is the named second adapter, if a beta user's recordkeeper turns out not to be covered. M0 found coverage at every recordkeeper tested (§6.3), so it is not part of the beta build. The pure-adapter design (§6.1) keeps it to a new adapter plus server routes. Until then, uncovered accounts stay on CSV |
+| D20 | Second aggregator | **Plaid Investments** is the named alternative adapter. M0 removed the coverage trigger, but Plaid's pay-as-you-go pricing (no monthly minimum, billed per linked login; unverified until a spike) may beat SnapTrade's $100/mo floor at small scale; compared at Gate 3 (D24, §10). The pure-adapter design (§6.1) keeps a switch, or running both, to a new adapter plus server routes. Accounts no aggregator covers stay on CSV |
 | D21 | Error monitoring | **Sentry for `api/` only**, with `sendDefaultPii: false`, no request or response bodies, and a `beforeSend` that keeps only route, status, error type, and stack. No client-side SDK in the beta |
-| D22 | Support access | **No routine access to user data.** Bugs are investigated from logs and `sync_runs` (IDs, codes, timings only) and from **user-initiated problem reports** (§5.9) that the user reviews before sending. As Supabase project owner you can technically read the database; the policy is to do so only with the user's consent for a specific report, logged in `support_access_log`, and the privacy notice says so. No impersonation or "view as user" feature |
+| D22 | Maintainer access | **Drift stores users' personal financial data on its servers** (portfolios, holdings, balances, account names), and the people who maintain Drift **can access it** for debugging, support, security, and data repair, **without asking each time**. Rules: try logs, `sync_runs` (IDs, codes, timings only) and **user-initiated problem reports** (§5.9) first; read only what the task needs; read production data only through the admin scripts, which write every access to `support_access_log` (who, whose data, what, why); never copy real data into a PR, fixture, issue, or AI coding tool (reproduce with synthetic fixtures instead). The Privacy Notice says all of this plainly. No impersonation or "view as user" feature |
 | D23 | Mobile | **Mobile web first:** every beta flow works in a phone browser and the app is installable as a PWA (§5.10). A **native app** is in beta scope as a secondary priority (M8). Default approach: wrap the same React app with Capacitor for iOS and Android, so there is one UI codebase; confirmed at the start of M8 |
+| D24 | Phases, tiers, and gates | **Alpha** (internal, the developer only) ends at **Gate 1**. The **open beta** starts at **Gate 2**, to validate demand and gather feedback, with three tiers: **Guest** (today's app, no signup, data stays in the browser), **Free account** (sign-in, sync across devices, households, CSV import and manual entry; no linking), and **Premium** (linking), offered only as a **waitlist behind a priced fake door** (§5.12). **Gate 3** decides whether demand justifies paying for an aggregator and opening Premium (M9). The developer's household keeps Personal-key linking throughout (§6.4) |
 
 ---
 
@@ -340,15 +350,19 @@ RLS: own rows for select. No dollar amounts or tickers.
   - `snaptrade_user_id` (random, never the email);
   - `user_secret_enc` (`v<n>:` + base64 of iv + ciphertext + tag);
   - `created_at`, `last_active_at`.
-- `waitlist`: `email` citext PK, `note`, `heard_from`, `heard_from_detail`,
+- `waitlist`: `id` PK, `email` citext, `interest` (`beta` | `premium`),
+  unique (`email`, `interest`), `user_id` null → `auth.users` on delete set
+  null, `price_variant` null, `note`, `heard_from`, `heard_from_detail`,
   `referral_code`, `updates_opt_in` (default false), `created_at`,
   `invited_at`.
 - `support_reports` (§5.9): `id`, `user_id`, `created_at`, `description`,
   `diagnostics` jsonb (no amounts or names), `portfolio_snapshot_enc` null
   (encrypted with the D10 keyring; present only if the user opted in),
   `status`, `closed_at`. Deleted 30 days after closing, or on request.
-- `support_access_log`: `id`, `report_id`, `accessed_at`, `reason`. Written
-  by the admin script whenever a snapshot is decrypted.
+- `support_access_log`: `id`, `accessed_by`, `subject_user_id` null,
+  `report_id` null, `scope` (what was read), `reason`, `accessed_at`. Written
+  by the admin scripts on **every** read of user data, including decrypting a
+  problem-report snapshot (D22).
 - `referral_codes` (M7): `code` PK, `user_id` unique, `created_at`. Owners can
   select their own.
 - `rate_limits`: `key` (route + hashed IP), `window_start`, `count`. Updated by
@@ -423,11 +437,12 @@ export function composePositions(
   account" with **"Continue as guest — no signup, your data stays in this
   browser"** (guest mode), and adds **Sign in**.
 - The sign-in page:
-  - states that Drift is in **closed beta**, invite-only;
+  - states the phase: invite-only during alpha; **open beta** from Gate 2,
+    with "Create an account" (email confirmation, Turnstile; D6);
   - offers email + password, "Email me a sign-in link," and "Forgot password";
   - asks for the TOTP code when the user has enabled MFA;
-  - links new visitors to **Join the waitlist**: email, plus optional "Which
-    brokerages do you use?" and "How did you hear about Drift?"
+  - before Gate 2, links new visitors to **Tell me when the beta opens**
+    (§5.2).
 - Invited users get an email; the link lands on a "Set your password" page.
   Household invites then land in that household.
 - All auth links use the PKCE flow and land on `drift.bayleaflabs.com`. The app exchanges
@@ -435,24 +450,30 @@ export function composePositions(
 - Profile → Security: enable/disable an authenticator app (TOTP).
 
 ### 5.2 Waitlist
-- `POST /api/v1/waitlist` stores the email.
+One `waitlist` table serves two lists, told apart by `interest`:
+- **`beta`** (alpha only): "Tell me when the beta opens." Email, plus
+  optional "Which brokerages do you use?" and "How did you hear about Drift?"
+  Gate 2's announcement goes to this list.
+- **`premium`** (beta): the Premium fake door (§5.12). Records the
+  `price_variant` the visitor saw. Signed-in users join in one click (their
+  email is known, and `user_id` is set); guests enter an email.
+- `POST /api/v1/waitlist` stores the entry.
   - Duplicate emails succeed silently (no user-existence leak).
   - Spam protection: a hidden honeypot field and a per-IP rate limit
-    (`rate_limits` table). Add Cloudflare Turnstile only if spam shows up.
-- No confirmation email in the beta, so nothing to send or track.
-- You invite from the waitlist through an admin script that sets
-  `invited_at`. The admin view lists referred signups first.
+    (`rate_limits` table), plus Turnstile once signup is open.
+- No confirmation email, so nothing to send or track.
+- When Premium opens (M9), you invite from the `premium` list in batches
+  through an admin script that sets `invited_at`. Referred entries are listed
+  first.
 
-### 5.2a Referrals (M7, once beta users exist)
+### 5.2a Referrals (M7)
 - Each signed-in user sees a personal link, `https://drift.bayleaflabs.com/join?ref=<code>`,
-  under Profile → "Invite a friend."
-- The link opens the waitlist form with the code attached; the signup is
-  stored with `referral_code`. "How did you hear" is pre-set to
-  `friend_family`.
-- Referral **does not auto-invite**. You still choose whom to invite, which
-  keeps control of SnapTrade connections and cost. Referred people are
-  prioritized in your invite list. (Household invites are different: they
-  admit the invitee directly; `spec-households.md` R2.)
+  under Profile → "Share Drift."
+- The link opens signup (or, before Gate 2, the beta waitlist) with the code
+  attached; the new profile or waitlist entry stores `referral_code`. "How did
+  you hear" is pre-set to `friend_family`.
+- Referral grants nothing by itself: signup is already open in the beta, and
+  referred Premium waitlist entries are only sorted first.
 - No rewards in the beta.
 - The `ref` parameter is stripped from the URL on load (like `?demo` and auth
   codes) so it never reaches analytics.
@@ -610,19 +631,42 @@ Drift's record of the person, not the person. `DELETE /api/v1/me`:
     practical.
   - **Limitation of liability**, especially for trading decisions.
   - The user verifies all numbers before acting.
-  - The beta is free and may become paid, with notice.
+  - The beta is free and may become paid, with notice. A Premium waitlist is
+    not an offer or a promise that Premium will launch, or at the price shown.
   - Acceptable use: one person per Drift user; no scraping; no reverse
     engineering of the service.
-  - Data handling by reference to the Privacy Notice: what's stored,
-    household sharing, SnapTrade, Resend, problem reports and support
-    access, deletion.
+  - Data handling by reference to the Privacy Notice: what's stored
+    (personal financial data on Drift's servers), household sharing,
+    SnapTrade, Resend, problem reports, maintainer access for debugging and
+    support (D22), deletion.
   - US-only; governing law of your state.
   - Feedback may be used to improve Drift.
 - **Native app (M8):** the App Store's standard EULA plus a link to the same
   terms. No custom EULA unless review requires one.
 - Drafted from a reputable template. A lawyer review is recommended before a
-  public launch, and optional for a friends-and-family beta. This spec is
-  not legal advice.
+  public launch, and worth deciding before Gate 2, since the open beta admits
+  strangers. This spec is not legal advice.
+
+### 5.12 Premium fake door and feedback (beta)
+The beta exists to answer two questions: will people pay for linking, and
+what do they want changed?
+- **Fake door.** Where linking would appear (Positions → "Link accounts
+  automatically"), Free-account users and guests see Premium with a **shown
+  price** and a "Join the waitlist" button. The page says plainly that
+  Premium isn't available yet and that joining is no commitment.
+- **Price test.** Each visitor gets a price variant at random, kept in
+  `localStorage` so it stays stable. The server counts fake-door views and
+  waitlist joins per variant. Only the variant ID is recorded with the count,
+  never PII, and none of it goes to the analytics tool (this needs the M1
+  analytics-guardrail amendment). Small samples make A/B results noisy, so
+  testing one price at a time in sequence may be the realistic first step.
+- **Feedback.** A "Send feedback" entry (Profile and the app footer) reuses
+  the problem-report path (§5.9) with `kind = feedback`: free text, reviewed
+  by the user before sending, no portfolio snapshot unless they attach one.
+  Plus `support@`.
+- **Gate 3 inputs:** Premium waitlist joins per price, the share of
+  fake-door viewers who join, and feedback themes, read against the
+  aggregator cost (§10).
 
 ---
 
@@ -744,6 +788,30 @@ Commercial link.
 
 ---
 
+### 6.4 Personal-key mode (alpha and beta)
+
+D3 starts on SnapTrade's free Personal key, where the key itself is the
+SnapTrade user: calls take no `userId`/`userSecret`, and there is no
+register or delete-user call. The server supports this as a mode, set by
+`SNAPTRADE_MODE=personal`, without changing the data model:
+- **One linking user.** Only the Drift user named by
+  `SNAPTRADE_PERSONAL_OWNER` (the developer's internal user ID) may call
+  `/snaptrade/*`. Everyone else gets `403 linking_unavailable`, and the UI hides
+  "Linked accounts" for them.
+- **No `snaptrade_users` row** is needed in this mode; connect skips
+  registration and the secret.
+- **Household logins** (for example a partner's 401(k)) are linked from the
+  developer's session, with the account holder entering their own
+  credentials in SnapTrade's portal, then assigned to the shared household
+  (`spec-households.md`). Household members see and edit them through
+  household roles, not through their own link. Whether this counts as
+  "personal use" is a question for SnapTrade (§11 Q6).
+- **Deletion:** `DELETE /me` for the owner deletes their connections at
+  SnapTrade (there is no SnapTrade user to delete).
+- **Switch to Commercial (M9, if Gate 3 opens Premium):** set `SNAPTRADE_MODE=commercial` and the Commercial
+  keys, register a SnapTrade user per linking Drift user, and have each re-link.
+  Logins linked under the Personal key don't carry over.
+
 ## 7. Email
 
 | Email | Sender | Content rule |
@@ -778,7 +846,8 @@ raise it if needed.
     back to the database, so an opt-out sticks.
   - Opt-in points: an unchecked "Email me Drift news" box on the waitlist
     form, and Profile → Email.
-  - Waitlist sign-up alone covers only the invite email itself.
+  - Waitlist sign-up alone covers only the one email it asked for (the beta
+    opening, or Premium opening).
 - **CAN-SPAM** for announcements:
   - a physical postal address (a PO box or virtual mailbox is fine);
   - a working unsubscribe, honored within 10 business days;
@@ -803,13 +872,13 @@ raise it if needed.
 | No trading | Read-only portal; no trade endpoints imported; a test greps `api/` for trading calls |
 | MFA | TOTP opt-in (D5) |
 | CSP | `connect-src 'self' https://<project>.supabase.co wss://<project>.supabase.co`. SnapTrade portal opens as top-level navigation. `form-action 'none'` and `frame-ancestors 'none'` stay |
-| Analytics stays page-only | URL scrubbed after auth callbacks and invite links; `<Analytics beforeSend>` drops query strings and hashes; reported path stays `/` |
+| Analytics stays page-only | URL scrubbed after auth callbacks and invite links; `<Analytics beforeSend>` drops query strings and hashes; reported path stays `/`. Fake-door counts (§5.12) are server-side, variant ID only, never sent to the analytics tool |
 | Email | No portfolio data; tracking off (§7) |
 | Logs and errors | Structured JSON logs per request: request ID, route, status, duration, user ID, error code. No bodies, emails, amounts, or tickers. Sentry on `api/` only, scrubbed (D21). Vercel's built-in log retention is short (confirm in M3), so `sync_runs`, Sentry, and problem reports are the durable record; add a log drain only if needed |
-| Support access | D22: user-initiated problem reports; consent-gated, logged snapshot access; no impersonation |
+| Maintainer access | D22: personal financial data is stored server-side and maintainers may read it for debugging and support; every read is logged in `support_access_log`; disclosed in the Privacy Notice; no impersonation; real data never reaches PRs, fixtures, or AI coding tools |
 | Environments | Real data only in the production Supabase project; previews use staging (D19) |
-| Cost hygiene | `snaptrade_users.last_active_at`. An admin script lists or deletes SnapTrade users inactive for 60+ days (with notice), since each connected user is billed until deleted |
-| Light beta posture | Beta Terms accepted at sign-in (§5.11); Privacy notice (accounts, households and sharing with members, waitlist, SnapTrade, email and Resend, problem reports and support access) and short ToS (the beta is free and may become paid, with notice); US-only; free; breach-response note in `docs/` |
+| Cost hygiene | Commercial mode only (M9): `snaptrade_users.last_active_at`. An admin script lists or deletes SnapTrade users inactive for 60+ days (with notice), since each connected user is billed until deleted; run it before month-end |
+| Light beta posture | Beta Terms accepted at sign-in (§5.11); Privacy notice (accounts, the personal financial data stored on Drift's servers, households and sharing with members, waitlist, SnapTrade, email and Resend, problem reports, logged maintainer access (D22)) and short ToS (the beta is free and may become paid, with notice); US-only; free; breach-response note in `docs/` |
 
 ---
 
@@ -848,12 +917,16 @@ raise it if needed.
     households.
 - **Engine:** no engine changes; the scenario suite should pass untouched.
 - **Manual before each gate:**
-  - Sign up from an invite, set password, magic link, password reset, TOTP.
+  - Sign up from an invite (alpha) or through open signup (from Gate 2), set
+    password, magic link, password reset, TOTP.
   - Link → assign → sync → map → rebalance on desktop and phone.
   - Check the network tab and `localStorage` for secrets.
   - Check that auth emails pass SPF, DKIM, and DMARC.
-  - Delete the Drift user profile and confirm the SnapTrade user is gone.
+  - Delete a Drift user profile and confirm its rows are gone (and, in
+    Commercial mode, its SnapTrade user).
   - Before M7: the household flow in M5b's exit criteria.
+  - Before Gate 2: signup, the fake door, the Premium waitlist, and feedback
+    as a stranger would see them.
 
 ---
 
@@ -871,8 +944,22 @@ raise it if needed.
   - a privacy rule update, because portfolio data then goes to an AI provider.
 - **Viewer/adviser role** in the UI (`spec-households.md` R7).
 - **Holdings history:** snapshot table for performance and drift over time.
-- **Public launch:** public signup, required MFA, abuse protection, legal
-  review (exploration doc Phase 3).
+- **Premium launch (Gate 3, M9).** If demand justifies it:
+  - **Aggregator choice:** compare SnapTrade and Plaid on real prices and
+    coverage. SnapTrade costs about `$100 + $1 × users` per month (Launch
+    plan, Daily refresh). Plaid's pay-as-you-go costs about `r × logins` per
+    month, where `r` is its per-login Investments rate and each user has `k`
+    logins (often 2–4). The break-even is `users = 100 / (r × k − 1)`; if
+    `r × k ≤ 1`, Plaid is cheaper at every size. Starting on Plaid and moving
+    to SnapTrade past break-even is viable, but each move asks every user to
+    re-link. Run a short Plaid spike (coverage, production-access review, and
+    the real rate) before choosing.
+  - SnapTrade's end-user consent step (an unchecked checkbox plus "Agree and
+    Continue", with stored evidence; §11 Q6) before the connection portal.
+  - Whether Premium is paid from day one (needs billing, below) or starts
+    free for early waitlist members.
+- **Public launch (leaving beta):** required MFA, broader abuse protection,
+  legal review (exploration doc Phase 3).
 - **Billing (post-beta).** Deferred. Expect an **additive** migration, with
   nothing to build now.
   - Billing attaches to a household or a Drift user (decide then; both work)
@@ -892,9 +979,8 @@ raise it if needed.
 
 1. ~~Which domain?~~ **Resolved:** `bayleaflabs.com`, under the publisher name Bay Leaf
    Labs, with the app at `drift.bayleaflabs.com` (D13).
-2. ~~Invite quotas for beta users?~~ **Resolved:** beta users invite
-   household members only. Everyone else comes through referral and your
-   invite (D6).
+2. ~~Invite quotas for beta users?~~ **Resolved:** the open beta has public
+   signup (D6); users invite only household members.
 3. ~~Does SnapTrade cover workplace 401(k)s?~~ **Resolved:** yes, at every
    recordkeeper tested in M0 (§6.3). No Plaid spike; D20 stays a named fallback.
 4. Household open questions: `spec-households.md` §7.
@@ -902,3 +988,17 @@ raise it if needed.
    page says "Continue as guest — no signup, your data stays in this
    browser." ("Incognito" was rejected: in browsers it means nothing is kept
    after you close the window, which is the opposite of guest mode.)
+6. **Questions for SnapTrade** (from the terms review, #248), to ask before
+   M3 builds the schema:
+   - Does linking a household member's logins (they enter their own
+     credentials) under the developer's Personal key count as personal use
+     (§6.4)? And what are the Personal plan's limits? The dashboard appeared
+     to show 20 accounts; confirm whether the cap is on accounts or on
+     brokerage connections. This decides whether M5b stays free.
+   - Does storing a user's own holdings (`price`, `market_value`) count as
+     storing "Market Data" (Developer Terms 2.f)? Fallback: store units only
+     and price at read time.
+   - Their end-user consent requirement (an unchecked checkbox plus an
+     "Agree and Continue" step, with stored evidence; Terms 7.f) becomes a
+     step before the connection portal in §5.5. Spec that change once the
+     other answers are in.

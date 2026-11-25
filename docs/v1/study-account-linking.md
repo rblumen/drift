@@ -96,6 +96,10 @@ Yodlee can be swapped/added later without touching the engine or UI.
 | **Commercial — free** | $0 | 5 brokerage connections total; positions, balances, orders | Phase 0 spike; a very small closed beta |
 | **Commercial — pay-as-you-go** | ~$2 per connected user / month | Unlimited connections; ~250 req/min default rate limit | Closed beta beyond 5 connections; public product |
 
+> **Superseded (Nov 2026):** SnapTrade's pricing changed. The free Build plan
+> is for testing and personal use only (5 brokerage connections), and paid use
+> starts at $100/mo plus $1–2 per user. See spec D3, D15, and D24.
+
 The Personal/Commercial split matters: as soon as *anyone other than you*
 links an account, you need a Commercial key, which uses SnapTrade's per-user
 model (`userId` + `userSecret` per end user — store these server-side,
