@@ -15,7 +15,9 @@
 
 import type { Account, AssetClass, FundDecomposition, Position, Strategy } from './engine/types';
 import { DEFAULT_STRATEGY } from './engine/strategy';
-import { appStateSchema, type AppState, type Reminder } from './ingest/schema';
+import {
+  appStateSchema, type AppState, type LinkedPositionOverride, type Person, type Reminder,
+} from './ingest/schema';
 
 export type { AppState };
 
@@ -36,6 +38,8 @@ export const DEFAULT_APP_STATE: AppState = {
   freeCash:        0,
   plannedWithdrawal: 0,
   reminder:        {},
+  linkedPositionOverrides: {},
+  people:          [],
 };
 
 // ─── Internal backup helpers ──────────────────────────────────────────────────
@@ -204,6 +208,11 @@ export function buildState(
   freeCash:        number = 0,
   plannedWithdrawal: number = 0,
   reminder:        Reminder = {},
+  people:          Person[] = [],
+  linkedPositionOverrides: Record<string, LinkedPositionOverride> = {},
 ): AppState {
-  return { version: SCHEMA_VERSION, accounts, positions, strategy, tickerOverrides, decompositions, freeCash, plannedWithdrawal, reminder };
+  return {
+    version: SCHEMA_VERSION, accounts, positions, strategy, tickerOverrides, decompositions,
+    freeCash, plannedWithdrawal, reminder, linkedPositionOverrides, people,
+  };
 }

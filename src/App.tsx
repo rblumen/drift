@@ -30,7 +30,7 @@ import {
   buildState, clearState, DEFAULT_APP_STATE, saveJson, loadJson,
   loadState, saveState, saveBackup, type AppState,
 } from './store';
-import { appStateSchema, type Reminder } from './ingest/schema';
+import { appStateSchema, type LinkedPositionOverride, type Person, type Reminder } from './ingest/schema';
 import SAMPLE_PORTFOLIO from './data/sample-portfolio.json';
 import { Analytics } from '@vercel/analytics/react';
 
@@ -71,6 +71,11 @@ export default function App() {
   const [freeCash,          setFreeCash]          = useState<number>(saved.freeCash ?? 0);
   const [plannedWithdrawal, setPlannedWithdrawal] = useState<number>(saved.plannedWithdrawal ?? 0);
   const [reminder,          setReminder]          = useState<Reminder>(saved.reminder ?? {});
+  const [people,            setPeople]            = useState<Person[]>(saved.people ?? []);
+  // Not edited in guest mode yet (linked accounts arrive in M5); carried through
+  // so a save never drops overrides that came in with a loaded file.
+  const [linkedPositionOverrides, setLinkedPositionOverrides] =
+    useState<Record<string, LinkedPositionOverride>>(saved.linkedPositionOverrides ?? {});
   const [activeTab,         setActiveTab]         = useState<Tab>('overview');
   const [howItWorksOpen,    setHowItWorksOpen]    = useState(false);
   const [resetConfirmOpen,  setResetConfirmOpen]  = useState(false);
@@ -117,10 +122,10 @@ export default function App() {
     tabRefs.current[nextTab]?.focus();
   }
 
-  const stateRef = useRef({ accounts, positions, strategy, tickerOverrides, decompositions, freeCash, plannedWithdrawal, reminder, isDemoMode });
+  const stateRef = useRef({ accounts, positions, strategy, tickerOverrides, decompositions, freeCash, plannedWithdrawal, reminder, people, linkedPositionOverrides, isDemoMode });
   useEffect(() => {
-    stateRef.current = { accounts, positions, strategy, tickerOverrides, decompositions, freeCash, plannedWithdrawal, reminder, isDemoMode };
-  }, [accounts, positions, strategy, tickerOverrides, decompositions, freeCash, plannedWithdrawal, reminder, isDemoMode]);
+    stateRef.current = { accounts, positions, strategy, tickerOverrides, decompositions, freeCash, plannedWithdrawal, reminder, people, linkedPositionOverrides, isDemoMode };
+  }, [accounts, positions, strategy, tickerOverrides, decompositions, freeCash, plannedWithdrawal, reminder, people, linkedPositionOverrides, isDemoMode]);
 
   const didMountRef = useRef(false);
 
@@ -131,9 +136,9 @@ export default function App() {
     // exits demo mode (the banner dismiss restores the saved portfolio; Load /
     // Reset replace it explicitly).
     if (isDemoMode) return;
-    saveState(buildState(accounts, positions, strategy, tickerOverrides, decompositions, freeCash, plannedWithdrawal, reminder));
+    saveState(buildState(accounts, positions, strategy, tickerOverrides, decompositions, freeCash, plannedWithdrawal, reminder, people, linkedPositionOverrides));
     setLastSavedAt(new Date());
-  }, [accounts, positions, strategy, tickerOverrides, decompositions, freeCash, plannedWithdrawal, reminder, isDemoMode]);
+  }, [accounts, positions, strategy, tickerOverrides, decompositions, freeCash, plannedWithdrawal, reminder, people, linkedPositionOverrides, isDemoMode]);
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -141,7 +146,7 @@ export default function App() {
       // Same guard as the primary autosave: demo state must not rotate the
       // real portfolio out of the 3-slot backup ring (#112).
       if (s.isDemoMode) return;
-      saveBackup(buildState(s.accounts, s.positions, s.strategy, s.tickerOverrides, s.decompositions, s.freeCash, s.plannedWithdrawal, s.reminder));
+      saveBackup(buildState(s.accounts, s.positions, s.strategy, s.tickerOverrides, s.decompositions, s.freeCash, s.plannedWithdrawal, s.reminder, s.people, s.linkedPositionOverrides));
     }, 5 * 60 * 1000);
     return () => clearInterval(id);
   }, []);
@@ -244,6 +249,8 @@ export default function App() {
     setFreeCash(s.freeCash ?? 0);
     setPlannedWithdrawal(s.plannedWithdrawal ?? 0);
     setReminder(s.reminder ?? {});
+    setPeople(s.people ?? []);
+    setLinkedPositionOverrides(s.linkedPositionOverrides ?? {});
   }
 
   function handleLoadSample() {
@@ -267,7 +274,7 @@ export default function App() {
   }
 
   function handleSave() {
-    saveJson(buildState(accounts, positions, strategy, tickerOverrides, decompositions, freeCash, plannedWithdrawal, reminder));
+    saveJson(buildState(accounts, positions, strategy, tickerOverrides, decompositions, freeCash, plannedWithdrawal, reminder, people, linkedPositionOverrides));
   }
 
   async function handleLoadFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -298,6 +305,8 @@ export default function App() {
     setFreeCash(0);
     setPlannedWithdrawal(0);
     setReminder({});
+    setPeople([]);
+    setLinkedPositionOverrides({});
     setActiveTab('accounts');
     setLastSavedAt(null);
     setRestoredFromBackup(null);
@@ -592,6 +601,8 @@ export default function App() {
             <AccountsPanel
               accounts={accounts}
               setAccounts={setAccounts}
+              people={people}
+              setPeople={setPeople}
               onDeleteAccount={handleDeleteAccount}
               freeCash={freeCash}
               setFreeCash={setFreeCash}

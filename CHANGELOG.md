@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Owner labels and an owner filter on the Accounts tab** ([#263](https://github.com/rblumen/drift/issues/263)) — add the people in your household (e.g. "Alex", "Sam") in the new Owners card, then mark each account as theirs, or pick two or more people for a joint account, in the account's Add or Edit form. Each account row shows its owners, and a filter in the Accounts header narrows the list to one person's accounts (joint accounts included), joint accounts only, or accounts with no owner. Owners are labels for display and filtering only: they never change trade suggestions. They're saved with your portfolio in this browser and in saved portfolio files.
+
 ### Changed
 
 - **Privacy promise rewritten for the upcoming signed-in mode** ([#262](https://github.com/rblumen/drift/issues/262)): guest mode keeps today's promise that your data never leaves your browser. Signed-in mode (v1.0, in development) will store your portfolios and linked holdings on Drift's servers, with logged maintainer access for support and no financial data ever sent to analytics. The README's privacy section says this plainly.

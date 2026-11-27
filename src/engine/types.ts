@@ -120,6 +120,9 @@ export interface Account {
    *  Taken first, before any additional drawdown, regardless of eligibility; added
    *  on top of the additional amount to form the total withdrawal. */
   rmdDueUsd?: number;
+  /** Owner labels: ids into AppState.people (spec-households R3.3). Several ids
+   *  means joint. Display and filtering only — the engine never reads it. */
+  ownerPersonIds?: string[];
 }
 
 export interface Position {

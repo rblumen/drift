@@ -30,6 +30,12 @@ jobs:
       - name: Type check
         run: npx tsc -b
 
+      # D9 (spec-account-linking): src/engine/ must import nothing
+      # environment-specific (React, DOM, Supabase, Node built-ins, fetch,
+      # storage). Also part of `npm test`; a separate step for a clear label.
+      - name: Engine boundary check
+        run: npx vitest run src/engineBoundary.test.ts
+
       - name: Run tests
         run: npm test
 
