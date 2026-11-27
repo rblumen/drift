@@ -200,7 +200,7 @@ and the demand gate, Gate 3 (spec D24).
 ### M3 — Domain, email, backend foundation
 | Owner | Task |
 |---|---|
-| 🤖 | Write the setup runbook: every dashboard setting for Supabase (both projects), Resend, Sentry, and Vercel; the full DNS record list; the env var names per environment; the key-generation command |
+| 🤖 | Write the setup runbook: every dashboard setting for Supabase (both projects), Resend, Sentry, and Vercel; the full DNS record list; the env var names per environment; the key-generation command ([`runbook-m3-setup.md`](runbook-m3-setup.md)) |
 | 👤 | Execute the runbook (checklist 5–10) |
 | 🤖 | `supabase/migrations/`: every §4 table, `private.household_role`, all §4.3 RPCs, RLS. Each Drift user gets a personal household; only the owner role is used yet |
 | 🤖 | Manually-triggered GitHub Actions workflow that applies migrations to staging or production |

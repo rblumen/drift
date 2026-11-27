@@ -13,6 +13,7 @@ experience forward into v1.0.
 | [`spec-account-linking.md`](spec-account-linking.md) | Product spec: decisions, data model, behavior, API, security |
 | [`spec-households.md`](spec-households.md) | Household requirements and the shared vocabulary |
 | [`build-plan-account-linking.md`](build-plan-account-linking.md) | Milestones, gates, and who does each step (agent vs. you) |
+| [`runbook-m3-setup.md`](runbook-m3-setup.md) | M3 vendor setup, step by step: Supabase, Resend, Sentry, Cloudflare DNS, Vercel env vars, GitHub environments |
 
 Read in this order: spec, then households, then build plan. Go to the study
 when you want the "why".
